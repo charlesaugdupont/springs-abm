@@ -16,8 +16,8 @@ from .experiment_config import (
     get_full_results_path,
     get_sim_runs_path
 )
-from dgl_ptm.config import SVEIRConfig
-from dgl_ptm.model.initialize_model import SVEIRModel
+from config import SVEIRConfig
+from abm.model.initialize_model import SVEIRModel
 
 def run_single_simulation(params: dict) -> dict:
     """

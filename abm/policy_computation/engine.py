@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from dgl_ptm.agent.health_cpt_utils import (
+from abm.agent.health_cpt_utils import (
     probability_weighting,
     cpt_value_function,
     compute_new_wealth,

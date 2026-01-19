@@ -1,5 +1,4 @@
 """These functions pertain to spatial grid creation."""
-from dgl_ptm.util.utils import sample_distribution_tensor
 import torch
 import numpy as np
 
@@ -24,6 +23,77 @@ class GridEnvironment:
 
     def __getitem__(self, property):
         return self.get_slice(property)
+    
+def sample_distribution_tensor(type, dist_parameters, n_samples, round=False, decimals=None):
+    """Create and return samples from different distributions.
+
+    :param type: Type of distribution to sample
+    :param dist_parameters: array of parameters as required/supported by
+        requested distribution type
+    :param n_samples: number of samples to return (as 1d tensor)
+    :param round: optional, whether the samples are to be rounded
+    :param decimals: optional, required if round is specified. decimal places to
+        round to
+    """
+    # check if each item in dist_parameters are torch tensors, if not convert them
+    for i, item in enumerate(dist_parameters):
+        # if item has dtype NoneType, raise error
+        if item is not None and not isinstance(item, torch.Tensor):
+                dist_parameters[i] = torch.tensor(item)
+
+    if not isinstance(n_samples, torch.Tensor):
+        n_samples = torch.tensor(n_samples)
+     
+    if type == 'uniform':
+        dist = torch.distributions.uniform.Uniform(
+            dist_parameters[0], dist_parameters[1]
+            ).sample([n_samples])
+    elif type == 'normal':
+        dist = torch.distributions.normal.Normal(
+            dist_parameters[0], dist_parameters[1]
+            ).sample([n_samples])
+    elif type == 'bernoulli':
+        dist = torch.distributions.bernoulli.Bernoulli(
+            probs=dist_parameters[0], logits=dist_parameters[1], validate_args=None
+            ).sample([n_samples])
+    elif type == 'multinomial':
+        multinomial_samples = torch.multinomial(
+            torch.tensor(dist_parameters[0]), n_samples, replacement=True
+            )
+        dist = torch.gather(torch.Tensor(dist_parameters[1]), 0, multinomial_samples)
+    elif type == 'truncnorm':
+        # dist_parameters are mean, standard deviation, min, and max.
+        # cdf(x)=(1+erf(x/2^0.5))/2. cdf^-1(x)=2^0.5*erfinv(2*x-1).
+        trunc_val_min = (dist_parameters[2]-dist_parameters[0])/dist_parameters[1]
+        trunc_val_max = (dist_parameters-dist_parameters[0])/dist_parameters[1]
+        cdf_min = (1 + torch.erf(trunc_val_min / torch.sqrt(torch.tensor(2.0))))/2
+        cdf_max = (1 + torch.erf(trunc_val_max / torch.sqrt(torch.tensor(2.0))))/2
+
+        uniform_samples = torch.rand(n_samples)
+        inverse_transform = torch.erfinv(
+            2 *(cdf_min + (cdf_max - cdf_min) * uniform_samples) - 1
+            )
+        sample_ppf = torch.sqrt(torch.tensor(2.0)) * inverse_transform
+
+        dist = dist_parameters[0] + dist_parameters[1] * sample_ppf
+    elif type == 'beta':
+        dist = torch.distributions.beta.Beta(dist_parameters[0], dist_parameters[1]
+            ).sample([n_samples])
+    else:
+        raise NotImplementedError(
+            'Currently only uniform, normal, multinomial, truncated normal, beta, and '
+            'bernoulli distributions are supported'
+            )
+
+    if round:
+        if decimals is None:
+            raise ValueError(
+                'rounding requires decimals of rounding accuracy to be specified'
+                )
+        else:
+            return torch.round(dist,decimals=decimals)
+    else:
+        return dist
 
 def grid_creation(**kwargs):
     """grid_creation - Creates a representation of the model environment

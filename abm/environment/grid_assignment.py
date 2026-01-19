@@ -1,7 +1,5 @@
-from dgl_ptm.util.utils import sample_distribution_tensor
 import torch
 import numpy as np
-import dgl
 
 def grid_assignment(graph, grid_environment, **kwargs):
     '''

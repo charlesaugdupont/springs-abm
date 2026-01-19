@@ -4,7 +4,7 @@ import os
 import multiprocessing
 from tqdm import tqdm
 
-from simulation_analysis.experiment_config import (
+from abm.simulation_analysis.experiment_config import (
     COST_SUBSIDY_FACTORS,
     EFFICACY_MULTIPLIERS,
     INFECTION_RISK_LEVELS,
@@ -12,7 +12,7 @@ from simulation_analysis.experiment_config import (
     get_policy_set_id,
     get_policy_set_path
 )
-from dgl_ptm.config import SVEIRConfig
+from config import SVEIRConfig
 from .generator import create_and_save_policy_library
 
 # --- Worker Function (Updated with correct error logging) ---

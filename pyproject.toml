@@ -1,0 +1,18 @@
+[project]
+name = "springs-abm"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "matplotlib>=3.10.6",
+    "numpy>=2.3.2",
+    "osmnx>=2.0.7",
+    "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
+    "scipy>=1.16.1",
+    "seaborn>=0.13.2",
+    "torch>=2.9.1",
+    "tqdm>=4.67.1",
+    "xarray>=2025.12.0",
+]

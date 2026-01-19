@@ -4,15 +4,15 @@ import argparse
 import os
 import time
 
-from policy_computation.sweep_runner import compute_all_policies_for_sweep
-from simulation_analysis.intervention_sweep import run_simulation_sweep
-from simulation_analysis.plots import (
+from abm.policy_computation.sweep_runner import compute_all_policies_for_sweep
+from abm.simulation_analysis.intervention_sweep import run_simulation_sweep
+from abm.simulation_analysis.plots import (
     plot_heatmap,
     plot_epidemic_curves,
     plot_final_state_violins,
     plot_final_state_scatter
 )
-from simulation_analysis.experiment_config import (
+from abm.simulation_analysis.experiment_config import (
     get_results_path,
     get_policy_set_id,
     get_policy_set_path,
@@ -20,8 +20,8 @@ from simulation_analysis.experiment_config import (
     EFFICACY_MULTIPLIERS,
     INFECTION_RISK_LEVELS
 )
-from dgl_ptm.environment.grid_generator import create_and_save_realistic_grid
-from dgl_ptm.config import SVEIRCONFIG
+from abm.environment.grid_generator import create_and_save_realistic_grid
+from config import SVEIRCONFIG
 
 def main():
     """

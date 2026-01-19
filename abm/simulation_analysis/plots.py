@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import seaborn as sns
 
-from dgl_ptm.config import SVEIRConfig
+from config import SVEIRConfig
 from .experiment_config import (
     COST_SUBSIDY_FACTORS,
     EFFICACY_MULTIPLIERS,

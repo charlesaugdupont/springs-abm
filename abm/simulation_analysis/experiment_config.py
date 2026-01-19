@@ -4,7 +4,7 @@ import numpy as np
 import os
 import json
 import hashlib
-from dgl_ptm.config import SVEIRConfig
+from config import SVEIRConfig
 
 # --- Define the Parameter Space for the Interventions ---
 COST_SUBSIDY_FACTORS = np.linspace(1.0, 0.4, 5)

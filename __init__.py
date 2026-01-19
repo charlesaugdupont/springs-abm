@@ -1,10 +1,10 @@
-"""Documentation about dgl_ptm."""
+"""Documentation about .."""
 import logging
 
-from dgl_ptm import config
+from . import config
 
-#from dgl_ptm.model import initialize_model, step
-from dgl_ptm.model.initialize_model import SVEIRModel
+#from .model import initialize_model, step
+from .model.initialize_model import SVEIRModel
 
 __all__ = ['config', 'SVEIRModel']
 

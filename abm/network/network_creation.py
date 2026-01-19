@@ -1,46 +1,46 @@
 """Network creation functions."""
 #!/usr/bin/env python
 
-
-import dgl
 import networkx as nx
 import torch
-
-# network_creation - Creates the network between the initialized nodes
-# using edges from DGL.
+import numpy as np
+from abm.state import AgentGraph
 
 def network_creation(num_agents, method, verbose, **kwargs):
-    """network_creation - Creates the graph network for the model.
-
-    Args:
-        num_agents: Number of agent nodes
-        method: Current implemented methods include:
-            barabasi_albert model: 
-                This method takes the following possible keyword arguments,
-                seed: random seed for networkx barabasi_albert_graph function.
-                new_node_edges: number of edges to create for each new node.
-        kwargs: keyword arguments to be supplied to the network creation method.
-
-    Return:
-        agent_graph: Created agent_graph as per the chosen method
-    """
+    """Creates the graph network for the model."""
     if (method == 'barabasi-albert'):
-        if 'seed' in kwargs.keys():
-            seed  = kwargs['seed']
-        else:
-            seed = torch.initial_seed() 
+        seed = kwargs.get('seed', torch.initial_seed())
+        new_node_edges = kwargs.get('new_node_edges', 1)
         
-        if 'new_node_edges' in kwargs.keys(): 
-            new_node_edges = kwargs['new_node_edges']
-        else:
-            new_node_edges = 1 
         if verbose:
             print(f"Using seed {seed} for network creation with {new_node_edges} edges requested.")
-        agent_graph = barabasi_albert_graph(num_agents, new_node_edges, seed)
+        
+        # Generate topology using NetworkX
+        nx_graph = nx.barabasi_albert_graph(n=num_agents, m=new_node_edges, seed=int(seed))
+        
+        # Convert to our AgentGraph container
+        agent_graph = AgentGraph(num_agents)
+        
+        # Extract edges (NetworkX returns list of tuples, convert to tensor)
+        # NetworkX edges are often (u, v), we need 2 rows [u_list, v_list]
+        edges = np.array(nx_graph.edges()).T 
+        
+        # Handle case where graph has no edges (rare for BA but possible with n=1)
+        if edges.size == 0:
+            u, v = torch.tensor([]), torch.tensor([])
+        else:
+            u = torch.from_numpy(edges[0]).long()
+            v = torch.from_numpy(edges[1]).long()
+            
+            # Make undirected (add reverse edges)
+            u_final = torch.cat([u, v])
+            v_final = torch.cat([v, u])
+            
+            agent_graph.add_edges(u_final, v_final)
+            
+        return agent_graph
     else:
         raise NotImplementedError('Currently only barabasi-albert model implemented!')
-    
-    return agent_graph
 
 def barabasi_albert_graph(num_agents, new_node_edges=1, seed=1):
     """Create a barabasi-albert graph.

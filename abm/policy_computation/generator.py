@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 import multiprocessing
 
-from dgl_ptm.config import SVEIRConfig
+from config import SVEIRConfig
 from .engine import value_iteration
 
 def create_and_save_policy_library(
