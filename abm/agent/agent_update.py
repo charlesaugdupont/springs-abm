@@ -8,23 +8,24 @@ from .health_cpt_utils import (
     compute_health_decline,
     compute_health_cost
 )
+from abm.constants import Compartment, Activity
 
-def sveir_agent_update(method, agent_graph, M=None, params=None, num_nodes=None, edge_weights=None, grid=None, adjacency=None, random_activity=None, policy=None, risk_levels=None):
+def sveir_agent_update(method, agent_graph, params=None, num_nodes=None, edge_weights=None, grid=None, adjacency=None, random_activity=None, policy=None, risk_levels=None):
     """
     Dispatcher function that calls the appropriate agent update logic.
     """
     # Define a mapping from method names to functions
     update_functions = {
-        "exposure_increment": (_agent_increment_exposure_time, [agent_graph, M]),
+        "exposure_increment": (_agent_increment_exposure_time, [agent_graph]),
         "health_investment": (_agent_health_investment_vectorized, [agent_graph, params, policy, risk_levels]),
-        "exposed_to_infectious": (_agent_exposed_to_infectious, [agent_graph, M, params]),
-        "infectious_to_recovered": (_agent_infectious_to_recovered, [agent_graph, M, params, num_nodes]),
-        "susceptible_to_vaccinated": (_agent_susceptible_to_vaccinated, [agent_graph, M, params, num_nodes]),
-        "susceptible_to_exposed": (_agent_susceptible_to_exposed, [agent_graph, M, params, num_nodes, adjacency]),
-        "vaccinated_to_exposed": (_agent_vaccinated_to_exposed, [agent_graph, M, params, num_nodes, adjacency]),
+        "exposed_to_infectious": (_agent_exposed_to_infectious, [agent_graph, params]),
+        "infectious_to_recovered": (_agent_infectious_to_recovered, [agent_graph, params]),
+        "susceptible_to_vaccinated": (_agent_susceptible_to_vaccinated, [agent_graph, params, num_nodes]),
+        "susceptible_to_exposed": (_agent_susceptible_to_exposed, [agent_graph, params, adjacency]),
+        "vaccinated_to_exposed": (_agent_vaccinated_to_exposed, [agent_graph, params, adjacency]),
         "move": (_agent_move, [agent_graph, edge_weights]),
-        "human_to_water_transmission": (_agent_human_to_water_transmission, [agent_graph, M, params, grid, random_activity]),
-        "water_to_human_transmission": (_agent_water_to_human_transmission, [agent_graph, M, params, grid]),
+        "human_to_water_transmission": (_agent_human_to_water_transmission, [agent_graph, params, grid, random_activity]),
+        "water_to_human_transmission": (_agent_water_to_human_transmission, [agent_graph, params, grid]),
         "water_recovery": (_water_recovery, [params, grid]),
         "shock": (_water_shock, [params, grid]),
     }
@@ -39,9 +40,9 @@ def sveir_agent_update(method, agent_graph, M=None, params=None, num_nodes=None,
     else:
         raise ValueError(f"Unknown agent update method: {method}")
 
-def _agent_increment_exposure_time(agent_graph, M):
+def _agent_increment_exposure_time(agent_graph):
     """Increments the exposure time for all agents currently in the 'Exposed' compartment."""
-    exposed_mask = agent_graph.ndata["compartments"] == M["E"]
+    exposed_mask = agent_graph.ndata["compartments"] == Compartment.EXPOSED
     agent_graph.ndata["exposure_time"][exposed_mask] += 1
 
 def _agent_health_investment_vectorized(agent_graph, params, policy_library, risk_levels):
@@ -53,7 +54,6 @@ def _agent_health_investment_vectorized(agent_graph, params, policy_library, ris
     health = agent_graph.ndata["health"].clone().long()
     persona_ids = agent_graph.ndata["persona_id"].long()
 
-    # --- DYNAMIC POLICY SELECTION ---
     current_prob = params['infection_probability']
     risk_level_index = torch.argmin(torch.abs(risk_levels - current_prob))
 
@@ -115,23 +115,21 @@ def _agent_health_investment_vectorized(agent_graph, params, policy_library, ris
     agent_graph.ndata["wealth"] = updated_wealth.clamp(min=1, max=params['max_state_value'])
     agent_graph.ndata["health"] = new_health
 
-
-def _agent_exposed_to_infectious(agent_graph, M, params):
+def _agent_exposed_to_infectious(agent_graph, params):
     """Transitions agents from 'Exposed' to 'Infectious' and returns the count."""
-    exposed_to_infections_mask = (agent_graph.ndata["compartments"]==M["E"]) & \
+    exposed_to_infections_mask = (agent_graph.ndata["compartments"] == Compartment.EXPOSED) & \
                                  (agent_graph.ndata["exposure_time"] >= params["exposure_period"])
-    
+
     if torch.any(exposed_to_infections_mask):
-        agent_graph.ndata["compartments"][exposed_to_infections_mask] = M["I"]
+        agent_graph.ndata["compartments"][exposed_to_infections_mask] = Compartment.INFECTIOUS
         agent_graph.ndata["num_infections"][exposed_to_infections_mask] += 1
         return torch.sum(exposed_to_infections_mask).item()
 
     return 0 # Return 0 if no new infections
 
-
-def _agent_infectious_to_recovered(agent_graph, M, params, num_nodes):
+def _agent_infectious_to_recovered(agent_graph, params):
     """Transitions agents from 'Infectious' to 'Recovered' based on a recovery probability."""
-    infectious_mask = agent_graph.ndata["compartments"] == M["I"]
+    infectious_mask = agent_graph.ndata["compartments"] == Compartment.INFECTIOUS
     if not torch.any(infectious_mask):
         return
         
@@ -139,12 +137,11 @@ def _agent_infectious_to_recovered(agent_graph, M, params, num_nodes):
     recovered_mask = recovery_chance < params["recovery_rate"]
     
     agents_to_recover = infectious_mask.nonzero(as_tuple=True)[0][recovered_mask]
-    agent_graph.ndata["compartments"][agents_to_recover] = M["R"]
+    agent_graph.ndata["compartments"][agents_to_recover] = Compartment.RECOVERED
 
-
-def _agent_susceptible_to_vaccinated(agent_graph, M, params, num_nodes):
+def _agent_susceptible_to_vaccinated(agent_graph, params):
     """Transitions agents from 'Susceptible' to 'Vaccinated' based on a vaccination probability."""
-    susceptible_mask = agent_graph.ndata["compartments"] == M["S"]
+    susceptible_mask = agent_graph.ndata["compartments"] == Compartment.SUSCEPTIBLE
     if not torch.any(susceptible_mask):
         return
 
@@ -152,10 +149,9 @@ def _agent_susceptible_to_vaccinated(agent_graph, M, params, num_nodes):
     vaccinated_mask = vaccination_chance < params["vaccination_rate"]
     
     agents_to_vaccinate = susceptible_mask.nonzero(as_tuple=True)[0][vaccinated_mask]
-    agent_graph.ndata["compartments"][agents_to_vaccinate] = M["V"]
+    agent_graph.ndata["compartments"][agents_to_vaccinate] = Compartment.VACCINATED
 
-
-def _calculate_and_apply_new_infections(agent_graph, M, params, target_nodes_mask, adjacency, base_prob_multiplier=1.0):
+def _calculate_and_apply_new_infections(agent_graph, params, target_nodes_mask, adjacency, base_prob_multiplier=1.0):
     """
     Helper function to handle infection logic for any group of agents.
     """
@@ -165,7 +161,7 @@ def _calculate_and_apply_new_infections(agent_graph, M, params, target_nodes_mas
     target_nodes_indices = target_nodes_mask.nonzero(as_tuple=True)[0]
     
     # Create a mask for infectious agents to find infectious neighbors
-    is_infectious_mask = agent_graph.ndata["compartments"] == M["I"]
+    is_infectious_mask = agent_graph.ndata["compartments"] == Compartment.INFECTIOUS
     
     # Calculate infection pressure from infectious agents at the same location
     infection_pressure = torch.matmul(adjacency[target_nodes_indices].float(), is_infectious_mask.float())
@@ -194,19 +190,19 @@ def _calculate_and_apply_new_infections(agent_graph, M, params, target_nodes_mas
     infected_nodes_indices = target_nodes_indices[newly_infected_mask]
 
     if len(infected_nodes_indices) > 0:
-        agent_graph.ndata["compartments"][infected_nodes_indices] = M["E"]
+        agent_graph.ndata["compartments"][infected_nodes_indices] = Compartment.EXPOSED
         agent_graph.ndata["exposure_time"][infected_nodes_indices] = 0
 
-def _agent_susceptible_to_exposed(agent_graph, M, params, num_nodes, adjacency):
+def _agent_susceptible_to_exposed(agent_graph, params, adjacency):
     """Transitions 'Susceptible' agents to 'Exposed' based on proximity to 'Infectious' agents."""
-    susceptible_mask = (agent_graph.ndata["compartments"] == M["S"])
-    _calculate_and_apply_new_infections(agent_graph, M, params, susceptible_mask, adjacency, base_prob_multiplier=1.0)
+    susceptible_mask = (agent_graph.ndata["compartments"] == Compartment.SUSCEPTIBLE)
+    _calculate_and_apply_new_infections(agent_graph, params, susceptible_mask, adjacency, base_prob_multiplier=1.0)
 
-def _agent_vaccinated_to_exposed(agent_graph, M, params, num_nodes, adjacency):
+def _agent_vaccinated_to_exposed(agent_graph, params, adjacency):
     """Transitions 'Vaccinated' agents to 'Exposed' (breakthrough infection)."""
-    vaccinated_mask = (agent_graph.ndata["compartments"] == M["V"])
+    vaccinated_mask = (agent_graph.ndata["compartments"] == Compartment.VACCINATED)
     breakthrough_multiplier = 1.0 - params["vaccine_efficacy"]
-    _calculate_and_apply_new_infections(agent_graph, M, params, vaccinated_mask, adjacency, base_prob_multiplier=breakthrough_multiplier)
+    _calculate_and_apply_new_infections(agent_graph, params, vaccinated_mask, adjacency, base_prob_multiplier=breakthrough_multiplier)
 
 def _agent_move(agent_graph, edge_weights):
     """Moves agents to different locations based on their daily activity schedule."""
@@ -215,7 +211,10 @@ def _agent_move(agent_graph, edge_weights):
 
     # Location mapping: 0:home, 1:school, 2:worship, 3:water, 4:social
     location_map = {
-        0: "home_location", 1: "school_location", 2: "worship_location", 3: "water_location"
+        Activity.HOME: "home_location",
+        Activity.SCHOOL: "school_location",
+        Activity.WORSHIP: "worship_location",
+        Activity.WATER: "water_location"
     }
 
     for activity_idx, location_key in location_map.items():
@@ -225,12 +224,12 @@ def _agent_move(agent_graph, edge_weights):
             agent_graph.ndata['y'][mask] = agent_graph.ndata[location_key][mask, 1]
 
     # Handle social visits separately as they are more complex
-    social_mask = (random_activity == 4)
+    social_mask = (random_activity == Activity.SOCIAL)
     if torch.any(social_mask):
         visiting_agents = social_mask.nonzero(as_tuple=True)[0]
 
         # 1. Identify potential hosts (must be at home)
-        is_at_home_mask = (random_activity == 0)
+        is_at_home_mask = (random_activity == Activity.HOME)
 
         # 2. Get weights
         # Note: edge_weights comes from agent_graph.edges().
@@ -258,7 +257,7 @@ def _agent_move(agent_graph, edge_weights):
 
     return random_activity
 
-def _agent_water_to_human_transmission(agent_graph, M, params, grid):
+def _agent_water_to_human_transmission(agent_graph, params, grid):
     """Handles infection of agents from contaminated water sources."""
     water_idx = grid.property_to_index['water']
     water_slice = grid.grid_tensor[:, :, water_idx]
@@ -274,23 +273,22 @@ def _agent_water_to_human_transmission(agent_graph, M, params, grid):
         return
 
     # Handle Susceptible/Recovered agents
-    s_r_mask = ((agent_graph.ndata["compartments"] == M["S"]) | (agent_graph.ndata["compartments"] == M["R"])) & at_infected_source_mask
-    _calculate_and_apply_new_infections(agent_graph, M, params, s_r_mask, torch.eye(agent_graph.num_nodes()), base_prob_multiplier=params["water_to_human_infection_prob"])
+    s_r_mask = ((agent_graph.ndata["compartments"] == Compartment.SUSCEPTIBLE) | (agent_graph.ndata["compartments"] == Compartment.RECOVERED)) & at_infected_source_mask
+    _calculate_and_apply_new_infections(agent_graph, params, s_r_mask, torch.eye(agent_graph.num_nodes()), base_prob_multiplier=params["water_to_human_infection_prob"])
 
     # Handle Vaccinated agents
-    v_mask = (agent_graph.ndata["compartments"] == M["V"]) & at_infected_source_mask
+    v_mask = (agent_graph.ndata["compartments"] == Compartment.VACCINATED) & at_infected_source_mask
     breakthrough_multiplier = (1.0 - params["vaccine_efficacy"]) * params["water_to_human_infection_prob"]
-    _calculate_and_apply_new_infections(agent_graph, M, params, v_mask, torch.eye(agent_graph.num_nodes()), base_prob_multiplier=breakthrough_multiplier)
+    _calculate_and_apply_new_infections(agent_graph, params, v_mask, torch.eye(agent_graph.num_nodes()), base_prob_multiplier=breakthrough_multiplier)
 
-
-def _agent_human_to_water_transmission(agent_graph, M, params, grid, random_activity):
+def _agent_human_to_water_transmission(agent_graph, params, grid, random_activity):
     """Handles contamination of water sources by infectious agents."""
     water_idx = grid.property_to_index['water']
     water_slice = grid.grid_tensor[:, :, water_idx]
-    
+
     # Find infectious agents who are at a water source
-    infectious_mask = agent_graph.ndata["compartments"] == M["I"]
-    at_water_source_mask = random_activity == 3
+    infectious_mask = agent_graph.ndata["compartments"] == Compartment.INFECTIOUS
+    at_water_source_mask = random_activity == Activity.WATER
     contaminator_mask = infectious_mask & at_water_source_mask
 
     if not torch.any(contaminator_mask):
@@ -299,15 +297,14 @@ def _agent_human_to_water_transmission(agent_graph, M, params, grid, random_acti
     # Probabilistic contamination
     contamination_chance = torch.rand(torch.sum(contaminator_mask), device=agent_graph.device)
     contamination_success = contamination_chance < params["human_to_water_infection_prob"]
-    
+
     successful_contaminators = contaminator_mask.nonzero(as_tuple=True)[0][contamination_success]
-    
+
     if len(successful_contaminators) > 0:
         # Get the unique locations of water points to be contaminated
         water_points_to_infect = torch.unique(agent_graph.ndata["water_location"][successful_contaminators], dim=0).int()
         if water_points_to_infect.shape[0] > 0:
             water_slice[water_points_to_infect[:, 0], water_points_to_infect[:, 1]] = 2 # Mark as contaminated
-
 
 def _water_recovery(params, grid):
     """Handles the random recovery of contaminated water sources."""
@@ -325,7 +322,6 @@ def _water_recovery(params, grid):
     
     if len(recovered_coords[0]) > 0:
         water_slice[recovered_coords] = 1 # Mark as clean
-
 
 def _water_shock(params, grid):
     """Applies a cyclical shock that contaminates clean water sources."""

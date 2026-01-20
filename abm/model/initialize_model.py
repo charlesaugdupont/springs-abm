@@ -11,6 +11,7 @@ from config import SVEIRCONFIG
 from abm.model.step import sveir_step
 from abm.network.network_creation import network_creation
 from abm.environment.grid_creation import grid_creation
+from abm.constants import Activity
 
 generator = torch.manual_seed(0)
 
@@ -377,7 +378,7 @@ class SVEIRModel(Model):
         # Ensure School (idx 1) remains 0 for adults
         base_adult = adult_weights.expand((~is_child).sum(), 5).clone()
         base_adult += adult_noise
-        base_adult[:, 1] = 0.0 
+        base_adult[:, Activity.SCHOOL] = 0.0 
 
         time_use[~is_child] = base_adult
   
@@ -389,9 +390,9 @@ class SVEIRModel(Model):
         child_noise = torch.rand(is_child.sum(), 5) * 5.0
         base_child = child_weights.expand(is_child.sum(), 5).clone()
         base_child += child_noise
-        base_child[:, 2] = 0.0 # No Worship
-        base_child[:, 3] = 0.0 # No Water
-        base_child[:, 4] = 0.0 # No Social Visits
+        base_child[:, Activity.WORSHIP] = 0.0   # No Worship
+        base_child[:, Activity.WATER] = 0.0     # No Water
+        base_child[:, Activity.SOCIAL] = 0.0    # No Social Visits
 
         time_use[is_child] = base_child
 

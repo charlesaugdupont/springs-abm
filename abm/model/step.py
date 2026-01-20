@@ -4,9 +4,8 @@ import torch
 from abm.agent.agent_update import sveir_agent_update
 from abm.model.data_collection import data_collection
 from abm.state import AgentGraph
+from abm.constants import Compartment
 
-# Define compartment mapping
-COMPARTMENT_MAP = {"S": 0, "V": 1, "E": 2, "I": 3, "R": 4}
 
 def _calculate_adjacency(agent_graph: AgentGraph) -> torch.Tensor:
     """Calculates dense adjacency matrix based on co-location."""
@@ -60,22 +59,22 @@ def sveir_step(
 
     # Agent Updates
     random_activity = sveir_agent_update("move", agent_graph, edge_weights=edge_weights)
-    sveir_agent_update("exposure_increment", agent_graph, M=COMPARTMENT_MAP)
+    sveir_agent_update("exposure_increment", agent_graph)
     
-    newly_infectious_count = sveir_agent_update("exposed_to_infectious", agent_graph, M=COMPARTMENT_MAP, params=params)
+    newly_infectious_count = sveir_agent_update("exposed_to_infectious", agent_graph, params=params)
     
-    sveir_agent_update("infectious_to_recovered", agent_graph, M=COMPARTMENT_MAP, params=params, num_nodes=num_nodes)
-    sveir_agent_update("susceptible_to_vaccinated", agent_graph, M=COMPARTMENT_MAP, params=params, num_nodes=num_nodes)
+    sveir_agent_update("infectious_to_recovered", agent_graph, params=params, num_nodes=num_nodes)
+    sveir_agent_update("susceptible_to_vaccinated", agent_graph, params=params, num_nodes=num_nodes)
     sveir_agent_update("health_investment", agent_graph, params=params, policy=policy_library, risk_levels=risk_levels)
 
     # Dynamic Adjacency based on new locations
     adjacency = _calculate_adjacency(agent_graph)
     
-    sveir_agent_update("susceptible_to_exposed", agent_graph, M=COMPARTMENT_MAP, params=params, num_nodes=num_nodes, adjacency=adjacency)
-    sveir_agent_update("vaccinated_to_exposed", agent_graph, M=COMPARTMENT_MAP, params=params, num_nodes=num_nodes, adjacency=adjacency)
+    sveir_agent_update("susceptible_to_exposed", agent_graph, params=params, num_nodes=num_nodes, adjacency=adjacency)
+    sveir_agent_update("vaccinated_to_exposed", agent_graph, params=params, num_nodes=num_nodes, adjacency=adjacency)
     
-    sveir_agent_update("water_to_human_transmission", agent_graph, M=COMPARTMENT_MAP, params=params, grid=grid)
-    sveir_agent_update("human_to_water_transmission", agent_graph, M=COMPARTMENT_MAP, params=params, grid=grid, random_activity=random_activity)
+    sveir_agent_update("water_to_human_transmission", agent_graph, params=params, grid=grid)
+    sveir_agent_update("human_to_water_transmission", agent_graph, params=params, grid=grid, random_activity=random_activity)
     sveir_agent_update("water_recovery", agent_graph, params=params, grid=grid)
     if (timestep + 1) % params["shock_frequency"] == 0:
         sveir_agent_update("shock", agent_graph, params=params, grid=grid)
@@ -96,11 +95,11 @@ def sveir_step(
     # Counts
     compartments = agent_graph.ndata["compartments"]
     compartment_counts = {
-        "S": torch.sum(compartments == COMPARTMENT_MAP["S"]).item(),
-        "V": torch.sum(compartments == COMPARTMENT_MAP["V"]).item(),
-        "E": torch.sum(compartments == COMPARTMENT_MAP["E"]).item(),
-        "I": torch.sum(compartments == COMPARTMENT_MAP["I"]).item(),
-        "R": torch.sum(compartments == COMPARTMENT_MAP["R"]).item(),
+        "S": torch.sum(compartments == Compartment.SUSCEPTIBLE).item(),
+        "V": torch.sum(compartments == Compartment.VACCINATED).item(),
+        "E": torch.sum(compartments == Compartment.EXPOSED).item(),
+        "I": torch.sum(compartments == Compartment.INFECTIOUS).item(),
+        "R": torch.sum(compartments == Compartment.RECOVERED).item(),
     }
 
     return newly_infectious_count, compartment_counts
