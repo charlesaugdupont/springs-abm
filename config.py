@@ -27,13 +27,6 @@ class GridCreationParams(BaseModel):
     properties: dict | None = None
     model_config = ConfigDict(validate_default=True)
 
-class GridAssignmentParams(BaseModel):
-    """Base class for agent to grid assignment arguments"""
-    method: str = "random"
-    property: str | None = None
-    path: str | None = None
-    model_config = ConfigDict(validate_default=True)
-
 class SteeringParamsSVEIR(BaseModel):
     """Steering parameters used within each step of the SVEIR model."""
     npath: str = "./agent_data.zarr"
@@ -78,7 +71,6 @@ class SVEIRConfig(BaseModel):
     number_agents: PositiveInt = 300
     spatial: bool = True
     spatial_creation_args: GridCreationParams = GridCreationParams()
-    spatial_assignment_args: GridAssignmentParams = GridAssignmentParams()
     initial_graph_type: str = "barabasi-albert"
     initial_graph_args: InitialGraphArgs = InitialGraphArgs()
     step_target: PositiveInt = 150

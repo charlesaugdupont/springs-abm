@@ -49,25 +49,3 @@ def network_creation(num_agents, method, verbose, active_indices=None, **kwargs)
         return agent_graph
     else:
         raise NotImplementedError('Currently only barabasi-albert model implemented!')
-
-def barabasi_albert_graph(num_agents, new_node_edges=1, seed=1):
-    """Create a barabasi-albert graph.
-    
-    This function creates a network graph for user-defined
-    number of agents using the barabasi albert model function 
-    from networkx.
-
-    Args:
-        num_agents: Number of agent nodes
-        new_node_edges: Number of edges to create for each new node
-        seed: random seed for function
-
-    Return:
-        agent_graph: Created agent_graph as per the chosen method
-    """
-    #Create graph using networkx function for barabasi albert graph 
-    networkx_graph = nx.barabasi_albert_graph(n=num_agents, m=new_node_edges, seed=seed)
-    barabasi_albert_coo = nx.to_scipy_sparse_array(networkx_graph,format='coo')
-    
-    #Return DGL graph from networkx graph
-    return dgl.from_scipy(barabasi_albert_coo)
