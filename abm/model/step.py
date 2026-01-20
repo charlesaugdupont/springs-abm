@@ -1,3 +1,5 @@
+# abm/model/step.py
+
 """Time-stepping module for the SVEIR model."""
 from typing import Any, Dict, Tuple
 import torch
@@ -58,7 +60,8 @@ def sveir_step(
         edge_weights[src, dst] = agent_graph.edata["weight"].to(device)
 
     # Agent Updates
-    random_activity = sveir_agent_update("move", agent_graph, edge_weights=edge_weights)
+    sveir_agent_update("move", agent_graph, edge_weights=edge_weights)
+    
     sveir_agent_update("exposure_increment", agent_graph)
     
     newly_infectious_count = sveir_agent_update("exposed_to_infectious", agent_graph, params=params)
@@ -74,7 +77,8 @@ def sveir_step(
     sveir_agent_update("vaccinated_to_exposed", agent_graph, params=params, num_nodes=num_nodes, adjacency=adjacency)
     
     sveir_agent_update("water_to_human_transmission", agent_graph, params=params, grid=grid)
-    sveir_agent_update("human_to_water_transmission", agent_graph, params=params, grid=grid, random_activity=random_activity)
+    sveir_agent_update("human_to_water_transmission", agent_graph, params=params, grid=grid)
+    
     sveir_agent_update("water_recovery", agent_graph, params=params, grid=grid)
     if (timestep + 1) % params["shock_frequency"] == 0:
         sveir_agent_update("shock", agent_graph, params=params, grid=grid)

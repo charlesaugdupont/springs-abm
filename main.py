@@ -40,7 +40,6 @@ def main():
             'simulate',
             'plot-heatmap',
             'plot-curves',
-            'plot-curves',
             'plot-violins',
             'plot-scatter'
         ],

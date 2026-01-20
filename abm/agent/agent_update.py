@@ -1,4 +1,4 @@
-# agent/agent_update.py
+# abm/agent/agent_update.py
 
 import torch
 from .health_cpt_utils import (
@@ -10,7 +10,7 @@ from .health_cpt_utils import (
 )
 from abm.constants import Compartment, Activity
 
-def sveir_agent_update(method, agent_graph, params=None, num_nodes=None, edge_weights=None, grid=None, adjacency=None, random_activity=None, policy=None, risk_levels=None):
+def sveir_agent_update(method, agent_graph, params=None, num_nodes=None, edge_weights=None, grid=None, adjacency=None, policy=None, risk_levels=None):
     """
     Dispatcher function that calls the appropriate agent update logic.
     """
@@ -24,7 +24,7 @@ def sveir_agent_update(method, agent_graph, params=None, num_nodes=None, edge_we
         "susceptible_to_exposed": (_agent_susceptible_to_exposed, [agent_graph, params, adjacency]),
         "vaccinated_to_exposed": (_agent_vaccinated_to_exposed, [agent_graph, params, adjacency]),
         "move": (_agent_move, [agent_graph, edge_weights]),
-        "human_to_water_transmission": (_agent_human_to_water_transmission, [agent_graph, params, grid, random_activity]),
+        "human_to_water_transmission": (_agent_human_to_water_transmission, [agent_graph, params, grid]),
         "water_to_human_transmission": (_agent_water_to_human_transmission, [agent_graph, params, grid]),
         "water_recovery": (_water_recovery, [params, grid]),
         "shock": (_water_shock, [params, grid]),
@@ -32,7 +32,8 @@ def sveir_agent_update(method, agent_graph, params=None, num_nodes=None, edge_we
 
     if method in update_functions:
         func, args = update_functions[method]
-        if method in ["move", "exposed_to_infectious"]:
+        # Only exposed_to_infectious needs to return a value (new infection count)
+        if method == "exposed_to_infectious":
              return func(*args)
         else:
             filtered_args = [arg for arg in args if arg is not None]
@@ -72,7 +73,7 @@ def _agent_health_investment_vectorized(agent_graph, params, policy_library, ris
     investment_cost = compute_health_cost(health, cost_params).int()
     health_change = compute_health_delta(health, delta_params).int()
     
-    # *** KEY CHANGE: Calculate health decline separately ***
+    # Calculate health decline separately
     health_decline = compute_health_decline(health).int()
 
     can_afford_mask = (wealth >= investment_cost)
@@ -255,8 +256,6 @@ def _agent_move(agent_graph, edge_weights):
             agent_graph.ndata['x'][active_visitors] = agent_graph.ndata["home_location"][visited_host_indices, 0]
             agent_graph.ndata['y'][active_visitors] = agent_graph.ndata["home_location"][visited_host_indices, 1]
 
-    return random_activity
-
 def _agent_water_to_human_transmission(agent_graph, params, grid):
     """Handles infection of agents from contaminated water sources."""
     water_idx = grid.property_to_index['water']
@@ -281,13 +280,17 @@ def _agent_water_to_human_transmission(agent_graph, params, grid):
     breakthrough_multiplier = (1.0 - params["vaccine_efficacy"]) * params["water_to_human_infection_prob"]
     _calculate_and_apply_new_infections(agent_graph, params, v_mask, torch.eye(agent_graph.num_nodes()), base_prob_multiplier=breakthrough_multiplier)
 
-def _agent_human_to_water_transmission(agent_graph, params, grid, random_activity):
+def _agent_human_to_water_transmission(agent_graph, params, grid):
     """Handles contamination of water sources by infectious agents."""
     water_idx = grid.property_to_index['water']
     water_slice = grid.grid_tensor[:, :, water_idx]
 
     # Find infectious agents who are at a water source
     infectious_mask = agent_graph.ndata["compartments"] == Compartment.INFECTIOUS
+    
+    # Retrieve the activity choice directly from the graph state
+    random_activity = agent_graph.ndata["activity_choice"]
+    
     at_water_source_mask = random_activity == Activity.WATER
     contaminator_mask = infectious_mask & at_water_source_mask
 
