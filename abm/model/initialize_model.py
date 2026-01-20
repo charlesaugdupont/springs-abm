@@ -93,7 +93,7 @@ class SVEIRModel(Model):
         else:
             torch.manual_seed(self.config.seed)
 
-            household_ids, is_child = self._calculate_demographics_arrays(self.config.number_agents)
+            _, is_child = self._calculate_demographics_arrays(self.config.number_agents)
             adult_indices = (~is_child).nonzero(as_tuple=True)[0]
 
             self.graph = network_creation(
@@ -120,27 +120,38 @@ class SVEIRModel(Model):
             self.generator_state = generator.get_state()
 
     def _calculate_demographics_arrays(self, num_agents):
-        """Calculates household IDs and Child status."""
-        avg_size = self.config.average_household_size
-        num_households = int(np.ceil(num_agents / avg_size))
-        
-        # Assign IDs
-        household_ids = torch.repeat_interleave(
-            torch.arange(num_households), avg_size
-        )[:num_agents]
-        
-        # Determine Child Status
+        """Calculates household IDs with VARIABLE sizes and Child status."""
+        avg_size = float(self.config.average_household_size)
+
+        # 1. Generate variable household sizes
+        # We sample enough households to definitely cover all agents
+        # Poisson(avg-1) + 1 ensures min size is 1 and mean is avg
+        estimated_num_households = int((num_agents / avg_size) * 1.5) 
+
+        # Sample sizes: Lambda is (Average - 1) because Poisson starts at 0
+        sizes = torch.poisson(torch.full((estimated_num_households,), avg_size - 1.0)) + 1.0
+        sizes = sizes.int()
+
+        # 2. Create IDs based on these sizes
+        # repeat_interleave repeats index 'i' by 'sizes[i]' times e.g., sizes=[3, 2] -> ids=[0,0,0, 1,1]
+        full_ids = torch.repeat_interleave(torch.arange(len(sizes)), sizes)
+
+        # Trim to exact number of agents
+        household_ids = full_ids[:num_agents]
+
+        # 3. Determine Child Status (Same logic as before)
         is_child = torch.zeros(num_agents, dtype=torch.bool)
         unique_households = torch.unique(household_ids)
-        
+
         for hid in unique_households:
             members = (household_ids == hid).nonzero(as_tuple=True)[0]
+            # Household Head (First member) is always Adult
+            # Others are probabilistically children
             if len(members) > 1:
-                # First member is Head (Adult). Others can be children.
                 others = members[1:]
                 random_draws = torch.rand(len(others))
                 is_child[others] = (random_draws < self.config.child_probability)
-                
+
         return household_ids, is_child
 
     def run(self, verbose=False):
@@ -373,7 +384,7 @@ class SVEIRModel(Model):
         # --- CHILD SCHEDULE ---
         # Children split time between Home, School, Social. (No Water, No Worship independently)
         # Weights: Home(40), School(40), Worship(0), Water(0), Social(20)
-        child_weights = torch.tensor([60.0, 40.0, 0.0, 0.0, 0.0])
+        child_weights = torch.tensor([80.0, 20.0, 0.0, 0.0, 0.0])
  
         child_noise = torch.rand(is_child.sum(), 5) * 5.0
         base_child = child_weights.expand(is_child.sum(), 5).clone()

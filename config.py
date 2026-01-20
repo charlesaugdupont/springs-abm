@@ -85,7 +85,8 @@ class SVEIRConfig(BaseModel):
 
     # Demographic Parameters
     average_household_size: int = 4
-    child_probability: float = 0.5 # probability that non-head-of-household member is a child
+    # probability that non-head-of-household member is a child
+    child_probability: float = 0.2
     
     # Parameters for Policy Pre-computation
     policy_library_path: str = "./policy_library.npz"
