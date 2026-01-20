@@ -14,24 +14,18 @@ def data_collection(agent_graph, timestep, npath='./agent_data', epath='./edge_d
         ndata = available_ndata
     elif ndata[0] == 'all_except':
         ndata = list(set(available_ndata) - set(ndata[1]))
-    # (Rest of ndata parsing logic remains similar)
     
-    # Updated: use edge_keys()
     available_edata = agent_graph.edge_keys()
     if edata == ['all']:
         edata = available_edata
 
     if ndata is not None:
-        if timestep == 0 and locals().get('initial_only', []) != []:
-             initialpath = npath.split('.')[0] + '_initial.zarr'
-             _node_property_collector(agent_graph, initialpath, initial_only, timestep, format, mode)
         _node_property_collector(agent_graph, npath, ndata, timestep, format, mode)
 
     if edata is not None:
         _edge_property_collector(agent_graph, epath, edata, timestep, format, mode)
 
 def _node_property_collector(agent_graph, npath, ndata, timestep, format, mode):
-    # Only support PyTorch (implicit in the model)
     if format == 'xarray':
         agent_data_instance = xr.Dataset()
         for prop in ndata:
