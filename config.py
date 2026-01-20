@@ -1,7 +1,6 @@
 # config.py
 
 """Configuration parameters for the SVEIR model.
-
 The configuration parameters are stored in a pydantic object. The model is
 initialized with default values. The default values can be overwritten by
 providing a yaml file or a dictionary.
@@ -76,13 +75,17 @@ class SVEIRConfig(BaseModel):
     description: str = "Configuration for the SVEIR agent-based model."
     device: str = "cpu"
     seed: int = 42
-    number_agents: PositiveInt = 100
+    number_agents: PositiveInt = 300
     spatial: bool = True
     spatial_creation_args: GridCreationParams = GridCreationParams()
     spatial_assignment_args: GridAssignmentParams = GridAssignmentParams()
     initial_graph_type: str = "barabasi-albert"
     initial_graph_args: InitialGraphArgs = InitialGraphArgs()
     step_target: PositiveInt = 150
+
+    # Demographic Parameters
+    average_household_size: int = 4
+    child_probability: float = 0.5 # probability that non-head-of-household member is a child
     
     # Parameters for Policy Pre-computation
     policy_library_path: str = "./policy_library.npz"

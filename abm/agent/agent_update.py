@@ -1,8 +1,6 @@
 # agent/agent_update.py
 
 import torch
-
-# Import from the new shared utility module
 from .health_cpt_utils import (
     utility,
     compute_new_wealth,
@@ -33,7 +31,6 @@ def sveir_agent_update(method, agent_graph, M=None, params=None, num_nodes=None,
 
     if method in update_functions:
         func, args = update_functions[method]
-        
         if method in ["move", "exposed_to_infectious"]:
              return func(*args)
         else:
@@ -230,30 +227,34 @@ def _agent_move(agent_graph, edge_weights):
     # Handle social visits separately as they are more complex
     social_mask = (random_activity == 4)
     if torch.any(social_mask):
-        agents_social_indices = social_mask.nonzero(as_tuple=True)[0]
-        
-        # Social agents visit other agents who are at home
+        visiting_agents = social_mask.nonzero(as_tuple=True)[0]
+
+        # 1. Identify potential hosts (must be at home)
         is_at_home_mask = (random_activity == 0)
-        
-        # Weights for visiting agents at home
-        social_weights = edge_weights[agents_social_indices][:, is_at_home_mask]
-        
-        # Only consider agents who have neighbors at home to visit
+
+        # 2. Get weights
+        # Note: edge_weights comes from agent_graph.edges().
+        # Since we only created edges between adults, this matrix 
+        # naturally only contains Adult->Adult connections.
+        social_weights = edge_weights[visiting_agents][:, is_at_home_mask]
+
+        # 3. Selection
         can_visit_mask = social_weights.sum(dim=1) > 0
         if torch.any(can_visit_mask):
-            visiting_agents = agents_social_indices[can_visit_mask]
-            visiting_weights = social_weights[can_visit_mask]
-            
-            # Normalize weights to form a probability distribution
-            visiting_weights /= visiting_weights.sum(dim=1, keepdim=True)
-            
-            # Choose a neighbor to visit
-            hosts_at_home = is_at_home_mask.nonzero(as_tuple=True)[0]
-            visited_host_indices = hosts_at_home[torch.multinomial(visiting_weights, num_samples=1).squeeze()]
-            
-            # Update location of visiting agents to the home of their host
-            agent_graph.ndata['x'][visiting_agents] = agent_graph.ndata["home_location"][visited_host_indices, 0]
-            agent_graph.ndata['y'][visiting_agents] = agent_graph.ndata["home_location"][visited_host_indices, 1]
+            active_visitors = visiting_agents[can_visit_mask]
+            active_weights = social_weights[can_visit_mask]
+
+            # Normalize
+            active_weights /= active_weights.sum(dim=1, keepdim=True)
+
+            # Choose Host
+            hosts_at_home_indices = is_at_home_mask.nonzero(as_tuple=True)[0]
+            chosen_local_idx = torch.multinomial(active_weights, num_samples=1).squeeze()
+            visited_host_indices = hosts_at_home_indices[chosen_local_idx]
+
+            # Teleport
+            agent_graph.ndata['x'][active_visitors] = agent_graph.ndata["home_location"][visited_host_indices, 0]
+            agent_graph.ndata['y'][active_visitors] = agent_graph.ndata["home_location"][visited_host_indices, 1]
 
     return random_activity
 

@@ -6,13 +6,11 @@ import os
 from pathlib import Path
 import torch
 
-# Removed dgl imports
 from abm.agentInteraction.weight_update import weight_update_sveir
 from config import SVEIRCONFIG
 from abm.model.step import sveir_step
 from abm.network.network_creation import network_creation
 from abm.environment.grid_creation import grid_creation
-from abm.environment.grid_assignment import grid_assignment
 
 generator = torch.manual_seed(0)
 
@@ -50,7 +48,6 @@ class SVEIRModel(Model):
         self.risk_levels_tensor = None
         self.infection_incidence = []
         self.prevalence_history = []
-        # History lists... (omitted for brevity, same as original)
         self.susceptible_history = []
         self.exposed_history = []
         self.recovered_history = []
@@ -95,18 +92,24 @@ class SVEIRModel(Model):
             self.step_count = self.inputs["step_count"]
         else:
             torch.manual_seed(self.config.seed)
-            if verbose:
-                print(f"Model torch seed set to {self.config.seed}")
-            
-            # Create network returns AgentGraph
-            self.create_network(verbose)
-            
+
+            household_ids, is_child = self._calculate_demographics_arrays(self.config.number_agents)
+            adult_indices = (~is_child).nonzero(as_tuple=True)[0]
+
+            self.graph = network_creation(
+                self.config.number_agents, 
+                self.config.initial_graph_type, 
+                verbose,
+                active_indices=adult_indices,  # <--- Pass adults here
+                **self.config.initial_graph_args.__dict__
+            )
+
             if self.config.spatial:
                 self.create_grid()
                 self.place_agents()
 
             self.initialize_agent_properties()
-            
+
             # Move AgentGraph to device
             self.graph = self.graph.to(self.config.device)
 
@@ -115,6 +118,30 @@ class SVEIRModel(Model):
 
             weight_update_sveir(self.graph, self.config.device, self.steering_parameters['proximity_decay_rate'], self.steering_parameters['truncation_weight'])
             self.generator_state = generator.get_state()
+
+    def _calculate_demographics_arrays(self, num_agents):
+        """Calculates household IDs and Child status."""
+        avg_size = self.config.average_household_size
+        num_households = int(np.ceil(num_agents / avg_size))
+        
+        # Assign IDs
+        household_ids = torch.repeat_interleave(
+            torch.arange(num_households), avg_size
+        )[:num_agents]
+        
+        # Determine Child Status
+        is_child = torch.zeros(num_agents, dtype=torch.bool)
+        unique_households = torch.unique(household_ids)
+        
+        for hid in unique_households:
+            members = (household_ids == hid).nonzero(as_tuple=True)[0]
+            if len(members) > 1:
+                # First member is Head (Adult). Others can be children.
+                others = members[1:]
+                random_draws = torch.rand(len(others))
+                is_child[others] = (random_draws < self.config.child_probability)
+                
+        return household_ids, is_child
 
     def run(self, verbose=False):
         # (Identical to original)
@@ -129,7 +156,6 @@ class SVEIRModel(Model):
             self.step(verbose)
 
     def step(self, verbose):
-        # (Identical logic, just calling functions)
         try:
             if verbose:
                 print(f'performing step {self.step_count} of {self.config.step_target}')
@@ -147,7 +173,6 @@ class SVEIRModel(Model):
             raise RuntimeError(f'Execution of step failed for step {self.step_count}') from e
         self.step_count += 1
 
-    # --- Getters (Identical, ndata access works the same) ---
     def get_total_infections(self) -> int:
         if "num_infections" in self.graph.ndata:
             return torch.sum(self.graph.ndata["num_infections"]).item()
@@ -194,14 +219,7 @@ class SVEIRModel(Model):
         if "initial_wealth" not in self.graph.ndata: return np.array([])
         return self.graph.ndata['initial_health'].cpu().numpy()
 
-    def create_network(self, verbose):
-        self.graph = network_creation(
-            self.config.number_agents, self.config.initial_graph_type, verbose,
-            **self.config.initial_graph_args.__dict__
-        )
-
     def create_grid(self):
-        # (Identical to original)
         grid_params = self.config.spatial_creation_args
         if grid_params.method == "realistic_import":
             if not grid_params.grid_id:
@@ -220,47 +238,80 @@ class SVEIRModel(Model):
             self.grid_environment = grid_creation(**grid_params.__dict__)
 
     def place_agents(self):
-        # (Identical to original, relies on self.graph.ndata)
         self.graph.ndata['x'] = torch.zeros(self.graph.num_nodes()).float()
         self.graph.ndata['y'] = torch.zeros(self.graph.num_nodes()).float()
-        
+
+        household_ids = self.graph.ndata["household_id"]
+        unique_households = torch.unique(household_ids)
+        num_households = len(unique_households)
+
         if self.config.spatial_creation_args.method == "realistic_import":
-            # (Identical distribution logic...)
-            num_agents = self.config.number_agents
+            # Identify valid residence cells
             residence_mask = self.grid_tensor[:, :, self.property_to_index['residences']]
             valid_cells = np.argwhere(residence_mask == 1)
-            if len(valid_cells) == 0: raise ValueError("No valid residence cells.")
-            allocations = np.random.multinomial(num_agents, np.ones(len(valid_cells)) / len(valid_cells))
-            agent_coords = []
+            
+            if len(valid_cells) == 0: 
+                raise ValueError("No valid residence cells.")
+            
+            # Allocate households to cells, not individual agents
+            allocations = np.random.multinomial(num_households, np.ones(len(valid_cells)) / len(valid_cells))
             minx, miny, maxx, maxy = self.grid_bounds
             x_step = (maxx - minx) / self.grid_tensor.shape[1]
             y_step = (maxy - miny) / self.grid_tensor.shape[0]
+            
+            household_centers = {}
+            current_hh_idx = 0
+            
+            # Determine (x,y) for each household ID
             for i, count in enumerate(allocations):
                 if count > 0:
                     r, c = valid_cells[i]
                     cell_x_center = minx + (c + 0.5) * x_step
                     cell_y_center = miny + (r + 0.5) * y_step
                     for _ in range(count):
-                        agent_coords.append((cell_x_center, cell_y_center))
-            coords_tensor = torch.tensor(agent_coords, dtype=torch.float)
-            coords_tensor = coords_tensor[torch.randperm(num_agents)]
-            self.graph.ndata['x'] = coords_tensor[:, 0]
-            self.graph.ndata['y'] = coords_tensor[:, 1]
+                        hh_id = unique_households[current_hh_idx].item()
+                        household_centers[hh_id] = (cell_x_center, cell_y_center)
+                        current_hh_idx += 1
+            
+            # Assign coordinates to agents based on their household ID
+            # This is a bit slow as a loop, can be vectorized if needed, but safe for <10k agents
+            x_coords = torch.zeros(self.graph.num_nodes())
+            y_coords = torch.zeros(self.graph.num_nodes())
+            for hh_id, (hx, hy) in household_centers.items():
+                mask = (household_ids == hh_id)
+                x_coords[mask] = hx
+                y_coords[mask] = hy
+                
+            self.graph.ndata['x'] = x_coords
+            self.graph.ndata['y'] = y_coords
+
         else:
-            grid_assignment(self.graph, self.grid_environment, **self.config.spatial_assignment_args.__dict__)
+            # Fallback for synthetic grids (random assignment)
+            # Create random positions for households
+            hh_x = torch.randint(0, self.grid_environment.grid_shape[0], (num_households,)).float()
+            hh_y = torch.randint(0, self.grid_environment.grid_shape[1], (num_households,)).float()
+            
+            # Map back to agents
+            # Note: This assumes household_ids are contiguous 0..N, which they are from _assign_demographics
+            self.graph.ndata['x'] = hh_x[household_ids]
+            self.graph.ndata['y'] = hh_y[household_ids]
 
     def initialize_agent_properties(self):
-        # (Identical to original logic)
         num_agents = self.graph.num_nodes()
         agent_properties = {}
-        # ... (Same persona generation logic) ...
         persona_ids = torch.randint(0, self.config.num_agent_personas, (num_agents,))
         assigned_personas = self.agent_personas[persona_ids]
+
+        # behavioural profile
         agent_properties["persona_id"] = persona_ids
         agent_properties["alpha"] = assigned_personas[:, 0]
         agent_properties["gamma"] = assigned_personas[:, 1]
         agent_properties["omega"] = assigned_personas[:, 2]
         agent_properties["eta"]   = assigned_personas[:, 3]
+
+        # demographics
+        agent_properties["household_id"] = self.graph.ndata['household_id']
+        agent_properties["is_child"] = self.graph.ndata['is_child'].long()
 
         agent_properties["num_infections"] = self._initialize_agent_num_infections()
         agent_properties["compartments"] = self._initialize_agents_compartment()
@@ -280,10 +331,9 @@ class SVEIRModel(Model):
         for key, value in agent_properties.items():
             self.graph.ndata[key] = value
 
-    # _initialize_ functions and _find_nearest_locations remain identical 
-    # as they just return Tensors or use self.graph.ndata which is supported.
     def _initialize_agent_num_infections(self):
         return torch.zeros(self.graph.num_nodes(), dtype=torch.int)
+
     def _initialize_agents_compartment(self):
         proportion = self.steering_parameters["initial_infected_proportion"]
         num_infected = round(self.graph.num_nodes() * proportion)
@@ -291,16 +341,59 @@ class SVEIRModel(Model):
         indices = torch.randperm(self.graph.num_nodes())[:num_infected]
         tensor[indices] = 3
         return tensor
+
     def _initialize_agents_exposure_time(self):
         return torch.zeros(self.graph.num_nodes(), dtype=torch.int)
+
     def _initialize_agents_time_use(self):
-        tensor = torch.rand(self.graph.num_nodes(), 5)
-        return tensor / tensor.sum(dim=1, keepdim=True)
+        """
+        Creates time use schedules.
+        Activities: 0:Home, 1:School, 2:Worship, 3:Water, 4:Social
+        """
+        num_agents = self.graph.num_nodes()
+        is_child = self.graph.ndata['is_child']
+
+        # Initialize tensor
+        time_use = torch.zeros((num_agents, 5))
+
+        # --- ADULT SCHEDULE ---
+        # Adults split time between Home, Worship, Water, Social. (No School)
+        # Weights: Home(40), School(0), Worship(10), Water(30), Social(20)
+        adult_weights = torch.tensor([40.0, 0.0, 10.0, 30.0, 20.0])
+
+        # Add some random noise to adults so they aren't robots
+        adult_noise = torch.rand((~is_child).sum(), 5) * 10.0
+        # Ensure School (idx 1) remains 0 for adults
+        base_adult = adult_weights.expand((~is_child).sum(), 5).clone()
+        base_adult += adult_noise
+        base_adult[:, 1] = 0.0 
+
+        time_use[~is_child] = base_adult
+  
+        # --- CHILD SCHEDULE ---
+        # Children split time between Home, School, Social. (No Water, No Worship independently)
+        # Weights: Home(40), School(40), Worship(0), Water(0), Social(20)
+        child_weights = torch.tensor([60.0, 40.0, 0.0, 0.0, 0.0])
+ 
+        child_noise = torch.rand(is_child.sum(), 5) * 5.0
+        base_child = child_weights.expand(is_child.sum(), 5).clone()
+        base_child += child_noise
+        base_child[:, 2] = 0.0 # No Worship
+        base_child[:, 3] = 0.0 # No Water
+        base_child[:, 4] = 0.0 # No Social Visits
+
+        time_use[is_child] = base_child
+
+        # Normalize to probabilities (sum to 1)
+        # Add epsilon to avoid division by zero if noise makes everything 0
+        return time_use / (time_use.sum(dim=1, keepdim=True) + 1e-6)
+
     def _initialize_agents_home_location(self):
         tensor = torch.zeros((self.graph.num_nodes(), 2), dtype=torch.int)
         tensor[:, 0] = self.graph.ndata["y"]
         tensor[:, 1] = self.graph.ndata["x"]
         return tensor.float()
+
     def _find_nearest_locations(self, home_locations, property_name):
         property_grid = self.grid_environment.grid_tensor[:, :, self.grid_environment.property_to_index[property_name]]
         property_locations = torch.stack(torch.where(property_grid == 1)).T.float()
@@ -309,14 +402,16 @@ class SVEIRModel(Model):
             return home_locations
         distances = torch.cdist(home_locations, property_locations)
         return property_locations[torch.argmin(distances, dim=1)]
+
     def _initialize_agents_activity_choice(self):
         return torch.zeros(self.graph.num_nodes(), dtype=torch.int)
+
     def _initialize_agents_wealth(self, min_val, max_val):
         return torch.randint(min_val, max_val + 1, (self.graph.num_nodes(),), dtype=torch.int)
+
     def _initialize_agents_health(self, min_val, max_val):
         return torch.randint(min_val, max_val + 1, (self.graph.num_nodes(),), dtype=torch.int)
 
-# Replaced dgl.save_graphs with simple pickle of the AgentGraph object
 def _save_model(path, inputs):
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
