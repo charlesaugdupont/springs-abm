@@ -3,7 +3,7 @@ from typing import Dict
 import torch
 
 from abm.agent_graph import AgentGraph
-from abm.constants import Activity, AgentPropertyKeys, Compartment
+from abm.constants import Activity, AgentPropertyKeys, Compartment, GridLayer
 from config import SVEIRConfig
 
 class AgentFactory:
@@ -45,9 +45,9 @@ class AgentFactory:
         agent_properties[AgentPropertyKeys.TIME_USE] = self._initialize_time_use(num_agents, agent_graph.ndata[AgentPropertyKeys.IS_CHILD])
         home_loc = self._initialize_home_location(agent_graph)
         agent_properties[AgentPropertyKeys.HOME_LOCATION] = home_loc
-        agent_properties[AgentPropertyKeys.SCHOOL_LOCATION] = self._find_nearest_locations(home_loc, "school", grid_env)
-        agent_properties[AgentPropertyKeys.WORSHIP_LOCATION] = self._find_nearest_locations(home_loc, "place_of_worship", grid_env)
-        agent_properties[AgentPropertyKeys.WATER_LOCATION] = self._find_nearest_locations(home_loc, "water", grid_env)
+        agent_properties[AgentPropertyKeys.SCHOOL_LOCATION] = self._find_nearest_locations(home_loc, GridLayer.SCHOOL, grid_env)
+        agent_properties[AgentPropertyKeys.WORSHIP_LOCATION] = self._find_nearest_locations(home_loc, GridLayer.WORSHIP, grid_env)
+        agent_properties[AgentPropertyKeys.WATER_LOCATION] = self._find_nearest_locations(home_loc, GridLayer.WATER, grid_env)
         agent_properties[AgentPropertyKeys.ACTIVITY_CHOICE] = torch.zeros(num_agents, dtype=torch.int)
 
         # --- Health and Wealth ---

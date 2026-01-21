@@ -15,6 +15,19 @@ class Activity(IntEnum):
     WATER = 3
     SOCIAL = 4
 
+class WaterStatus(IntEnum):
+    """Represents the contamination status of a water source in the grid."""
+    CLEAN = 1
+    CONTAMINATED = 2
+
+class GridLayer:
+    """Centralized string keys for layers in the spatial grid."""
+    RESIDENCES = "residences"
+    SCHOOL = "school"
+    WORSHIP = "place_of_worship"
+    WATER = "water"
+    ANIMAL_DENSITY = "animal_density"
+
 class AgentPropertyKeys:
     """Centralized string keys for agent properties in AgentGraph.ndata."""
     # Core State

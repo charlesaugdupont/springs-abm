@@ -4,7 +4,7 @@ import torch
 
 from .pathogen import Pathogen
 from abm.agent_graph import AgentGraph
-from abm.constants import Compartment, AgentPropertyKeys, Activity
+from abm.constants import Compartment, AgentPropertyKeys, Activity, GridLayer, WaterStatus
 from config import RotavirusConfig, SteeringParamsSVEIR
 
 class Rotavirus(Pathogen):
@@ -29,7 +29,7 @@ class Rotavirus(Pathogen):
         self._susceptible_to_vaccinated(agent_graph)
 
         # 3. Handle transmission
-        # 3a. H2H Transmission
+        # 3a. H2H Transmission (uses the co-location adjacency matrix)
         self._update_infection_probability()
         self._susceptible_to_exposed_h2h(agent_graph, adjacency)
         self._vaccinated_to_exposed_h2h(agent_graph, adjacency)
@@ -37,6 +37,7 @@ class Rotavirus(Pathogen):
         # 3b. Waterborne Transmission
         self._human_to_water(agent_graph, grid)
         self._water_to_human(agent_graph, grid)
+
 
     def _update_infection_probability(self):
         """Calculates a new stochastic infection probability for the current step."""
@@ -76,7 +77,7 @@ class Rotavirus(Pathogen):
 
     def _human_to_water(self, agent_graph: AgentGraph, grid: Any):
         """Infectious agents contaminate water sources."""
-        water_idx = grid.property_to_index.get('water')
+        water_idx = grid.property_to_index.get(GridLayer.WATER)
         if water_idx is None: return
 
         status_key = AgentPropertyKeys.status(self.name)
@@ -97,22 +98,22 @@ class Rotavirus(Pathogen):
             unique_points = torch.unique(water_points, dim=0)
             if unique_points.shape[0] > 0:
                 # Grid tensor expects (row, col) which is (y, x)
-                grid.grid_tensor[unique_points[:, 0], unique_points[:, 1], water_idx] = 2 # 2 represents contaminated
+                grid.grid_tensor[unique_points[:, 0], unique_points[:, 1], water_idx] = WaterStatus.CONTAMINATED
 
     def _water_to_human(self, agent_graph: AgentGraph, grid: Any):
         """Susceptible agents get infected from contaminated water sources."""
-        water_idx = grid.property_to_index.get('water')
+        water_idx = grid.property_to_index.get(GridLayer.WATER)
         if water_idx is None: return
 
         water_slice = grid.grid_tensor[:, :, water_idx]
-        if torch.all(water_slice != 2): return # No contaminated water
+        if torch.all(water_slice != WaterStatus.CONTAMINATED): return
 
         # Find agents at contaminated water sources
         agent_coords = torch.stack(
             (agent_graph.ndata[AgentPropertyKeys.Y], agent_graph.ndata[AgentPropertyKeys.X]), dim=1
         ).long()
         agent_water_status = water_slice[agent_coords[:, 0], agent_coords[:, 1]]
-        at_contaminated_water_mask = (agent_water_status == 2)
+        at_contaminated_water_mask = (agent_water_status == WaterStatus.CONTAMINATED)
 
         if not torch.any(at_contaminated_water_mask):
             return

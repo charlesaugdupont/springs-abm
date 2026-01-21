@@ -7,6 +7,8 @@ import random
 import json
 import hashlib
 
+from abm.constants import GridLayer
+
 # These default parameters could be moved to a configuration file
 # for greater flexibility in future studies.
 AKUSE_CENTER_POINT = (6.100635676379143, 0.12736045405150456)
@@ -16,8 +18,8 @@ AKUSE_BOUNDARY_COORDS = [
 ]
 GRID_SIZE = 75
 POI_FETCH_RADIUS = 1500
-OSM_POI_TAGS = {"amenity": ["school", "place_of_worship"]}
-PROCEDURAL_POI_COUNTS = {"school": 5, "place_of_worship": 5, "water": 20}
+OSM_POI_TAGS = {"amenity": [GridLayer.SCHOOL, GridLayer.WORSHIP]}
+PROCEDURAL_POI_COUNTS = {GridLayer.SCHOOL: 5, GridLayer.WORSHIP: 5, GridLayer.WATER: 20}
 
 def get_grid_id(boundary_coords, grid_size, osm_tags, procedural_counts) -> str:
     """Creates a unique, deterministic hash from all grid generation parameters."""
@@ -109,7 +111,7 @@ def create_and_save_realistic_grid():
     
     # Layer 0: Residences
     final_layers.append(valid_cells.astype(np.uint8))
-    property_map[0] = "residences"
+    property_map[0] = GridLayer.RESIDENCES
     
     # Subsequent layers: POIs
     poi_layers_stack = []
@@ -123,7 +125,7 @@ def create_and_save_realistic_grid():
     # Final data layer: Animal density
     animal_density = _place_animal_density(valid_cells)
     final_layers.append(animal_density)
-    property_map[len(final_layers) - 1] = "animal_density"
+    property_map[len(final_layers) - 1] = GridLayer.ANIMAL_DENSITY
     
     final_grid = np.stack(final_layers, axis=-1)
 

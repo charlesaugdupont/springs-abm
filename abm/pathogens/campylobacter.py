@@ -3,8 +3,8 @@ from typing import Any
 import torch
 
 from .pathogen import Pathogen
-from abm.agent_graph import AgentGraph
-from abm.constants import Compartment, AgentPropertyKeys
+from abm.state import AgentGraph
+from abm.constants import Compartment, AgentPropertyKeys, GridLayer
 from config import CampylobacterConfig, SteeringParamsSVEIR
 
 class Campylobacter(Pathogen):
@@ -24,12 +24,12 @@ class Campylobacter(Pathogen):
         self._exposed_to_infectious(agent_graph)
         self._infectious_to_recovered(agent_graph)
 
-        # 2. Handle transmission from animal reservoir
+        # 2. Handle transmission from animal reservoir (NO human-to-human)
         self._animal_to_human_transmission(agent_graph, grid)
 
     def _animal_to_human_transmission(self, agent_graph: AgentGraph, grid: Any):
         """Handles Beta-Poisson infection from the animal density environmental layer."""
-        animal_idx = grid.property_to_index.get('animal_density')
+        animal_idx = grid.property_to_index.get(GridLayer.ANIMAL_DENSITY)
         if animal_idx is None:
             return
 

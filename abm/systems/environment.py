@@ -4,6 +4,7 @@ import torch
 
 from .system import System
 from abm.agent_graph import AgentGraph
+from abm.constants import GridLayer, WaterStatus
 
 class EnvironmentSystem(System):
     """Handles environmental dynamics like water contamination recovery and shocks."""
@@ -24,11 +25,11 @@ class EnvironmentSystem(System):
 
     def _water_recovery(self, grid: Any):
         """Models the natural recovery of contaminated water sources."""
-        water_idx = grid.property_to_index.get('water')
+        water_idx = grid.property_to_index.get(GridLayer.WATER)
         if water_idx is None: return
 
         water_slice = grid.grid_tensor[:, :, water_idx]
-        infected_mask = (water_slice == 2)
+        infected_mask = (water_slice == WaterStatus.CONTAMINATED)
         if not torch.any(infected_mask):
             return
 
@@ -40,15 +41,15 @@ class EnvironmentSystem(System):
         recovered_coords = (coords_to_recover[0][success], coords_to_recover[1][success])
 
         if len(recovered_coords[0]) > 0:
-            water_slice[recovered_coords] = 1 # 1 represents clean
+            water_slice[recovered_coords] = WaterStatus.CLEAN
 
     def _water_shock(self, grid: Any):
         """Introduces contamination to clean water sources, simulating a shock event."""
-        water_idx = grid.property_to_index.get('water')
+        water_idx = grid.property_to_index.get(GridLayer.WATER)
         if water_idx is None: return
 
         water_slice = grid.grid_tensor[:, :, water_idx]
-        clean_mask = (water_slice == 1)
+        clean_mask = (water_slice == WaterStatus.CLEAN)
         if not torch.any(clean_mask):
             return
 
@@ -60,4 +61,4 @@ class EnvironmentSystem(System):
         shocked_coords = (coords_to_shock[0][success], coords_to_shock[1][success])
 
         if len(shocked_coords[0]) > 0:
-            water_slice[shocked_coords] = 2 # 2 represents contaminated
+            water_slice[shocked_coords] = WaterStatus.CONTAMINATED
