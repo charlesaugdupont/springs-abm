@@ -33,8 +33,6 @@ def sveir_step(
     timestep: int,
     config: SVEIRConfig,
     grid: Any,
-    policy_library: dict,
-    risk_levels: torch.Tensor,
     pathogens: List[Pathogen],
     systems: List[System]
 ) -> Tuple[Dict[str, int], Dict[str, int]]:
@@ -44,7 +42,6 @@ def sveir_step(
     params = config.steering_parameters
 
     # --- 1. MOVEMENT & INTERACTION SETUP ---
-    # The MovementSystem is assumed to be the first system.
     src, dst = agent_graph.edges()
     edge_weights = torch.zeros((agent_graph.num_nodes(), agent_graph.num_nodes()), device=config.device)
     if EdgePropertyKeys.WEIGHT in agent_graph.edata:
@@ -53,27 +50,16 @@ def sveir_step(
     systems[0].update(agent_graph, edge_weights=edge_weights) # MovementSystem
     adjacency = _calculate_adjacency(agent_graph)
 
-    # --- 2. BEHAVIORAL & ENVIRONMENTAL UPDATES ---
-    # The BehavioralSystem needs a risk proxy. We use the first pathogen's (e.g., Rota) prob.
-    # A more robust solution might average risks or use a dedicated risk perception model.
-    risk_proxy = 0.002 # Default risk
-    for p in pathogens:
-        if isinstance(p, Rotavirus):
-            p._update_infection_probability() # Ensure probability is current
-            risk_proxy = p.current_infection_prob
-            break
-    
-    systems[1].update( # BehavioralSystem
-        agent_graph, policy_library=policy_library, risk_levels=risk_levels,
-        current_risk_proxy=risk_proxy
-    )
-    systems[2].update(agent_graph, grid=grid, timestep=timestep) # EnvironmentSystem
-
-    # --- 3. PATHOGEN DYNAMICS ---
+    # --- 2. PATHOGEN DYNAMICS ---
     new_cases_by_pathogen: Dict[str, int] = {}
     for pathogen in pathogens:
         pathogen.update(agent_graph, adjacency, grid)
         new_cases_by_pathogen[pathogen.name] = pathogen.new_cases_this_step
+
+    # --- 3. ILLNESS & BEHAVIORAL UPDATES ---
+    systems[1].update(agent_graph) # ChildIllnessSystem
+    systems[2].update(agent_graph) # CareSeekingSystem
+    systems[3].update(agent_graph, grid=grid, timestep=timestep) # EnvironmentSystem
 
     # --- 4. DATA COLLECTION ---
     if (params.data_collection_period > 0 and (timestep % params.data_collection_period == 0)) or \

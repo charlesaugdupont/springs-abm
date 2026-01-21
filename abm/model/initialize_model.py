@@ -3,6 +3,7 @@
 from pathlib import Path
 import torch
 import numpy as np
+from scipy.stats import qmc
 
 from abm.agentInteraction.weight_update import weight_update_sveir
 from config import SVEIRConfig, RotavirusConfig, CampylobacterConfig
@@ -36,8 +37,6 @@ class SVEIRModel(Model):
         super().__init__(model_identifier=model_identifier, root_path=root_path)
         self.steering_parameters = None
         self.graph = None
-        self.policy_library = None
-        self.risk_levels_tensor = None
         self.infection_incidence = []
         self.prevalence_history = []
         self.pathogens = []
@@ -47,11 +46,18 @@ class SVEIRModel(Model):
         """Sets model parameters from a dictionary, overriding defaults."""
         self.config = SVEIRConfig.from_dict(kwargs)
         self.steering_parameters = self.config.steering_parameters
-        # Update data paths to be relative to the model's output directory
         self.model_dir.mkdir(parents=True, exist_ok=True)
         self.steering_parameters.npath = str(self.model_dir / Path(self.steering_parameters.npath).name)
         self.steering_parameters.epath = str(self.model_dir / Path(self.steering_parameters.epath).name)
         self.save_model_parameters()
+    
+    def _load_agent_personas(self):
+        """Generates agent behavioral personas using LH sampling."""
+        sampler = qmc.LatinHypercube(d=2, seed=self.config.seed)
+        samples = sampler.random(n=self.config.num_agent_personas)
+        ranges = [self.config.gamma_range, self.config.lambda_range]
+        scaled_samples = qmc.scale(samples, [r[0] for r in ranges], [r[1] for r in ranges])
+        self.agent_personas = torch.from_numpy(scaled_samples).float()
 
     def _load_policy_library(self):
         """Loads the pre-computed agent decision policies."""
@@ -72,7 +78,7 @@ class SVEIRModel(Model):
             raise RuntimeError("Model parameters have not been set. Call set_model_parameters() first.")
 
         torch.manual_seed(self.config.seed)
-        self._load_policy_library()
+        self._load_agent_personas()
 
         # 1. Create Social Network
         household_ids, is_child = self._calculate_demographics(self.config.number_agents)
@@ -107,8 +113,9 @@ class SVEIRModel(Model):
     def _initialize_pathogens_and_systems(self):
         """Instantiates the pathogen and system objects that drive the simulation."""
         from abm.systems.movement import MovementSystem
-        from abm.systems.behavior import BehavioralSystem
         from abm.systems.environment import EnvironmentSystem
+        from abm.systems.child_illness import ChildIllnessSystem
+        from abm.systems.care_seeking import CareSeekingSystem
 
         pathogen_map = {"rota": Rotavirus, "campy": Campylobacter}
         pathogen_config_map = {"rota": RotavirusConfig, "campy": CampylobacterConfig}
@@ -124,7 +131,8 @@ class SVEIRModel(Model):
 
         self.systems = [
             MovementSystem(self.config),
-            BehavioralSystem(self.config),
+            ChildIllnessSystem(self.config),
+            CareSeekingSystem(self.config),
             EnvironmentSystem(self.config),
         ]
 

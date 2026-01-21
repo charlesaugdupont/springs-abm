@@ -88,7 +88,7 @@ class Pathogen(ABC):
         health = agent_graph.ndata[AgentPropertyKeys.HEALTH][target_indices].float()
 
         immunity_factor = torch.exp(-self.global_params.prior_infection_immunity_factor * num_prior_infections)
-        health_factor = torch.exp(-self.global_params.infection_reduction_factor_per_health_unit * (health - 1.0))
+        health_factor = torch.exp(-self.global_params.infection_reduction_factor_per_health_unit * health)
 
         final_prob = prob_multiplier * base_prob * immunity_factor * health_factor
         final_prob.clamp_(0.0, 1.0)

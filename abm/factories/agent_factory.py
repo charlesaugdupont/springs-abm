@@ -31,7 +31,18 @@ class AgentFactory:
 
         # --- Demographics ---
         agent_properties[AgentPropertyKeys.HOUSEHOLD_ID] = agent_graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
-        agent_properties[AgentPropertyKeys.IS_CHILD] = agent_graph.ndata[AgentPropertyKeys.IS_CHILD].long()
+        is_child = agent_graph.ndata[AgentPropertyKeys.IS_CHILD].bool()
+        agent_properties[AgentPropertyKeys.IS_CHILD] = is_child
+        # Assign IS_PARENT status to the first adult in any household with children
+        is_parent = torch.zeros_like(is_child)
+        for hh_id in torch.unique(agent_graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID]):
+            in_hh = agent_graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID] == hh_id
+            if torch.any(in_hh & is_child):
+                 # Find first adult in that household and make them a parent
+                 adults_in_hh = (in_hh & ~is_child).nonzero(as_tuple=True)[0]
+                 if len(adults_in_hh) > 0:
+                     is_parent[adults_in_hh[0]] = True
+        agent_properties[AgentPropertyKeys.IS_PARENT] = is_parent
 
         # --- Disease States (Initialized for all pathogens in config) ---
         for pathogen_conf in self.config.pathogens:
@@ -51,13 +62,16 @@ class AgentFactory:
         agent_properties[AgentPropertyKeys.ACTIVITY_CHOICE] = torch.zeros(num_agents, dtype=torch.int)
 
         # --- Health and Wealth ---
-        max_val = self.config.steering_parameters.max_state_value
-        wealth = torch.randint(1, max_val + 1, (num_agents,), dtype=torch.int)
-        health = torch.randint(1, max_val + 1, (num_agents,), dtype=torch.int)
+        wealth = torch.rand(num_agents, dtype=torch.float)
+        health = torch.rand(num_agents, dtype=torch.float)
         agent_properties[AgentPropertyKeys.WEALTH] = wealth
         agent_properties[AgentPropertyKeys.HEALTH] = health
         agent_properties[AgentPropertyKeys.INITIAL_WEALTH] = wealth.clone()
         agent_properties[AgentPropertyKeys.INITIAL_HEALTH] = health.clone()
+
+        # --- Illness State ---
+        agent_properties[AgentPropertyKeys.SYMPTOM_SEVERITY] = torch.zeros(num_agents, dtype=torch.float)
+        agent_properties[AgentPropertyKeys.ILLNESS_DURATION] = torch.zeros(num_agents, dtype=torch.int)
 
         # --- Assign all properties to the graph ---
         for key, value in agent_properties.items():

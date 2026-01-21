@@ -12,7 +12,7 @@ def cpt_value_function(x: float, params: Dict[str, float]) -> float:
     """Applies the CPT value function, sensitive to gains and losses."""
     if x >= 0:
         return x**params["theta"]
-    return -params["omega"] * (-x)**params["eta"]
+    return -params["lambda"] * (-x)**params["eta"]
 
 def compute_new_wealth(w: torch.Tensor, wealth_update_scale: float, utility_val: torch.Tensor) -> torch.Tensor:
     """Calculates the agent's new wealth based on a utility-driven adjustment."""

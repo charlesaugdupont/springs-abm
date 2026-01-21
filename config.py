@@ -66,15 +66,12 @@ class SteeringParamsSVEIR(BaseModel):
     mode: str = "w"
 
     # Shared / Global Parameters
-    infection_reduction_factor_per_health_unit: float = 0.005
-    beta: float = 0.95  # Discount factor for value iteration
-    theta: float = 0.88 # CPT value function parameter
-    P_H_increase: float = 0.75
-    P_H_decrease: float = 0.50
-    efficacy_multiplier: float = 1.0
-    cost_subsidy_factor: float = 1.0
-    infection_health_shock: int = 20
-    wealth_update_A: float = 0.50
+    infection_reduction_factor_per_health_unit: float = 0.5
+    theta: float = 0.88
+    eta: float = 0.88
+    gamma: float = 0.8
+    lambduh: float = 2.25
+    infection_health_shock: float = 0.2
 
     # Water Parameters (Shared Reservoir)
     human_to_water_infection_prob: float = 0.001
@@ -88,13 +85,11 @@ class SteeringParamsSVEIR(BaseModel):
     proximity_decay_rate: float = 0.5
     data_collection_period: int = 0
     data_collection_list: list[int] | None = None
-    max_state_value: int = 100
+    max_state_value: float = 1.0
     prior_infection_immunity_factor: float = 1.5
 
 class ExperimentParams(BaseModel):
     """Parameters defining the intervention sweep experiments."""
-    cost_subsidy_factors: List[float] = Field(default_factory=lambda: np.linspace(1.0, 0.4, 5).tolist())
-    efficacy_multipliers: List[float] = Field(default_factory=lambda: np.linspace(1.0, 2.0, 5).tolist())
     infection_risk_levels: List[float] = Field(default_factory=lambda: [0.001, 0.002, 0.003, 0.004, 0.005])
     num_cores: int = 6
     repetitions: int = 5
@@ -120,12 +115,9 @@ class SVEIRConfig(BaseModel):
     child_probability: float = 0.2
 
     # Parameters for Policy Pre-computation
-    policy_library_path: str = "./policy_library.npz"
     num_agent_personas: int = 32
-    alpha_range: list[float] = [0.1, 0.9]
-    gamma_range: list[float] = [0.2, 0.8]
-    omega_range: list[float] = [1.0, 4.0]
-    eta_range:   list[float] = [0.5, 1.0]
+    gamma_range: list[float] = [0.4, 0.9]
+    lambda: list[float] = [1.0, 3]
 
     # Experiment Control
     experiment_params: ExperimentParams = ExperimentParams()

@@ -8,7 +8,7 @@ import pickle
 import traceback
 from typing import Dict
 
-from .experiment_config import get_policy_path, get_results_path, get_full_results_path, get_sim_runs_path
+from .experiment_config import get_summary_results_path, get_full_results_path, get_sim_runs_path
 from config import SVEIRConfig
 from abm.model.initialize_model import SVEIRModel
 
@@ -29,8 +29,7 @@ def run_single_simulation(params: Dict) -> Dict:
         time_series = model.get_time_series_data()
         final_states = model.get_final_agent_states()
         return {
-            'efficacy': model.config.steering_parameters.efficacy_multiplier,
-            'subsidy': model.config.steering_parameters.cost_subsidy_factor,
+            'run_name': run_name,
             'proportion_infected': model.get_proportion_infected_at_least_once(),
             'prevalence_curve': time_series['prevalence'],
             'final_health': final_states['health'],
@@ -39,13 +38,13 @@ def run_single_simulation(params: Dict) -> Dict:
     except Exception:
         print(f"\n--- ERROR IN WORKER: {run_name} ---")
         traceback.print_exc()
-        return {'efficacy': -1, 'subsidy': -1, 'proportion_infected': -1.0}
+        return {'run_name': run_name, 'proportion_infected': -1.0}
 
 def worker_unpacker(args):
     """Helper to unpack arguments for the multiprocessing pool."""
     return run_single_simulation(args)
 
-def run_simulation_sweep(config: SVEIRConfig, experiment_name: str, policy_set_id: str):
+def run_simulation_sweep(config: SVEIRConfig, experiment_name: str):
     """Runs the full simulation sweep in parallel and saves results."""
     print(f"Starting parallel simulation sweep for experiment: {experiment_name}")
     sim_runs_path = get_sim_runs_path(experiment_name)
@@ -55,29 +54,19 @@ def run_simulation_sweep(config: SVEIRConfig, experiment_name: str, policy_set_i
     exp_params = config.experiment_params
     base_seed = config.seed
 
-    for i, efficacy in enumerate(exp_params.efficacy_multipliers):
-        for j, subsidy in enumerate(exp_params.cost_subsidy_factors):
-            policy_path = get_policy_path(policy_set_id, efficacy, subsidy)
-            if not os.path.exists(policy_path):
-                print(f"WARNING: Policy file not found at '{policy_path}'. Skipping combination.")
-                continue
+    for r in range(exp_params.repetitions):
+        unique_seed = base_seed + r
+        run_name = f"sim_rep_{r+1}"
 
-            for r in range(exp_params.repetitions):
-                unique_seed = base_seed + (i * len(exp_params.cost_subsidy_factors) * exp_params.repetitions) + (j * exp_params.repetitions) + r
-                run_name = f"sim_eff_{efficacy:.2f}_cost_{subsidy:.2f}_rep_{r+1}"
+        # Create a temporary config object for this specific run
+        run_config = config.model_copy(deep=True)
+        run_config.seed = unique_seed
 
-                # Create a temporary config object for this specific run
-                run_config = config.model_copy(deep=True)
-                run_config.seed = unique_seed
-                run_config.policy_library_path = policy_path
-                run_config.steering_parameters.efficacy_multiplier = efficacy
-                run_config.steering_parameters.cost_subsidy_factor = subsidy
-
-                tasks.append({
-                    'run_name': run_name,
-                    'config_dict': run_config.model_dump(by_alias=True),
-                    'sim_runs_path': sim_runs_path
-                })
+        tasks.append({
+            'run_name': run_name,
+            'config_dict': run_config.model_dump(by_alias=True),
+            'sim_runs_path': sim_runs_path
+        })
 
     if not tasks:
         print("No valid simulation tasks could be created. Aborting.")
@@ -94,26 +83,17 @@ def run_simulation_sweep(config: SVEIRConfig, experiment_name: str, policy_set_i
                     raw_results.append(result)
                 pbar.update(1)
 
-    # Save detailed results
+    # Save detailed results (this remains the same)
     full_results_path = get_full_results_path(experiment_name, config)
     with open(full_results_path, 'wb') as f:
         pickle.dump(raw_results, f)
     print(f"\nFull results saved to: {full_results_path}")
 
-    # Aggregate and save summary grid
-    results_agg = {}
-    for res in raw_results:
-        key = (res['efficacy'], res['subsidy'])
-        if key not in results_agg: results_agg[key] = []
-        results_agg[key].append(res['proportion_infected'])
-
-    summary_grid = np.zeros((len(exp_params.efficacy_multipliers), len(exp_params.cost_subsidy_factors)))
-    for i, efficacy in enumerate(exp_params.efficacy_multipliers):
-        for j, subsidy in enumerate(exp_params.cost_subsidy_factors):
-            key = (efficacy, subsidy)
-            proportions = [p for p in results_agg.get(key, [-1.0]) if p >= 0]
-            summary_grid[i, j] = np.mean(proportions) if proportions else -1.0
-
-    summary_grid_path = get_results_path(experiment_name, config.number_agents, exp_params.repetitions)
-    np.save(summary_grid_path, summary_grid)
-    print(f"Summary grid saved to: {summary_grid_path}")
+    summary_outcomes = {
+        res['run_name']: res['proportion_infected']
+        for res in raw_results if 'run_name' in res
+    }
+    summary_path = get_summary_results_path(experiment_name, config)
+    with open(summary_path, 'wb') as f:
+        pickle.dump(summary_outcomes, f)
+    print(f"Summary of outcomes saved to: {summary_path}")

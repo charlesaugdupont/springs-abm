@@ -39,6 +39,7 @@ class AgentPropertyKeys:
     # Demographics
     HOUSEHOLD_ID = "household_id"
     IS_CHILD = "is_child"
+    IS_PARENT = "is_parent"
 
     # Behavior / CPT
     PERSONA_ID = "persona_id"
@@ -56,6 +57,10 @@ class AgentPropertyKeys:
     SCHOOL_LOCATION = "school_location"
     WORSHIP_LOCATION = "worship_location"
     WATER_LOCATION = "water_location"
+    
+    # Illness State
+    SYMPTOM_SEVERITY = "symptom_severity"
+    ILLNESS_DURATION = "illness_duration"
 
     # Dynamic keys for pathogens
     @staticmethod
