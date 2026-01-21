@@ -1,46 +1,43 @@
+# abm/network/network_creation.py
 """Network creation functions."""
-#!/usr/bin/env python
-
 import networkx as nx
 import torch
 import numpy as np
-from abm.state import AgentGraph
+from abm.agent_graph import AgentGraph
+from typing import Optional
 
-def network_creation(num_agents, method, verbose, active_indices=None, **kwargs):
+def network_creation(num_agents: int, method: str, verbose: bool, device: str,
+                     active_indices: Optional[torch.Tensor] = None, **kwargs) -> AgentGraph:
     """Creates the graph network for the model."""
-    agent_graph = AgentGraph(num_agents)
+    agent_graph = AgentGraph(num_agents, device=device)
 
     if method == 'barabasi-albert':
-        seed = kwargs.get('seed', torch.initial_seed())
+        seed = kwargs.get('seed', 42)
         new_node_edges = kwargs.get('new_node_edges', 1)
-        
-        # Determine who gets edges
+
+        # Determine which subset of agents will form the network (e.g., adults only)
         if active_indices is not None:
-            # We are building a sub-network (e.g., Adults only)
             num_active_nodes = len(active_indices)
-            mapping = active_indices.cpu().numpy() # Maps local graph index 0..N to global Agent index
+            # A mapping from the local index (0 to N-1) in the nx_graph to the global agent ID
+            id_map = active_indices.cpu().numpy()
         else:
             num_active_nodes = num_agents
-            mapping = np.arange(num_agents)
+            id_map = np.arange(num_agents)
 
         if verbose:
-            print(f"Creating {method} network for {num_active_nodes} active agents out of {num_agents} total.")
+            print(f"Creating Barabasi-Albert network for {num_active_nodes} active agents (out of {num_agents} total).")
 
-        # Generate topology for the active subset
-        nx_graph = nx.barabasi_albert_graph(n=num_active_nodes, m=new_node_edges, seed=int(seed))
-
-        # Extract edges (NetworkX returns list of tuples)
-        edges = np.array(nx_graph.edges()).T 
+        # Generate the graph topology using networkx
+        nx_graph = nx.barabasi_albert_graph(n=num_active_nodes, m=new_node_edges, seed=seed)
+        edges = np.array(list(nx_graph.edges())).T
 
         if edges.size > 0:
-            # These edges refer to 0..N_Adults. We need to map them to real Agent IDs.
-            u_local = edges[0]
-            v_local = edges[1]
+            # Map local edge indices back to global agent IDs
+            u_local, v_local = edges[0], edges[1]
+            u_global = torch.from_numpy(id_map[u_local]).long()
+            v_global = torch.from_numpy(id_map[v_local]).long()
 
-            u_global = torch.from_numpy(mapping[u_local]).long()
-            v_global = torch.from_numpy(mapping[v_local]).long()
-
-            # Make undirected
+            # Make the graph undirected by adding edges in both directions
             u_final = torch.cat([u_global, v_global])
             v_final = torch.cat([v_global, u_global])
 
@@ -48,4 +45,4 @@ def network_creation(num_agents, method, verbose, active_indices=None, **kwargs)
 
         return agent_graph
     else:
-        raise NotImplementedError('Currently only barabasi-albert model implemented!')
+        raise NotImplementedError(f"Network creation method '{method}' is not implemented.")

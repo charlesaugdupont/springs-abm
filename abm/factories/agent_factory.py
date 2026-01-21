@@ -1,0 +1,118 @@
+# abm/factories/agent_factory.py
+from typing import Dict
+import torch
+
+from abm.agent_graph import AgentGraph
+from abm.constants import Activity, AgentPropertyKeys, Compartment
+from config import SVEIRConfig
+
+class AgentFactory:
+    """A class to handle the initialization of agent properties."""
+
+    def __init__(self, config: SVEIRConfig, agent_personas: torch.Tensor):
+        self.config = config
+        self.agent_personas = agent_personas.to(config.device)
+
+    def initialize_agent_properties(self, agent_graph: AgentGraph, grid_env):
+        """
+        Populates the agent graph with all necessary initial properties.
+        """
+        num_agents = agent_graph.num_nodes()
+        agent_properties: Dict[str, torch.Tensor] = {}
+
+        # --- Behavioral Profile ---
+        persona_ids = torch.randint(0, self.config.num_agent_personas, (num_agents,))
+        assigned_personas = self.agent_personas[persona_ids]
+        agent_properties[AgentPropertyKeys.PERSONA_ID] = persona_ids
+        agent_properties[AgentPropertyKeys.ALPHA] = assigned_personas[:, 0]
+        agent_properties[AgentPropertyKeys.GAMMA] = assigned_personas[:, 1]
+        agent_properties[AgentPropertyKeys.OMEGA] = assigned_personas[:, 2]
+        agent_properties[AgentPropertyKeys.ETA] = assigned_personas[:, 3]
+
+        # --- Demographics ---
+        agent_properties[AgentPropertyKeys.HOUSEHOLD_ID] = agent_graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
+        agent_properties[AgentPropertyKeys.IS_CHILD] = agent_graph.ndata[AgentPropertyKeys.IS_CHILD].long()
+
+        # --- Disease States (Initialized for all pathogens in config) ---
+        for pathogen_conf in self.config.pathogens:
+            p_name = pathogen_conf.name
+            p_prop = pathogen_conf.initial_infected_proportion
+            agent_properties[AgentPropertyKeys.status(p_name)] = self._initialize_compartment(num_agents, p_prop)
+            agent_properties[AgentPropertyKeys.exposure_time(p_name)] = torch.zeros(num_agents, dtype=torch.int)
+            agent_properties[AgentPropertyKeys.num_infections(p_name)] = torch.zeros(num_agents, dtype=torch.int)
+
+        # --- Location and Activity ---
+        agent_properties[AgentPropertyKeys.TIME_USE] = self._initialize_time_use(num_agents, agent_graph.ndata[AgentPropertyKeys.IS_CHILD])
+        home_loc = self._initialize_home_location(agent_graph)
+        agent_properties[AgentPropertyKeys.HOME_LOCATION] = home_loc
+        agent_properties[AgentPropertyKeys.SCHOOL_LOCATION] = self._find_nearest_locations(home_loc, "school", grid_env)
+        agent_properties[AgentPropertyKeys.WORSHIP_LOCATION] = self._find_nearest_locations(home_loc, "place_of_worship", grid_env)
+        agent_properties[AgentPropertyKeys.WATER_LOCATION] = self._find_nearest_locations(home_loc, "water", grid_env)
+        agent_properties[AgentPropertyKeys.ACTIVITY_CHOICE] = torch.zeros(num_agents, dtype=torch.int)
+
+        # --- Health and Wealth ---
+        max_val = self.config.steering_parameters.max_state_value
+        wealth = torch.randint(1, max_val + 1, (num_agents,), dtype=torch.int)
+        health = torch.randint(1, max_val + 1, (num_agents,), dtype=torch.int)
+        agent_properties[AgentPropertyKeys.WEALTH] = wealth
+        agent_properties[AgentPropertyKeys.HEALTH] = health
+        agent_properties[AgentPropertyKeys.INITIAL_WEALTH] = wealth.clone()
+        agent_properties[AgentPropertyKeys.INITIAL_HEALTH] = health.clone()
+
+        # --- Assign all properties to the graph ---
+        for key, value in agent_properties.items():
+            agent_graph.ndata[key] = value.to(self.config.device)
+
+    def _initialize_compartment(self, num_agents: int, proportion: float) -> torch.Tensor:
+        num_infected = round(num_agents * proportion)
+        tensor = torch.zeros(num_agents, dtype=torch.int)
+        if num_infected > 0:
+            indices = torch.randperm(num_agents)[:num_infected]
+            tensor[indices] = Compartment.INFECTIOUS
+        return tensor
+
+    def _initialize_time_use(self, num_agents: int, is_child: torch.Tensor) -> torch.Tensor:
+        time_use = torch.zeros((num_agents, 5))
+        num_adults = (~is_child).sum()
+        num_children = is_child.sum()
+
+        if num_adults > 0:
+            adult_weights = torch.tensor([40.0, 0.0, 10.0, 30.0, 20.0])
+            adult_noise = torch.rand(num_adults, 5) * 10.0
+            base_adult = adult_weights.expand(num_adults, 5).clone() + adult_noise
+            base_adult[:, Activity.SCHOOL] = 0.0
+            time_use[~is_child] = base_adult
+
+        if num_children > 0:
+            child_weights = torch.tensor([80.0, 20.0, 0.0, 0.0, 0.0])
+            child_noise = torch.rand(num_children, 5) * 5.0
+            base_child = child_weights.expand(num_children, 5).clone() + child_noise
+            base_child[:, [Activity.WORSHIP, Activity.WATER, Activity.SOCIAL]] = 0.0
+            time_use[is_child] = base_child
+
+        return time_use / (time_use.sum(dim=1, keepdim=True) + 1e-9)
+
+    def _initialize_home_location(self, agent_graph: AgentGraph) -> torch.Tensor:
+        tensor = torch.zeros((agent_graph.num_nodes(), 2), dtype=torch.float)
+        # Note: Grid is (row, col) which corresponds to (y, x)
+        tensor[:, 0] = agent_graph.ndata[AgentPropertyKeys.Y]
+        tensor[:, 1] = agent_graph.ndata[AgentPropertyKeys.X]
+        return tensor
+
+    def _find_nearest_locations(self, home_locations, property_name, grid_env) -> torch.Tensor:
+        prop_idx = grid_env.property_to_index.get(property_name)
+        if prop_idx is None:
+            print(f"Warning: Property '{property_name}' not in grid. Defaulting to home location.")
+            return home_locations
+
+        property_grid = grid_env.grid_tensor[:, :, prop_idx]
+        property_locations = torch.stack(torch.where(property_grid == 1)).T.float().to(self.config.device)
+
+        if property_locations.shape[0] == 0:
+            print(f"Warning: No grid locations found for '{property_name}'. Defaulting to home location.")
+            return home_locations
+
+        # Ensure home_locations is on the correct device for cdist
+        home_locations_dev = home_locations.to(self.config.device)
+        distances = torch.cdist(home_locations_dev, property_locations)
+        return property_locations[torch.argmin(distances, dim=1)]

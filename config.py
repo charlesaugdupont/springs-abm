@@ -1,56 +1,61 @@
 # config.py
 
-"""Configuration parameters for the SVEIR model.
-The configuration parameters are stored in a pydantic object. The model is
-initialized with default values. The default values can be overwritten by
-providing a yaml file or a dictionary.
-"""
-
+"""Configuration parameters for the SVEIR model."""
+from typing import List, Union
 from pathlib import Path
+import numpy as np
 
 import torch
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
+
+# --- Pathogen Configuration ---
+
+class PathogenConfig(BaseModel):
+    """Base class for pathogen-specific parameters."""
+    name: str
+    initial_infected_proportion: float = 0.0
+    recovery_rate: float
+    exposure_period: int
+
+class RotavirusConfig(PathogenConfig):
+    """Parameters specific to Rotavirus."""
+    name: str = "rota"
+    infection_prob_mean: float = 0.002
+    infection_prob_std: float = 0.0002
+    recovery_rate: float = 0.33
+    exposure_period: int = 2
+    vaccination_rate: float = 0.01
+    vaccine_efficacy: float = 0.9
+
+class CampylobacterConfig(PathogenConfig):
+    """Parameters specific to Campylobacter."""
+    name: str = "campy"
+    # Beta-Poisson Dose Response Constants
+    beta_poisson_alpha: float = 0.145
+    beta_poisson_beta: float = 7.59
+    # Disease Dynamics
+    recovery_rate: float = 0.15  # ~1 week duration
+    exposure_period: int = 3
+    # Environmental
+    human_animal_interaction_rate: float = 50.0
+
+# --- General Model Configuration ---
 
 class InitialGraphArgs(BaseModel):
-    """Base class for initial graph arguments."""
+    """Arguments for the initial social network graph creation."""
     seed: int = 1
     new_node_edges: int = 1
     model_config = ConfigDict(validate_default=True)
 
 class GridCreationParams(BaseModel):
-    """Base class for grid creation arguments"""
+    """Arguments for creating the spatial grid environment."""
     method: str = "realistic_import"
     grid_id: str | None = None
     x: int | None = 75
     y: int | None = 75
     properties: dict | None = None
     model_config = ConfigDict(validate_default=True)
-
-class RotavirusParams(BaseModel):
-    """Parameters specific to Rotavirus (Viral, H2H driven)."""
-    initial_infected_proportion: float = 0.02
-    infection_prob_mean: float = 0.002
-    infection_prob_std: float = 0.0002
-    recovery_rate: float = 0.33
-    vaccination_rate: float = 0.01
-    vaccine_efficacy: float = 0.9
-    exposure_period: int = 2
-
-class CampylobacterParams(BaseModel):
-    """Parameters specific to Campylobacter (Bacterial, Zoonotic driven)."""
-    initial_infected_proportion: float = 0.00
-
-    # Beta-Poisson Dose Response Constants
-    beta_poisson_alpha: float = 0.145
-    beta_poisson_beta: float = 7.59
-    
-    # Disease Dynamics
-    recovery_rate: float = 0.15  # ~1 week duration
-    exposure_period: int = 3
-    
-    # Environmental
-    human_animal_interaction_rate: float = 50.0 # Scalar for dose calculation
 
 class SteeringParamsSVEIR(BaseModel):
     """Steering parameters used within each step of the SVEIR model."""
@@ -59,15 +64,11 @@ class SteeringParamsSVEIR(BaseModel):
     ndata: list | None = Field(default_factory=lambda: ["all_except", ["a_table"]])
     edata: list[str] | None = ["all"]
     mode: str = "w"
-    
-    # Pathogen Configurations
-    rotavirus: RotavirusParams = RotavirusParams()
-    campylobacter: CampylobacterParams = CampylobacterParams()
 
     # Shared / Global Parameters
     infection_reduction_factor_per_health_unit: float = 0.005
-    beta: float = 0.95
-    theta: float = 0.88
+    beta: float = 0.95  # Discount factor for value iteration
+    theta: float = 0.88 # CPT value function parameter
     P_H_increase: float = 0.75
     P_H_decrease: float = 0.50
     efficacy_multiplier: float = 1.0
@@ -82,12 +83,21 @@ class SteeringParamsSVEIR(BaseModel):
     shock_frequency: int = 30
     shock_infection_prob: float = 0.10
 
+    # Other simulation parameters
     truncation_weight: float = 1.0e-10
     proximity_decay_rate: float = 0.5
     data_collection_period: int = 0
     data_collection_list: list[int] | None = None
     max_state_value: int = 100
     prior_infection_immunity_factor: float = 1.5
+
+class ExperimentParams(BaseModel):
+    """Parameters defining the intervention sweep experiments."""
+    cost_subsidy_factors: List[float] = Field(default_factory=lambda: np.linspace(1.0, 0.4, 5).tolist())
+    efficacy_multipliers: List[float] = Field(default_factory=lambda: np.linspace(1.0, 2.0, 5).tolist())
+    infection_risk_levels: List[float] = Field(default_factory=lambda: [0.001, 0.002, 0.003, 0.004, 0.005])
+    num_cores: int = 6
+    repetitions: int = 5
 
 class SVEIRConfig(BaseModel):
     """Main configuration class for the SVEIR model."""
@@ -102,11 +112,13 @@ class SVEIRConfig(BaseModel):
     initial_graph_args: InitialGraphArgs = InitialGraphArgs()
     step_target: PositiveInt = 150
 
+    # Pathogen Configuration
+    pathogens: List[Union[RotavirusConfig, CampylobacterConfig]] = [RotavirusConfig(), CampylobacterConfig()]
+
     # Demographic Parameters
     average_household_size: int = 4
-    # probability that non-head-of-household member is a child
     child_probability: float = 0.2
-    
+
     # Parameters for Policy Pre-computation
     policy_library_path: str = "./policy_library.npz"
     num_agent_personas: int = 32
@@ -115,38 +127,45 @@ class SVEIRConfig(BaseModel):
     omega_range: list[float] = [1.0, 4.0]
     eta_range:   list[float] = [0.5, 1.0]
 
+    # Experiment Control
+    experiment_params: ExperimentParams = ExperimentParams()
+
     steering_parameters: SteeringParamsSVEIR = SteeringParamsSVEIR()
-    checkpoint_period: int = 0  # Set to 0 to disable default checkpointing
+    checkpoint_period: int = 0
     milestones: list[PositiveInt] | None = None
-    
+
     model_config = ConfigDict(
-        validate_default=True,
-        protected_namespaces=(),
-        populate_by_name=True,
-        validate_assignment=True,
-        extra="forbid",
+        validate_default=True, protected_namespaces=(), populate_by_name=True,
+        validate_assignment=True, extra="forbid",
     )
+
+    @field_validator('pathogens', mode='before')
+    def set_pathogen_types(cls, v):
+        if not v:
+            return v
+        pathogen_map = {
+            'rota': RotavirusConfig,
+            'campy': CampylobacterConfig
+        }
+        return [pathogen_map[p['name']](**p) if isinstance(p, dict) else p for p in v]
 
     @classmethod
     def from_dict(cls, cfg):
         if not isinstance(cfg, dict):
             raise TypeError("Input must be a dictionary.")
         return cls(**cfg)
-    
+
     def to_yaml(self, config_file):
         if Path(config_file).exists():
             print(f"Overwriting config file {config_file}.")
-
         cfg = self.model_dump(by_alias=True, warnings=False)
-
         def _convert_tensors(nested_dict):
             for key, value in nested_dict.items():
                 if isinstance(value, torch.Tensor):
                     nested_dict[key] = value.tolist()
                 elif isinstance(value, dict):
-                    nested_dict[key] = _convert_tensors(value)
+                    _convert_tensors(value)
             return nested_dict
-
         cfg = _convert_tensors(cfg)
         with open(config_file, "w") as f:
             yaml.dump(cfg, f, sort_keys=False)
@@ -156,11 +175,7 @@ class SVEIRConfig(BaseModel):
         if not Path(config_file).exists():
             raise FileNotFoundError(f"Config file {config_file} not found.")
         with open(config_file) as f:
-            try:
-                cfg = yaml.safe_load(f)
-            except yaml.YAMLError as exc:
-                raise SyntaxError(f"Error parsing config file {config_file}.") from exc
+            cfg = yaml.safe_load(f)
         return cls(**cfg)
 
-# The only config object we instantiate and use in the project
 SVEIRCONFIG = SVEIRConfig()

@@ -1,30 +1,31 @@
+# abm/agentInteraction/weight_update.py
 import torch
 
-def weight_update_sveir(agent_graph, device, decay_rate, truncation_weight):
+from abm.agent_graph import AgentGraph
+from abm.constants import AgentPropertyKeys, EdgePropertyKeys
+
+def weight_update_sveir(agent_graph: AgentGraph, decay_rate: float, truncation_weight: float):
     """
-    Update function to calculate the weight of edges based on Euclidean distance.
+    Update function to calculate the weight of edges based on Euclidean distance
+    between agents' home locations.
     """
-    # Extract x and y positions of connected nodes (u = source, v = target)
-    # Using our new AgentGraph .edges() method
     u, v = agent_graph.edges()
-    
-    # Ensure indices are on the correct device
+    device = agent_graph.device
+
     u = u.to(device)
     v = v.to(device)
-    
-    x_u = agent_graph.ndata['home_location'][u, 0]
-    y_u = agent_graph.ndata['home_location'][u, 1]
-    x_v = agent_graph.ndata['home_location'][v, 0]
-    y_v = agent_graph.ndata['home_location'][v, 1]
+
+    # Extract home locations (y, x)
+    loc_u = agent_graph.ndata[AgentPropertyKeys.HOME_LOCATION][u]
+    loc_v = agent_graph.ndata[AgentPropertyKeys.HOME_LOCATION][v]
 
     # Compute pairwise Euclidean distance
-    distance = torch.sqrt((x_u - x_v)**2 + (y_u - y_v)**2)
+    distance = torch.sqrt(torch.sum((loc_u - loc_v)**2, dim=1))
 
     # Apply decaying weight function
     weights = torch.exp(-decay_rate * distance)
 
-    # Handle truncation
+    # Apply truncation
     truncated_weights = torch.where(weights > truncation_weight, weights, truncation_weight)
 
-    # Update the edge weights in the graph dict
-    agent_graph.edata['weight'] = truncated_weights.to(device)
+    agent_graph.edata[EdgePropertyKeys.WEIGHT] = truncated_weights.to(device)

@@ -1,7 +1,7 @@
 [project]
 name = "springs-abm"
-version = "0.1.0"
-description = "Add your description here"
+version = "1.0.0"
+description = "Agent-based model to simulate diarrheal pathogen spread and human behavior."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
