@@ -29,6 +29,7 @@ class GridCreationParams(BaseModel):
 
 class RotavirusParams(BaseModel):
     """Parameters specific to Rotavirus (Viral, H2H driven)."""
+    initial_infected_proportion: float = 0.02
     infection_prob_mean: float = 0.002
     infection_prob_std: float = 0.0002
     recovery_rate: float = 0.33
@@ -38,6 +39,8 @@ class RotavirusParams(BaseModel):
 
 class CampylobacterParams(BaseModel):
     """Parameters specific to Campylobacter (Bacterial, Zoonotic driven)."""
+    initial_infected_proportion: float = 0.00
+
     # Beta-Poisson Dose Response Constants
     beta_poisson_alpha: float = 0.145
     beta_poisson_beta: float = 7.59

@@ -142,14 +142,20 @@ class SVEIRModel(Model):
             if verbose:
                 print(f'performing step {self.step_count} of {self.config.step_target}')
             
-            # Note: sveir_step now returns complex data for multi-pathogens
-            # For simplicity, we capture generic output, analytics can be updated later
-            _ = sveir_step(
+            (new_cases_rota, new_cases_campy), compartment_counts = sveir_step(
                 self.graph, self.config.device, self.step_count, self.steering_parameters,
                 self.grid_environment, self.policy_library, self.risk_levels_tensor
             )
+            
+            total_new_cases = (new_cases_rota or 0) + (new_cases_campy or 0)
+            total_prevalence = compartment_counts.get("rota_I", 0) + compartment_counts.get("campy_I", 0)
+            
+            self.infection_incidence.append(total_new_cases)
+            self.prevalence_history.append(total_prevalence)
+
         except Exception as e:
             raise RuntimeError(f'Execution of step failed for step {self.step_count}') from e
+
         self.step_count += 1
 
     def get_total_infections(self) -> int:
@@ -294,7 +300,8 @@ class SVEIRModel(Model):
         agent_properties["num_infections_rota"] = torch.zeros(num_agents, dtype=torch.int)
 
         # --- CAMPYLOBACTER TRACK ---
-        agent_properties["status_campy"] = self._initialize_agents_compartment(proportion=0.0)
+        campy_prop = self.config.steering_parameters.campylobacter.initial_infected_proportion
+        agent_properties["status_campy"] = self._initialize_agents_compartment(proportion=campy_prop)
         agent_properties["exposure_time_campy"] = torch.zeros(num_agents, dtype=torch.int)
         agent_properties["num_infections_campy"] = torch.zeros(num_agents, dtype=torch.int)
 
