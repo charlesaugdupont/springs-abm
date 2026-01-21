@@ -73,7 +73,7 @@ def main():
     if args.stage == 'create-grid':
         create_and_save_realistic_grid()
 
-    # --- STAGE 3: RUN SIMULATION ---
+    # --- STAGE 2: RUN SIMULATION ---
     elif args.stage == 'simulate':
         if not args.grid_id:
             parser.error("'simulate' stage requires --grid-id.")
