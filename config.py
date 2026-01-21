@@ -3,7 +3,6 @@
 """Configuration parameters for the SVEIR model."""
 from typing import List, Union
 from pathlib import Path
-import numpy as np
 
 import torch
 import yaml
@@ -69,8 +68,6 @@ class SteeringParamsSVEIR(BaseModel):
     infection_reduction_factor_per_health_unit: float = 0.5
     theta: float = 0.88
     eta: float = 0.88
-    gamma: float = 0.8
-    lambduh: float = 2.25
     infection_health_shock: float = 0.2
 
     # Water Parameters (Shared Reservoir)
@@ -87,12 +84,6 @@ class SteeringParamsSVEIR(BaseModel):
     data_collection_list: list[int] | None = None
     max_state_value: float = 1.0
     prior_infection_immunity_factor: float = 1.5
-
-class ExperimentParams(BaseModel):
-    """Parameters defining the intervention sweep experiments."""
-    infection_risk_levels: List[float] = Field(default_factory=lambda: [0.001, 0.002, 0.003, 0.004, 0.005])
-    num_cores: int = 6
-    repetitions: int = 5
 
 class SVEIRConfig(BaseModel):
     """Main configuration class for the SVEIR model."""
@@ -114,13 +105,11 @@ class SVEIRConfig(BaseModel):
     average_household_size: int = 4
     child_probability: float = 0.2
 
-    # Parameters for Policy Pre-computation
+    # Parameters for Agent Personas
     num_agent_personas: int = 32
+    alpha_range: list[float] = [0.1, 0.9]
     gamma_range: list[float] = [0.4, 0.9]
-    lambda: list[float] = [1.0, 3]
-
-    # Experiment Control
-    experiment_params: ExperimentParams = ExperimentParams()
+    lambda_range: list[float] = [1.0, 3.0]
 
     steering_parameters: SteeringParamsSVEIR = SteeringParamsSVEIR()
     checkpoint_period: int = 0

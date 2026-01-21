@@ -48,13 +48,17 @@ class ChildIllnessSystem(System):
 
     def _initialize_illness(self, agent_graph: AgentGraph, mask: torch.Tensor, pathogen_name: str):
         """Calculates and sets the initial severity and duration for an illness."""
-        # Note: 'vaccine_status' is a placeholder for a property we'd need to add
-        # For now, we pass None.
+        vaccine_status_tensor = None
+        if pathogen_name == 'rota':
+            status_key = AgentPropertyKeys.status('rota')
+            all_statuses = agent_graph.ndata[status_key][mask]
+            vaccine_status_tensor = (all_statuses == Compartment.VACCINATED)
+
         severity = calculate_illness_severity(
             pathogen_name=pathogen_name,
             is_child=agent_graph.ndata[AgentPropertyKeys.IS_CHILD][mask],
             wealth=agent_graph.ndata[AgentPropertyKeys.WEALTH][mask],
-            vaccine_status=None, # Placeholder
+            vaccine_status=vaccine_status_tensor,
             num_infections=agent_graph.ndata[AgentPropertyKeys.num_infections(pathogen_name)][mask]
         )
         duration = calculate_illness_duration(severity)

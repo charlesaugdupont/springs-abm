@@ -23,24 +23,3 @@ def utility(w: torch.Tensor, h: torch.Tensor, alpha: torch.Tensor, rate: float =
     """Calculates the Cobb-Douglas utility from wealth and health."""
     # Add a small epsilon to prevent log(0) or power of zero issues
     return (w + 1e-9)**alpha * (h + 1e-9)**(rate - alpha)
-
-# --- Functions for Health/Cost Dynamics ---
-
-def _calculate_base_health_change(h: torch.Tensor) -> torch.Tensor:
-    """Calculates the potential health change, which decays as health increases."""
-    k = torch.log(torch.tensor(10.0)) / 150.0
-    return 10 * torch.exp(-k * h) + 1
-
-def compute_health_delta(h: torch.Tensor, params: Dict[str, float]) -> torch.Tensor:
-    """Calculates the POSITIVE change in health from a successful investment."""
-    base_delta = _calculate_base_health_change(h)
-    return base_delta * params.get('efficacy_multiplier', 1.0)
-
-def compute_health_decline(h: torch.Tensor) -> torch.Tensor:
-    """Calculates the potential health decline from not investing (natural decay)."""
-    return _calculate_base_health_change(h)
-
-def compute_health_cost(h: torch.Tensor, params: Dict[str, float]) -> torch.Tensor:
-    """Calculates the cost of investing to improve health."""
-    base_cost = -compute_health_delta(h, params) + 11
-    return base_cost * params.get('cost_subsidy_factor', 1.0)

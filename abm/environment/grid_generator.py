@@ -138,7 +138,7 @@ def create_and_save_realistic_grid():
     grid_dir = os.path.join("grids", grid_id)
     os.makedirs(grid_dir, exist_ok=True)
     output_path = os.path.join(grid_dir, "grid.npz")
-    np.savez_compressed(output_path, grid=final_grid, property_map=property_map)
+    np.savez_compressed(output_path, grid=final_grid, property_map=property_map, bounds=np.array(boundary_info))
     print(f"\n--- Grid Generation Complete ---\n  Grid ID: {grid_id}\n  Saved to: {output_path}")
 
 if __name__ == '__main__':

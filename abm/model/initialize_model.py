@@ -41,6 +41,8 @@ class SVEIRModel(Model):
         self.prevalence_history = []
         self.pathogens = []
         self.systems = []
+        self.grid_environment = None
+        self.agent_personas = None
 
     def set_model_parameters(self, **kwargs):
         """Sets model parameters from a dictionary, overriding defaults."""
@@ -53,24 +55,11 @@ class SVEIRModel(Model):
     
     def _load_agent_personas(self):
         """Generates agent behavioral personas using LH sampling."""
-        sampler = qmc.LatinHypercube(d=2, seed=self.config.seed)
+        sampler = qmc.LatinHypercube(d=3, seed=self.config.seed)
         samples = sampler.random(n=self.config.num_agent_personas)
-        ranges = [self.config.gamma_range, self.config.lambda_range]
+        ranges = [self.config.alpha_range, self.config.gamma_range, self.config.lambda_range]
         scaled_samples = qmc.scale(samples, [r[0] for r in ranges], [r[1] for r in ranges])
         self.agent_personas = torch.from_numpy(scaled_samples).float()
-
-    def _load_policy_library(self):
-        """Loads the pre-computed agent decision policies."""
-        policy_path = Path(self.config.policy_library_path)
-        if not policy_path.exists():
-            raise FileNotFoundError(f"Policy library not found at '{policy_path}'.")
-        data = np.load(policy_path, allow_pickle=True)
-        self.agent_personas = torch.from_numpy(data['agent_personas']).float()
-        self.risk_levels_tensor = torch.from_numpy(data['infection_risk_levels']).float().to(self.config.device)
-        self.policy_library = {
-            pid: torch.from_numpy(data[f"policies_{pid}"]).long().to(self.config.device)
-            for pid in range(self.config.num_agent_personas)
-        }
 
     def initialize_model(self, verbose: bool = False):
         """Initializes the entire model state, including agents, network, and environment."""
@@ -166,8 +155,7 @@ class SVEIRModel(Model):
         try:
             new_cases_by_pathogen, compartment_counts = sveir_step(
                 self.graph, self.step_count, self.config,
-                self.grid_environment, self.policy_library,
-                self.risk_levels_tensor, self.pathogens, self.systems
+                self.grid_environment, self.pathogens, self.systems
             )
             total_new_cases = sum(new_cases_by_pathogen.values())
             total_prevalence = sum(v for k, v in compartment_counts.items() if k.endswith("_I"))
@@ -195,17 +183,3 @@ class SVEIRModel(Model):
             'health': self.graph.ndata[AgentPropertyKeys.HEALTH].cpu().numpy(),
             'wealth': self.graph.ndata[AgentPropertyKeys.WEALTH].cpu().numpy()
         }
-
-    def get_final_infection_counts(self) -> np.ndarray:
-        if not self.pathogens: return np.array([])
-        counts = [self.graph.ndata[AgentPropertyKeys.num_infections(p.name)] for p in self.pathogens]
-        return torch.stack(counts).sum(dim=0).cpu().numpy()
-
-    def get_agent_personas(self) -> np.ndarray:
-        return self.graph.ndata[AgentPropertyKeys.PERSONA_ID].cpu().numpy()
-
-    def get_initial_wealth(self) -> np.ndarray:
-        return self.graph.ndata[AgentPropertyKeys.INITIAL_WEALTH].cpu().numpy()
-
-    def get_initial_health(self) -> np.ndarray:
-        return self.graph.ndata[AgentPropertyKeys.INITIAL_HEALTH].cpu().numpy()

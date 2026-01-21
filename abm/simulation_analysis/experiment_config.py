@@ -1,7 +1,5 @@
 # abm/simulation_analysis/experiment_config.py
 import os
-import json
-import hashlib
 from config import SVEIRConfig
 
 # --- Define Top-Level Directory Settings ---
@@ -21,18 +19,9 @@ def get_sim_runs_path(experiment_name: str) -> str:
     os.makedirs(sim_runs_dir, exist_ok=True)
     return sim_runs_dir
 
-def get_summary_results_path(experiment_name: str, config: SVEIRConfig) -> str:
-    """
-    Generates the path for the simulation summary results file (e.g., a pickled list of outcomes).
-    """
-    results_dir = os.path.join(get_experiment_base_path(experiment_name), RESULTS_SUBDIR)
-    os.makedirs(results_dir, exist_ok=True)
-    filename = f"summary_results_agents_{config.number_agents}_reps_{config.experiment_params.repetitions}.pkl"
-    return os.path.join(results_dir, filename)
-
 def get_full_results_path(experiment_name: str, config: SVEIRConfig) -> str:
     """Generates the path for the full, detailed simulation results (.pkl file)."""
     results_dir = os.path.join(get_experiment_base_path(experiment_name), RESULTS_SUBDIR)
     os.makedirs(results_dir, exist_ok=True)
-    filename = f"full_results_agents_{config.number_agents}_reps_{config.experiment_params.repetitions}.pkl"
+    filename = f"full_results_agents_{config.number_agents}.pkl"
     return os.path.join(results_dir, filename)

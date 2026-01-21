@@ -9,7 +9,6 @@ from abm.model.data_collection import data_collection
 from abm.constants import Compartment, EdgePropertyKeys
 from abm.pathogens.pathogen import Pathogen
 from abm.systems.system import System
-from abm.pathogens.rotavirus import Rotavirus
 
 def _calculate_adjacency(agent_graph: AgentGraph) -> torch.Tensor:
     """Calculates a dense adjacency matrix based on agent co-location."""

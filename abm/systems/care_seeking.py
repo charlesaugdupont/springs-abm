@@ -75,8 +75,8 @@ class CareSeekingSystem(System):
         parent_params = {
             'gamma': agent_graph.ndata[AgentPropertyKeys.GAMMA][parent_idx].item(),
             'theta': self.config.steering_parameters.theta,
-            'omega': agent_graph.ndata[AgentPropertyKeys.OMEGA][parent_idx].item(),
-            'eta': agent_graph.ndata[AgentPropertyKeys.ETA][parent_idx].item(),
+            'lambda': agent_graph.ndata[AgentPropertyKeys.LAMBDA][parent_idx].item(),
+            'eta': self.config.steering_parameters.eta,
         }
         ref_utility = utility(parent_wealth, agent_graph.ndata[AgentPropertyKeys.HEALTH][parent_idx],
                               agent_graph.ndata[AgentPropertyKeys.ALPHA][parent_idx])

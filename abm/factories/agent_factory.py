@@ -24,10 +24,15 @@ class AgentFactory:
         persona_ids = torch.randint(0, self.config.num_agent_personas, (num_agents,))
         assigned_personas = self.agent_personas[persona_ids]
         agent_properties[AgentPropertyKeys.PERSONA_ID] = persona_ids
+
+        # CPT parameters from persona (alpha, gamma, lambda)
         agent_properties[AgentPropertyKeys.ALPHA] = assigned_personas[:, 0]
         agent_properties[AgentPropertyKeys.GAMMA] = assigned_personas[:, 1]
-        agent_properties[AgentPropertyKeys.OMEGA] = assigned_personas[:, 2]
-        agent_properties[AgentPropertyKeys.ETA] = assigned_personas[:, 3]
+        agent_properties[AgentPropertyKeys.LAMBDA] = assigned_personas[:, 2]
+
+        # Globally defined behavioral parameters
+        agent_properties[AgentPropertyKeys.ETA] = torch.full((num_agents,), self.config.steering_parameters.eta)
+        agent_properties[AgentPropertyKeys.THETA] = torch.full((num_agents,), self.config.steering_parameters.eta)
 
         # --- Demographics ---
         agent_properties[AgentPropertyKeys.HOUSEHOLD_ID] = agent_graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID]

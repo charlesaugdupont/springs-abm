@@ -45,8 +45,9 @@ class AgentPropertyKeys:
     PERSONA_ID = "persona_id"
     ALPHA = "alpha"
     GAMMA = "gamma"
-    OMEGA = "omega"
+    LAMBDA = "lambda"
     ETA = "eta"
+    THETA = "theta"
 
     # Location & Activity
     X = "x"
