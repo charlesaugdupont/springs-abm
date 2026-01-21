@@ -31,8 +31,6 @@ OSM_POI_TAGS = {
 }
 
 # 2. Procedurally generated POIs to add to the map.
-#    This enriches the environment and prevents agent pile-ups.
-#    The key is the 'property_name' that will be used in the model.
 PROCEDURAL_POI_COUNTS = {
     "school": 5,
     "place_of_worship": 5,
@@ -50,6 +48,7 @@ def get_grid_id(boundary_coords, grid_size, osm_tags, procedural_counts):
         "grid_size": grid_size,
         "osm_poi_tags": osm_tags,
         "procedural_poi_counts": procedural_counts,
+        "animal_layer_version": "v1.0" 
     }
     params_string = json.dumps(params, sort_keys=True, indent=None)
     return hashlib.sha256(params_string.encode('utf-8')).hexdigest()[:12]
@@ -105,7 +104,6 @@ def _place_procedural_pois(counts, valid_cells_mask, occupied_mask):
     print("3. Placing procedurally generated POIs...")
     procedural_layers = {}
     
-    # Create a mutable copy of the occupied mask to update within the loop
     current_occupied_mask = occupied_mask.copy()
 
     for amenity_type, num_to_add in counts.items():
@@ -115,20 +113,54 @@ def _place_procedural_pois(counts, valid_cells_mask, occupied_mask):
         print(f"  - Adding {num_to_add} procedural '{amenity_type}' locations.")
         procedural_layers[amenity_type] = np.zeros((GRID_SIZE, GRID_SIZE), dtype=np.uint8)
         
-        # Find cells that are valid but not yet occupied by ANY POI
         available_cells = np.argwhere(valid_cells_mask & ~current_occupied_mask)
         
         if len(available_cells) >= num_to_add:
             selected_indices = random.sample(range(len(available_cells)), num_to_add)
             new_poi_cells = available_cells[selected_indices]
             
-            # Place new POIs on the layer and update the master occupied mask
             procedural_layers[amenity_type][new_poi_cells[:, 0], new_poi_cells[:, 1]] = 1
             current_occupied_mask[new_poi_cells[:, 0], new_poi_cells[:, 1]] = True
         else:
-            print(f"    Warning: Not enough available cells ({len(available_cells)}) to place {num_to_add} {amenity_type}s.")
+            print(f"    Warning: Not enough available cells to place {amenity_type}.")
             
     return procedural_layers
+
+def _place_animal_density(valid_cells_mask):
+    """
+    Generates a spatial layer representing poultry/livestock density.
+    Values range from 0.0 (no animals) to 1.0 (high density).
+    """
+    rows, cols = valid_cells_mask.shape
+    density = np.zeros((rows, cols), dtype=np.float32)
+    
+    # 1. Background noise (stray animals, low density everywhere)
+    noise = np.random.uniform(0.0, 0.1, size=(rows, cols))
+    density += noise
+    
+    # 2. High-density clusters (Farms / Backyard Poultry)
+    num_clusters = 15
+    cluster_radius = 8  # Cells
+    
+    for _ in range(num_clusters):
+        cx = np.random.randint(0, rows)
+        cy = np.random.randint(0, cols)
+        
+        # Create a coordinate grid for the distance calculation
+        y_grid, x_grid = np.ogrid[-cx:rows-cx, -cy:cols-cy]
+        dist_sq = x_grid**2 + y_grid**2
+        mask = dist_sq <= cluster_radius**2
+        
+        # Add density: higher at center, lower at edges (Gaussian-ish)
+        cluster_values = np.exp(-0.5 * dist_sq[mask] / (cluster_radius/2)**2)
+        intensity = np.random.uniform(0.4, 0.9) 
+        density[mask] += cluster_values * intensity
+
+    # 3. Apply the valid cells mask and clip
+    density = density * valid_cells_mask
+    density = np.clip(density, 0.0, 1.0)
+    
+    return density
 
 # ==============================================================================
 # --- MAIN FUNCTION ---
@@ -137,7 +169,7 @@ def _place_procedural_pois(counts, valid_cells_mask, occupied_mask):
 def create_and_save_realistic_grid():
     """
     Fetches real-world geographic data and enriches it with procedurally generated
-    locations to create a realistic base grid for the simulation.
+    locations and animal density to create a realistic base grid.
     """
     grid_id = get_grid_id(
         boundary_coords=AKUSE_BOUNDARY_COORDS,
@@ -152,7 +184,7 @@ def create_and_save_realistic_grid():
     # Step 2: Place POIs from OpenStreetMap
     osm_layers, osm_occupied_mask = _place_osm_pois(OSM_POI_TAGS, boundary_info)
     
-    # Step 3: Place procedural POIs, ensuring they don't overlap with OSM POIs
+    # Step 3: Place procedural POIs
     procedural_layers = _place_procedural_pois(PROCEDURAL_POI_COUNTS, valid_cells_mask, osm_occupied_mask)
 
     # Step 4: Combine all layers and create the final property map
@@ -160,14 +192,14 @@ def create_and_save_realistic_grid():
     final_layers = []
     property_map = {}
     
-    # Start with the residence layer
+    # 4a. Residence Layer
     final_layers.append(valid_cells_mask.astype(np.uint8))
     property_map[0] = "residences"
     
-    # Combine all POI layers (OSM and procedural)
+    # 4b. POI Layers
     all_poi_types = set(osm_layers.keys()) | set(procedural_layers.keys())
     
-    for amenity_type in sorted(list(all_poi_types)): # Sort for consistent order
+    for amenity_type in sorted(list(all_poi_types)):
         osm_layer = osm_layers.get(amenity_type, 0)
         proc_layer = procedural_layers.get(amenity_type, 0)
         combined_layer = ((osm_layer + proc_layer) > 0).astype(np.uint8)
@@ -176,12 +208,21 @@ def create_and_save_realistic_grid():
         final_layers.append(combined_layer)
         property_map[layer_index] = amenity_type
 
+    # 4c. Animal Density Layer (Campylobacter Source)
+    animal_density_layer = _place_animal_density(valid_cells_mask)
+    animal_layer_index = len(final_layers)
+    final_layers.append(animal_density_layer)
+    property_map[animal_layer_index] = "animal_density"
+    
     # Step 5: Finalize and save the grid
     final_grid = np.stack(final_layers, axis=-1)
-    
-    # Ensure residences are not placed directly on top of ANY POI
-    all_poi_mask = np.sum(final_grid[:, :, 1:], axis=2) > 0
-    final_grid[:, :, 0][all_poi_mask] = 0
+
+    # Ensure residences are not placed directly on top of ANY POI (excluding animals)
+    # We use the previous layers (excluding residence and animal) for this check
+    poi_layers_stack = final_grid[:, :, 1:animal_layer_index]
+    if poi_layers_stack.shape[2] > 0:
+        all_poi_mask = np.sum(poi_layers_stack, axis=2) > 0
+        final_grid[:, :, 0][all_poi_mask] = 0
 
     print(f"5. Saving base grid and metadata...")
     grid_dir = os.path.join("grids", grid_id)
@@ -197,8 +238,6 @@ def create_and_save_realistic_grid():
     print(f"\n--- Grid Generation Complete ---")
     print(f"  Grid ID: {grid_id}")
     print(f"  Saved to: {output_path}")
-    print("\nUse this ID for the 'simulate' stage:")
-    print(f"  uv run main.py simulate --grid-id {grid_id} --policy-set-id <your_policy_id>")
 
 if __name__ == '__main__':
     create_and_save_realistic_grid()

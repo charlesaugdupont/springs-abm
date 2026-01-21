@@ -27,6 +27,28 @@ class GridCreationParams(BaseModel):
     properties: dict | None = None
     model_config = ConfigDict(validate_default=True)
 
+class RotavirusParams(BaseModel):
+    """Parameters specific to Rotavirus (Viral, H2H driven)."""
+    infection_prob_mean: float = 0.002
+    infection_prob_std: float = 0.0002
+    recovery_rate: float = 0.33
+    vaccination_rate: float = 0.01
+    vaccine_efficacy: float = 0.9
+    exposure_period: int = 2
+
+class CampylobacterParams(BaseModel):
+    """Parameters specific to Campylobacter (Bacterial, Zoonotic driven)."""
+    # Beta-Poisson Dose Response Constants
+    beta_poisson_alpha: float = 0.145
+    beta_poisson_beta: float = 7.59
+    
+    # Disease Dynamics
+    recovery_rate: float = 0.15  # ~1 week duration
+    exposure_period: int = 3
+    
+    # Environmental
+    human_animal_interaction_rate: float = 50.0 # Scalar for dose calculation
+
 class SteeringParamsSVEIR(BaseModel):
     """Steering parameters used within each step of the SVEIR model."""
     npath: str = "./agent_data.zarr"
@@ -34,15 +56,12 @@ class SteeringParamsSVEIR(BaseModel):
     ndata: list | None = Field(default_factory=lambda: ["all_except", ["a_table"]])
     edata: list[str] | None = ["all"]
     mode: str = "w"
-    infection_prob_mean: float = 0.002
-    infection_prob_std: float = 0.0002
-    recovery_rate: float = 0.33
-    vaccination_rate: float = 0.01
-    vaccine_efficacy: float = 0.9
-    exposure_period: int = 5
-    initial_infected_proportion: float = 0.03
-    human_to_water_infection_prob: float = 0.001
-    water_to_human_infection_prob: float = 0.001
+    
+    # Pathogen Configurations
+    rotavirus: RotavirusParams = RotavirusParams()
+    campylobacter: CampylobacterParams = CampylobacterParams()
+
+    # Shared / Global Parameters
     infection_reduction_factor_per_health_unit: float = 0.005
     beta: float = 0.95
     theta: float = 0.88
@@ -52,9 +71,14 @@ class SteeringParamsSVEIR(BaseModel):
     cost_subsidy_factor: float = 1.0
     infection_health_shock: int = 20
     wealth_update_A: float = 0.50
+
+    # Water Parameters (Shared Reservoir)
+    human_to_water_infection_prob: float = 0.001
+    water_to_human_infection_prob: float = 0.001
     water_recovery_prob: float = 0.2
     shock_frequency: int = 30
     shock_infection_prob: float = 0.10
+
     truncation_weight: float = 1.0e-10
     proximity_decay_rate: float = 0.5
     data_collection_period: int = 0
