@@ -3,7 +3,7 @@
 import networkx as nx
 import torch
 import numpy as np
-from abm.agent_graph import AgentGraph
+from abm.state import AgentGraph
 from typing import Optional
 
 def network_creation(num_agents: int, method: str, verbose: bool, device: str,

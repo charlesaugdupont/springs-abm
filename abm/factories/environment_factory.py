@@ -5,7 +5,7 @@ import torch
 import numpy as np
 
 from abm.environment.grid_creation import grid_creation, GridEnvironment
-from abm.agent_graph import AgentGraph
+from abm.state import AgentGraph
 from abm.constants import AgentPropertyKeys
 from config import GridCreationParams
 

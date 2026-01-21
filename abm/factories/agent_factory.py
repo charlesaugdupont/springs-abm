@@ -2,7 +2,7 @@
 from typing import Dict
 import torch
 
-from abm.agent_graph import AgentGraph
+from abm.state import AgentGraph
 from abm.constants import Activity, AgentPropertyKeys, Compartment, GridLayer
 from config import SVEIRConfig
 

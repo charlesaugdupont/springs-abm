@@ -2,7 +2,7 @@
 import torch
 
 from .system import System
-from abm.agent_graph import AgentGraph
+from abm.state import AgentGraph
 from abm.constants import AgentPropertyKeys
 from abm.agent.health_cpt_utils import (
     utility,

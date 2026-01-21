@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 import torch
 
-from abm.agent_graph import AgentGraph
+from abm.state import AgentGraph
 from config import PathogenConfig, SteeringParamsSVEIR
 
 class Pathogen(ABC):

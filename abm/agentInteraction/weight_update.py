@@ -1,7 +1,7 @@
 # abm/agentInteraction/weight_update.py
 import torch
 
-from abm.agent_graph import AgentGraph
+from abm.state import AgentGraph
 from abm.constants import AgentPropertyKeys, EdgePropertyKeys
 
 def weight_update_sveir(agent_graph: AgentGraph, decay_rate: float, truncation_weight: float):

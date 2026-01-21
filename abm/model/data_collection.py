@@ -2,7 +2,7 @@
 """The module to collect data from agents and edges."""
 from pathlib import Path
 import xarray as xr
-from abm.agent_graph import AgentGraph
+from abm.state import AgentGraph
 
 def data_collection(agent_graph: AgentGraph, timestep: int, npath: str, epath: str,
                     ndata: list | None, edata: list | None, mode: str):

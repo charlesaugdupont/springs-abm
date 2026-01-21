@@ -2,7 +2,7 @@
 import torch
 
 from .system import System
-from abm.agent_graph import AgentGraph
+from abm.state import AgentGraph
 from abm.constants import Activity, AgentPropertyKeys
 
 class MovementSystem(System):

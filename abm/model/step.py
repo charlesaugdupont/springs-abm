@@ -3,7 +3,7 @@
 from typing import Any, Dict, Tuple, List
 import torch
 
-from abm.agent_graph import AgentGraph
+from abm.state import AgentGraph
 from config import SVEIRConfig
 from abm.model.data_collection import data_collection
 from abm.constants import Compartment, EdgePropertyKeys

@@ -3,7 +3,7 @@ from typing import Any
 import torch
 
 from .pathogen import Pathogen
-from abm.agent_graph import AgentGraph
+from abm.state import AgentGraph
 from abm.constants import Compartment, AgentPropertyKeys, Activity, GridLayer, WaterStatus
 from config import RotavirusConfig, SteeringParamsSVEIR
 
