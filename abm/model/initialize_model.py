@@ -5,11 +5,10 @@ import torch
 import numpy as np
 from scipy.stats import qmc
 
-from abm.agentInteraction.weight_update import weight_update_sveir
 from config import SVEIRConfig, RotavirusConfig, CampylobacterConfig
 from abm.model.step import sveir_step
 from abm.network.network_creation import network_creation
-from abm.constants import AgentPropertyKeys
+from abm.constants import AgentPropertyKeys, EdgePropertyKeys
 from abm.factories.agent_factory import AgentFactory
 from abm.factories.environment_factory import EnvironmentFactory
 from abm.pathogens.rotavirus import Rotavirus
@@ -93,7 +92,12 @@ class SVEIRModel(Model):
 
         # 4. Finalize Graph and Initialize Systems
         self.graph.to(self.config.device)
-        weight_update_sveir(self.graph, self.steering_parameters.proximity_decay_rate, self.steering_parameters.truncation_weight)
+
+        if self.graph.num_edges() > 0:
+            self.graph.edata[EdgePropertyKeys.WEIGHT] = torch.ones(
+                self.graph.num_edges(), device=self.config.device, dtype=torch.float
+            )   
+     
         self._initialize_pathogens_and_systems()
 
         if verbose:

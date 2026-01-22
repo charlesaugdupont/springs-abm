@@ -15,7 +15,7 @@ class Campylobacter(Pathogen):
         # Ensure config is of the correct type for type hinting
         self.config: CampylobacterConfig = config
 
-    def update(self, agent_graph: AgentGraph, adjacency: torch.Tensor, grid: Any):
+    def update(self, agent_graph: AgentGraph, location_ids: torch.Tensor, num_locations: int, grid: Any):
         """Runs the full update cycle for Campylobacter."""
         self.reset_incidence()
 
