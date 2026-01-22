@@ -29,7 +29,7 @@ class GridLayer:
     ANIMAL_DENSITY = "animal_density"
 
 class AgentPropertyKeys:
-    """Centralized string keys for agent properties in AgentGraph.ndata."""
+    """Centralized string keys for agent properties in AgentState.ndata."""
     # Core State
     HEALTH = "health"
     WEALTH = "wealth"

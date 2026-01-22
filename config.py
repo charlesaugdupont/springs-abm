@@ -53,9 +53,7 @@ class GridCreationParams(BaseModel):
 class SteeringParamsSVEIR(BaseModel):
     """Steering parameters used within each step of the SVEIR model."""
     npath: str = "./agent_data.zarr"
-    epath: str = "./edge_data"
     ndata: list | None = Field(default_factory=lambda: ["all_except", ["a_table"]])
-    edata: list[str] | None = ["all"]
     mode: str = "w"
 
     # Shared / Global Parameters

@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional
 import torch
 
-from abm.state import AgentGraph
+from abm.state import AgentState
 from config import PathogenConfig, SteeringParamsSVEIR
 
 class Pathogen(ABC):
@@ -21,7 +21,7 @@ class Pathogen(ABC):
         self.new_cases_this_step = 0
 
     @abstractmethod
-    def step_progression(self, agent_graph: AgentGraph):
+    def step_progression(self, agent_state: AgentState):
         """
         Updates internal disease states (timers, recovery).
         Should run once per full simulation day.
@@ -29,38 +29,38 @@ class Pathogen(ABC):
         pass
 
     @abstractmethod
-    def step_transmission(self, agent_graph: AgentGraph, location_ids: torch.Tensor, num_locations: int, grid: Any):
+    def step_transmission(self, agent_state: AgentState, location_ids: torch.Tensor, num_locations: int, grid: Any):
         """
         Calculates infections based on current agent locations.
         Can run multiple times per day (e.g. Day Phase and Night Phase).
         """
         pass
 
-    def _increment_exposure_time(self, agent_graph: AgentGraph):
+    def _increment_exposure_time(self, agent_state: AgentState):
         from abm.constants import Compartment, AgentPropertyKeys
         status_key = AgentPropertyKeys.status(self.name)
         timer_key = AgentPropertyKeys.exposure_time(self.name)
-        exposed_mask = agent_graph.ndata[status_key] == Compartment.EXPOSED
-        agent_graph.ndata[timer_key][exposed_mask] += 1
+        exposed_mask = agent_state.ndata[status_key] == Compartment.EXPOSED
+        agent_state.ndata[timer_key][exposed_mask] += 1
 
-    def _exposed_to_infectious(self, agent_graph: AgentGraph):
+    def _exposed_to_infectious(self, agent_state: AgentState):
         from abm.constants import Compartment, AgentPropertyKeys
         status_key = AgentPropertyKeys.status(self.name)
         timer_key = AgentPropertyKeys.exposure_time(self.name)
         count_key = AgentPropertyKeys.num_infections(self.name)
 
-        mask = (agent_graph.ndata[status_key] == Compartment.EXPOSED) & \
-               (agent_graph.ndata[timer_key] >= self.config.exposure_period)
+        mask = (agent_state.ndata[status_key] == Compartment.EXPOSED) & \
+               (agent_state.ndata[timer_key] >= self.config.exposure_period)
 
         if torch.any(mask):
-            agent_graph.ndata[status_key][mask] = Compartment.INFECTIOUS
-            agent_graph.ndata[count_key][mask] += 1
+            agent_state.ndata[status_key][mask] = Compartment.INFECTIOUS
+            agent_state.ndata[count_key][mask] += 1
             # Note: We do NOT count incidence here. Incidence is counted when they become EXPOSED (new infection).
 
-    def _infectious_to_recovered(self, agent_graph: AgentGraph):
+    def _infectious_to_recovered(self, agent_state: AgentState):
         from abm.constants import Compartment, AgentPropertyKeys
         status_key = AgentPropertyKeys.status(self.name)
-        infectious_mask = agent_graph.ndata[status_key] == Compartment.INFECTIOUS
+        infectious_mask = agent_state.ndata[status_key] == Compartment.INFECTIOUS
         if not torch.any(infectious_mask):
             return
 
@@ -68,11 +68,11 @@ class Pathogen(ABC):
         recovered_mask = recovery_chance < self.config.recovery_rate
 
         agents_to_recover = infectious_mask.nonzero(as_tuple=True)[0][recovered_mask]
-        agent_graph.ndata[status_key][agents_to_recover] = Compartment.RECOVERED
+        agent_state.ndata[status_key][agents_to_recover] = Compartment.RECOVERED
 
     def _apply_new_infections(
         self, 
-        agent_graph: AgentGraph, 
+        agent_state: AgentState, 
         target_nodes_mask: torch.Tensor,
         base_prob: float, 
         location_ids: Optional[torch.Tensor] = None,
@@ -96,7 +96,7 @@ class Pathogen(ABC):
             infection_pressure = forced_pressure[target_indices]
         elif location_ids is not None and num_locations is not None:
             # Case: H2H Transmission via co-location
-            is_infectious = (agent_graph.ndata[status_key] == Compartment.INFECTIOUS).float()
+            is_infectious = (agent_state.ndata[status_key] == Compartment.INFECTIOUS).float()
             infected_per_location = torch.zeros(num_locations, device=self.device)
             infected_per_location.index_add_(0, location_ids, is_infectious)
             pressure_per_agent = infected_per_location[location_ids]
@@ -109,8 +109,8 @@ class Pathogen(ABC):
             return
 
         # --- Calculate Individual Susceptibility ---
-        num_prior_infections = agent_graph.ndata[count_key][target_indices].float()
-        health = agent_graph.ndata[AgentPropertyKeys.HEALTH][target_indices].float()
+        num_prior_infections = agent_state.ndata[count_key][target_indices].float()
+        health = agent_state.ndata[AgentPropertyKeys.HEALTH][target_indices].float()
 
         immunity_factor = torch.exp(-self.global_params.prior_infection_immunity_factor * num_prior_infections)
         health_factor = torch.exp(-self.global_params.infection_reduction_factor_per_health_unit * health)
@@ -129,6 +129,6 @@ class Pathogen(ABC):
 
         num_new = len(infected_nodes_indices)
         if num_new > 0:
-            agent_graph.ndata[status_key][infected_nodes_indices] = Compartment.EXPOSED
-            agent_graph.ndata[AgentPropertyKeys.exposure_time(self.name)][infected_nodes_indices] = 0
+            agent_state.ndata[status_key][infected_nodes_indices] = Compartment.EXPOSED
+            agent_state.ndata[AgentPropertyKeys.exposure_time(self.name)][infected_nodes_indices] = 0
             self.new_cases_this_step += num_new

@@ -1,13 +1,13 @@
 # abm/model/data_collection.py
-"""The module to collect data from agents and edges."""
-from pathlib import Path
 import xarray as xr
-from abm.state import AgentGraph
+from abm.state import AgentState
 
-def data_collection(agent_graph: AgentGraph, timestep: int, npath: str, epath: str,
-                    ndata: list | None, edata: list | None, mode: str):
-    """Collects specified data from agents and edges and saves it."""
-    available_ndata = agent_graph.node_keys()
+def data_collection(agent_state: AgentState, timestep: int, npath: str,
+                    ndata: list | None, mode: str):
+    """Collects specified data from agents and saves it."""
+    
+    # 1. Determine which Node properties to collect
+    available_ndata = agent_state.node_keys()
     if ndata == ['all']:
         ndata_to_collect = available_ndata
     elif ndata and ndata[0] == 'all_except':
@@ -15,26 +15,18 @@ def data_collection(agent_graph: AgentGraph, timestep: int, npath: str, epath: s
     else:
         ndata_to_collect = ndata
 
-    available_edata = agent_graph.edge_keys()
-    if edata == ['all']:
-        edata_to_collect = available_edata
-    else:
-        edata_to_collect = edata
-
+    # 2. Collect Node Data
     if ndata_to_collect:
-        _node_property_collector(agent_graph, npath, ndata_to_collect, timestep, mode)
+        _node_property_collector(agent_state, npath, ndata_to_collect, timestep, mode)
 
-    if edata_to_collect:
-        _edge_property_collector(agent_graph, epath, edata_to_collect, timestep, mode)
-
-def _node_property_collector(agent_graph: AgentGraph, npath: str, ndata: list, timestep: int, mode: str):
+def _node_property_collector(agent_state: AgentState, npath: str, ndata: list, timestep: int, mode: str):
     """Collects and saves node (agent) data to a Zarr store."""
     agent_data = xr.Dataset()
     for prop in ndata:
-        if prop not in agent_graph.ndata:
+        if prop not in agent_state.ndata:
             raise ValueError(f"Node property '{prop}' not found in graph.")
         # Ensure data is 2D (n_agents, n_time=1) for concatenation
-        data_tensor = agent_graph.ndata[prop].cpu().numpy()
+        data_tensor = agent_state.ndata[prop].cpu().numpy()
         if data_tensor.ndim == 1:
             data_tensor = data_tensor[:, None]
         agent_data[prop] = (['n_agents', 'n_time'], data_tensor)
@@ -43,23 +35,3 @@ def _node_property_collector(agent_graph: AgentGraph, npath: str, ndata: list, t
         agent_data.to_zarr(npath, mode=mode)
     else:
         agent_data.to_zarr(npath, append_dim='n_time')
-
-def _edge_property_collector(agent_graph: AgentGraph, epath: str, edata: list, timestep: int, mode: str):
-    """Collects and saves edge data for a specific timestep to a Zarr store."""
-    u, v = agent_graph.edges()
-    edge_data = xr.Dataset(
-        coords=dict(
-            source=(["n_edges"], u.cpu().numpy()),
-            dest=(["n_edges"], v.cpu().numpy()),
-        )
-    )
-    for prop in edata:
-        if prop not in agent_graph.edata:
-            raise ValueError(f"Edge property '{prop}' not found in graph.")
-        data_tensor = agent_graph.edata[prop].cpu().numpy()
-        edge_data[prop] = (['n_edges'], data_tensor)
-
-    # Save each timestep as a separate file
-    epath_dir = Path(epath)
-    epath_dir.mkdir(parents=True, exist_ok=True)
-    edge_data.to_zarr(epath_dir / f"{timestep}.zarr", mode=mode)

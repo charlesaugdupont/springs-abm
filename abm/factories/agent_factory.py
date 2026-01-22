@@ -2,7 +2,7 @@
 from typing import Dict
 import torch
 
-from abm.state import AgentGraph
+from abm.state import AgentState
 from abm.constants import Activity, AgentPropertyKeys, Compartment, GridLayer
 from config import SVEIRConfig
 
@@ -13,11 +13,11 @@ class AgentFactory:
         self.config = config
         self.agent_personas = agent_personas.to(config.device)
 
-    def initialize_agent_properties(self, agent_graph: AgentGraph, grid_env):
+    def initialize_agent_properties(self, agent_state: AgentState, grid_env):
         """
         Populates the agent graph with all necessary initial properties.
         """
-        num_agents = agent_graph.num_nodes()
+        num_agents = agent_state.num_nodes()
         agent_properties: Dict[str, torch.Tensor] = {}
 
         # --- Behavioral Profile ---
@@ -35,8 +35,8 @@ class AgentFactory:
         agent_properties[AgentPropertyKeys.THETA] = torch.full((num_agents,), self.config.steering_parameters.eta)
 
         # --- Demographics ---
-        agent_properties[AgentPropertyKeys.HOUSEHOLD_ID] = agent_graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
-        is_child = agent_graph.ndata[AgentPropertyKeys.IS_CHILD].bool()
+        agent_properties[AgentPropertyKeys.HOUSEHOLD_ID] = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
+        is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD].bool()
         num_children = is_child.sum()
 
         # Default age for adults (e.g., 30 years in months)
@@ -50,8 +50,8 @@ class AgentFactory:
         agent_properties[AgentPropertyKeys.IS_CHILD] = is_child
         # Assign IS_PARENT status to the first adult in any household with children
         is_parent = torch.zeros_like(is_child)
-        for hh_id in torch.unique(agent_graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID]):
-            in_hh = agent_graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID] == hh_id
+        for hh_id in torch.unique(agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]):
+            in_hh = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID] == hh_id
             if torch.any(in_hh & is_child):
                  # Find first adult in that household and make them a parent
                  adults_in_hh = (in_hh & ~is_child).nonzero(as_tuple=True)[0]
@@ -68,8 +68,8 @@ class AgentFactory:
             agent_properties[AgentPropertyKeys.num_infections(p_name)] = torch.zeros(num_agents, dtype=torch.int)
 
         # --- Location and Activity ---
-        agent_properties[AgentPropertyKeys.TIME_USE] = self._initialize_time_use(num_agents, agent_graph.ndata[AgentPropertyKeys.IS_CHILD])
-        home_loc = self._initialize_home_location(agent_graph)
+        agent_properties[AgentPropertyKeys.TIME_USE] = self._initialize_time_use(num_agents, agent_state.ndata[AgentPropertyKeys.IS_CHILD])
+        home_loc = self._initialize_home_location(agent_state)
         agent_properties[AgentPropertyKeys.HOME_LOCATION] = home_loc
         agent_properties[AgentPropertyKeys.SCHOOL_LOCATION] = self._find_nearest_locations(home_loc, GridLayer.SCHOOL, grid_env)
         agent_properties[AgentPropertyKeys.WORSHIP_LOCATION] = self._find_nearest_locations(home_loc, GridLayer.WORSHIP, grid_env)
@@ -90,7 +90,7 @@ class AgentFactory:
 
         # --- Assign all properties to the graph ---
         for key, value in agent_properties.items():
-            agent_graph.ndata[key] = value.to(self.config.device)
+            agent_state.ndata[key] = value.to(self.config.device)
 
     def _initialize_compartment(self, num_agents: int, proportion: float) -> torch.Tensor:
         num_infected = round(num_agents * proportion)
@@ -121,11 +121,11 @@ class AgentFactory:
 
         return time_use / (time_use.sum(dim=1, keepdim=True) + 1e-9)
 
-    def _initialize_home_location(self, agent_graph: AgentGraph) -> torch.Tensor:
-        tensor = torch.zeros((agent_graph.num_nodes(), 2), dtype=torch.float)
+    def _initialize_home_location(self, agent_state: AgentState) -> torch.Tensor:
+        tensor = torch.zeros((agent_state.num_nodes(), 2), dtype=torch.float)
         # Note: Grid is (row, col) which corresponds to (y, x)
-        tensor[:, 0] = agent_graph.ndata[AgentPropertyKeys.Y]
-        tensor[:, 1] = agent_graph.ndata[AgentPropertyKeys.X]
+        tensor[:, 0] = agent_state.ndata[AgentPropertyKeys.Y]
+        tensor[:, 1] = agent_state.ndata[AgentPropertyKeys.X]
         return tensor
 
     def _find_nearest_locations(self, home_locations, property_name, grid_env) -> torch.Tensor:

@@ -2,7 +2,7 @@
 import torch
 
 from .system import System
-from abm.state import AgentGraph
+from abm.state import AgentState
 from abm.constants import AgentPropertyKeys, Compartment
 from abm.agent.illness_mechanics import calculate_illness_severity, calculate_illness_duration
 
@@ -11,66 +11,66 @@ class ChildIllnessSystem(System):
     Manages the state of illness for child agents, including severity and duration.
     """
 
-    def update(self, agent_graph: AgentGraph, **kwargs):
+    def update(self, agent_state: AgentState, **kwargs):
         """
         Updates illness states. This should be called *after* pathogen progression.
         """
         # --- 1. Check for New Illnesses in Children ---
-        is_child = agent_graph.ndata[AgentPropertyKeys.IS_CHILD]
-        newly_symptomatic_children = self._find_newly_symptomatic(agent_graph, is_child)
+        is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
+        newly_symptomatic_children = self._find_newly_symptomatic(agent_state, is_child)
 
         # Process for each pathogen that can cause symptoms (now dynamically loaded)
         for pathogen_config in self.config.pathogens:
             pathogen_name = pathogen_config.name
             # This mask should be specific to the pathogen causing the new symptom
             pathogen_status_key = AgentPropertyKeys.status(pathogen_name)
-            p_mask = (agent_graph.ndata[pathogen_status_key] == Compartment.INFECTIOUS) & newly_symptomatic_children
+            p_mask = (agent_state.ndata[pathogen_status_key] == Compartment.INFECTIOUS) & newly_symptomatic_children
             if torch.any(p_mask):
-                self._initialize_illness(agent_graph, p_mask, pathogen_name)
+                self._initialize_illness(agent_state, p_mask, pathogen_name)
 
         # --- 2. Progress Existing Illnesses & Apply Health Impact ---
-        is_sick = agent_graph.ndata[AgentPropertyKeys.ILLNESS_DURATION] > 0
+        is_sick = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] > 0
         if torch.any(is_sick):
             # Apply health degradation due to being sick
-            severity = agent_graph.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][is_sick]
+            severity = agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][is_sick]
             health_shock = severity * self.config.steering_parameters.severity_health_impact_factor
-            current_health = agent_graph.ndata[AgentPropertyKeys.HEALTH][is_sick]
-            agent_graph.ndata[AgentPropertyKeys.HEALTH][is_sick] = torch.clamp(current_health - health_shock, min=0.0)
+            current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][is_sick]
+            agent_state.ndata[AgentPropertyKeys.HEALTH][is_sick] = torch.clamp(current_health - health_shock, min=0.0)
 
             # Reduce illness duration
-            agent_graph.ndata[AgentPropertyKeys.ILLNESS_DURATION][is_sick] -= 1
+            agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][is_sick] -= 1
 
             # When duration ends, reset severity
-            illness_ended = (agent_graph.ndata[AgentPropertyKeys.ILLNESS_DURATION] == 0)
-            agent_graph.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][illness_ended] = 0.0
+            illness_ended = (agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] == 0)
+            agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][illness_ended] = 0.0
 
-    def _find_newly_symptomatic(self, agent_graph: AgentGraph, is_child: torch.Tensor) -> torch.Tensor:
+    def _find_newly_symptomatic(self, agent_state: AgentState, is_child: torch.Tensor) -> torch.Tensor:
         """Identifies child agents who just became infectious and are not already sick."""
-        already_sick = agent_graph.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY] > 0
+        already_sick = agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY] > 0
         # A child is newly symptomatic if they are infectious for any reason and not already sick
         # A more robust model would check for *new* transitions to infectious
         is_infectious = torch.zeros_like(is_child)
         for p_config in self.config.pathogens:
-             is_infectious |= (agent_graph.ndata[AgentPropertyKeys.status(p_config.name)] == Compartment.INFECTIOUS)
+             is_infectious |= (agent_state.ndata[AgentPropertyKeys.status(p_config.name)] == Compartment.INFECTIOUS)
 
         return is_child & is_infectious & ~already_sick
 
-    def _initialize_illness(self, agent_graph: AgentGraph, mask: torch.Tensor, pathogen_name: str):
+    def _initialize_illness(self, agent_state: AgentState, mask: torch.Tensor, pathogen_name: str):
         """Calculates and sets the initial severity and duration for an illness."""
         vaccine_status_tensor = None
         if pathogen_name == 'rota':
             status_key = AgentPropertyKeys.status('rota')
-            vaccine_status_tensor = (agent_graph.ndata[status_key][mask] == Compartment.VACCINATED)
+            vaccine_status_tensor = (agent_state.ndata[status_key][mask] == Compartment.VACCINATED)
 
         severity = calculate_illness_severity(
             pathogen_name=pathogen_name,
-            is_child=agent_graph.ndata[AgentPropertyKeys.IS_CHILD][mask],
-            age=agent_graph.ndata[AgentPropertyKeys.AGE][mask],
-            wealth=agent_graph.ndata[AgentPropertyKeys.WEALTH][mask],
+            is_child=agent_state.ndata[AgentPropertyKeys.IS_CHILD][mask],
+            age=agent_state.ndata[AgentPropertyKeys.AGE][mask],
+            wealth=agent_state.ndata[AgentPropertyKeys.WEALTH][mask],
             vaccine_status=vaccine_status_tensor,
-            num_infections=agent_graph.ndata[AgentPropertyKeys.num_infections(pathogen_name)][mask]
+            num_infections=agent_state.ndata[AgentPropertyKeys.num_infections(pathogen_name)][mask]
         )
         duration = calculate_illness_duration(severity)
 
-        agent_graph.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][mask] = severity
-        agent_graph.ndata[AgentPropertyKeys.ILLNESS_DURATION][mask] = duration
+        agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][mask] = severity
+        agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][mask] = duration

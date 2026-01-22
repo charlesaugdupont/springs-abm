@@ -3,13 +3,13 @@ from typing import Any
 import torch
 
 from .system import System
-from abm.state import AgentGraph
+from abm.state import AgentState
 from abm.constants import GridLayer, WaterStatus
 
 class EnvironmentSystem(System):
     """Handles environmental dynamics like water contamination recovery and shocks."""
 
-    def update(self, agent_graph: AgentGraph, **kwargs):
+    def update(self, agent_state: AgentState, **kwargs):
         """
         Updates the state of the environment.
         """

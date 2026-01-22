@@ -5,7 +5,7 @@ import torch
 import numpy as np
 
 from abm.environment.grid_environment import GridEnvironment
-from abm.state import AgentGraph
+from abm.state import AgentState
 from abm.constants import AgentPropertyKeys
 from config import GridCreationParams
 
@@ -41,15 +41,15 @@ class EnvironmentFactory:
         else:
             raise Exception("Grid method should be 'realistic import'.")
 
-    def place_agents(self, agent_graph: AgentGraph):
+    def place_agents(self, agent_state: AgentState):
         """Places agents on the grid, assigning their initial x and y coordinates."""
         if self.grid_environment is None or self.grid_tensor is None:
             raise RuntimeError("Grid has not been created. Call create_grid() first.")
 
-        agent_graph.ndata[AgentPropertyKeys.X] = torch.zeros(agent_graph.num_nodes(), dtype=torch.float)
-        agent_graph.ndata[AgentPropertyKeys.Y] = torch.zeros(agent_graph.num_nodes(), dtype=torch.float)
+        agent_state.ndata[AgentPropertyKeys.X] = torch.zeros(agent_state.num_nodes(), dtype=torch.float)
+        agent_state.ndata[AgentPropertyKeys.Y] = torch.zeros(agent_state.num_nodes(), dtype=torch.float)
 
-        household_ids = agent_graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
+        household_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
         unique_households, household_indices = torch.unique(household_ids, return_inverse=True)
         num_households = len(unique_households)
 
@@ -72,12 +72,12 @@ class EnvironmentFactory:
             agent_coords = torch.from_numpy(household_coords[household_indices])
 
             # Grid is (row, col), so coords are (y, x)
-            agent_graph.ndata[AgentPropertyKeys.Y] = agent_coords[:, 0].float()
-            agent_graph.ndata[AgentPropertyKeys.X] = agent_coords[:, 1].float()
+            agent_state.ndata[AgentPropertyKeys.Y] = agent_coords[:, 0].float()
+            agent_state.ndata[AgentPropertyKeys.X] = agent_coords[:, 1].float()
         else:
             # Fallback to random placement for non-realistic grids
             shape = self.grid_environment.grid_shape
             hh_x = torch.randint(0, shape[0], (num_households,)).float()
             hh_y = torch.randint(0, shape[1], (num_households,)).float()
-            agent_graph.ndata[AgentPropertyKeys.X] = hh_x[household_indices]
-            agent_graph.ndata[AgentPropertyKeys.Y] = hh_y[household_indices]
+            agent_state.ndata[AgentPropertyKeys.X] = hh_x[household_indices]
+            agent_state.ndata[AgentPropertyKeys.Y] = hh_y[household_indices]

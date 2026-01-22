@@ -12,7 +12,7 @@ from abm.factories.agent_factory import AgentFactory
 from abm.factories.environment_factory import EnvironmentFactory
 from abm.pathogens.rotavirus import Rotavirus
 from abm.pathogens.campylobacter import Campylobacter
-from abm.state import AgentGraph
+from abm.state import AgentState
 
 class Model:
     """Abstract base class for a model."""
@@ -49,7 +49,6 @@ class SVEIRModel(Model):
         self.steering_parameters = self.config.steering_parameters
         self.model_dir.mkdir(parents=True, exist_ok=True)
         self.steering_parameters.npath = str(self.model_dir / Path(self.steering_parameters.npath).name)
-        self.steering_parameters.epath = str(self.model_dir / Path(self.steering_parameters.epath).name)
         self.save_model_parameters()
     
     def _load_agent_personas(self):
@@ -72,7 +71,7 @@ class SVEIRModel(Model):
         household_ids, is_child = self._calculate_demographics(self.config.number_agents)
         
         # Initialize Graph container
-        self.graph = AgentGraph(self.config.number_agents, device=self.config.device)
+        self.graph = AgentState(self.config.number_agents, device=self.config.device)
         self.graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID] = household_ids
         self.graph.ndata[AgentPropertyKeys.IS_CHILD] = is_child
 
@@ -118,8 +117,8 @@ class SVEIRModel(Model):
             MovementSystem(self.config),
             ChildIllnessSystem(self.config),
             CareSeekingSystem(self.config),
-            EnvironmentSystem(self.config),
             HouseholdSystem(self.config),
+            EnvironmentSystem(self.config),
             EconomicSystem(self.config),
         ]
 
