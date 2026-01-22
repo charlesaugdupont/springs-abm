@@ -95,6 +95,10 @@ class SteeringParamsSVEIR(BaseModel):
     parent_stress_health_impact: float = 0.05 # Health drop for parent if child worsens
     severity_health_impact_factor: float = 0.02 # Daily health reduction per unit of severity
 
+    # Income and wealth dynamics
+    daily_income_rate: float = 0.1 # Wealth gained per day for a perfectly healthy adult
+    health_based_income: bool = True # Flag to enable the feedback loop
+
 class SVEIRConfig(BaseModel):
     """Main configuration class for the SVEIR model."""
     model_identifier: str = Field("sveir_model", alias='_model_identifier')

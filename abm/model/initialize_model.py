@@ -105,6 +105,7 @@ class SVEIRModel(Model):
         from abm.systems.environment import EnvironmentSystem
         from abm.systems.child_illness import ChildIllnessSystem
         from abm.systems.care_seeking import CareSeekingSystem
+        from abm.systems.economics import EconomicSystem
 
         pathogen_map = {"rota": Rotavirus, "campy": Campylobacter}
         pathogen_config_map = {"rota": RotavirusConfig, "campy": CampylobacterConfig}
@@ -123,6 +124,7 @@ class SVEIRModel(Model):
             ChildIllnessSystem(self.config),
             CareSeekingSystem(self.config),
             EnvironmentSystem(self.config),
+            EconomicSystem(self.config),
         ]
 
     def _calculate_demographics(self, num_agents: int) -> tuple[torch.Tensor, torch.Tensor]:
