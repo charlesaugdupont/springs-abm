@@ -15,16 +15,18 @@ class Campylobacter(Pathogen):
         # Ensure config is of the correct type for type hinting
         self.config: CampylobacterConfig = config
 
-    def update(self, agent_graph: AgentGraph, location_ids: torch.Tensor, num_locations: int, grid: Any):
-        """Runs the full update cycle for Campylobacter."""
-        self.reset_incidence()
-
-        # 1. Update internal disease progression
+    def step_progression(self, agent_graph: AgentGraph):
+        """Internal progression (Once per day)."""
         self._increment_exposure_time(agent_graph)
         self._exposed_to_infectious(agent_graph)
         self._infectious_to_recovered(agent_graph)
 
-        # 2. Handle transmission from animal reservoir (NO human-to-human)
+    def step_transmission(self, agent_graph: AgentGraph, location_ids: torch.Tensor, num_locations: int, grid: Any):
+        """Transmission (Day and Night)."""
+        # Campylobacter is environmental. It depends on where the agent IS.
+        # This works perfectly with the Day/Night loop: 
+        # Day: Exposed to animals at Activity Location (e.g. School surroundings)
+        # Night: Exposed to animals at Home.
         self._animal_to_human_transmission(agent_graph, grid)
 
     def _animal_to_human_transmission(self, agent_graph: AgentGraph, grid: Any):
@@ -54,6 +56,8 @@ class Campylobacter(Pathogen):
         rand_vals = torch.rand(agent_graph.num_nodes(), device=self.device)
         new_infections = (rand_vals < prob_infection) & susceptible_mask
 
-        if torch.any(new_infections):
+        num_new = torch.sum(new_infections).item()
+        if num_new > 0:
             agent_graph.ndata[status_key][new_infections] = Compartment.EXPOSED
             agent_graph.ndata[AgentPropertyKeys.exposure_time(self.name)][new_infections] = 0
+            self.new_cases_this_step += num_new

@@ -11,10 +11,13 @@ class MovementSystem(System):
     def update(self, agent_graph: AgentGraph, **kwargs):
         """
         Updates agent x, y coordinates based on their daily activity choice.
+        (Day Phase Movement)
         """
         edge_weights = kwargs.get("edge_weights")
+        # If we haven't removed the network yet, we keep this check for now.
         if edge_weights is None:
-            raise ValueError("MovementSystem requires 'edge_weights' in update call.")
+             # Fallback if weights aren't provided, though step.py usually provides them
+             pass
 
         # 1. Agents choose an activity for the day
         time_use_probs = agent_graph.ndata[AgentPropertyKeys.TIME_USE]
@@ -41,8 +44,18 @@ class MovementSystem(System):
 
         # Handle dynamic social locations
         social_mask = (activity_choice == Activity.SOCIAL)
-        if torch.any(social_mask):
+        if torch.any(social_mask) and edge_weights is not None:
             self._move_social_agents(agent_graph, social_mask, activity_choice, edge_weights)
+
+    def reset_to_home(self, agent_graph: AgentGraph):
+        """
+        Forces all agents to their home coordinates.
+        (Night Phase Movement)
+        """
+        # Locations are stored as (y, x) in HOME_LOCATION
+        home_locs = agent_graph.ndata[AgentPropertyKeys.HOME_LOCATION]
+        agent_graph.ndata[AgentPropertyKeys.Y] = home_locs[:, 0]
+        agent_graph.ndata[AgentPropertyKeys.X] = home_locs[:, 1]
 
     def _move_social_agents(self, agent_graph: AgentGraph, social_mask: torch.Tensor,
                             activity_choice: torch.Tensor, edge_weights: torch.Tensor):

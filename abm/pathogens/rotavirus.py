@@ -15,10 +15,8 @@ class Rotavirus(Pathogen):
         self.config: RotavirusConfig = config
         self.current_infection_prob = 0.0
 
-    def update(self, agent_graph: AgentGraph, location_ids: torch.Tensor, num_locations: int, grid: Any):
-        """Runs the full update cycle for Rotavirus."""
-        self.reset_incidence()
-
+    def step_progression(self, agent_graph: AgentGraph):
+        """Internal state progression (Once per day)."""
         # 1. Update internal disease progression
         self._increment_exposure_time(agent_graph)
         self._exposed_to_infectious(agent_graph)
@@ -27,17 +25,21 @@ class Rotavirus(Pathogen):
         # 2. Update population states (vaccination)
         self._susceptible_to_vaccinated(agent_graph)
 
-        # 3. Handle transmission
+        # 3. Update stochastic global infection probability for the day
         self._update_infection_probability()
 
-        # 3a. H2H Transmission (Using optimized location groups)
+    def step_transmission(self, agent_graph: AgentGraph, location_ids: torch.Tensor, num_locations: int, grid: Any):
+        """Transmission logic (Run for Day and Night phases)."""
+        
+        # 1. H2H Transmission
         self._susceptible_to_exposed_h2h(agent_graph, location_ids, num_locations)
         self._vaccinated_to_exposed_h2h(agent_graph, location_ids, num_locations)
 
-        # 3b. Waterborne Transmission
+        # 2. Waterborne Transmission
+        # Water transmission only happens if agents are actually AT the water source.
+        # In Night phase (Reset to Home), no one is at water, so this naturally results in 0 infections, which is correct.
         self._human_to_water(agent_graph, grid)
         self._water_to_human(agent_graph, grid)
-
 
     def _update_infection_probability(self):
         self.current_infection_prob = max(
@@ -88,7 +90,16 @@ class Rotavirus(Pathogen):
         status_key = AgentPropertyKeys.status(self.name)
         infectious_mask = agent_graph.ndata[status_key] == Compartment.INFECTIOUS
         at_water_mask = agent_graph.ndata[AgentPropertyKeys.ACTIVITY_CHOICE] == Activity.WATER
-        contaminator_mask = infectious_mask & at_water_mask
+        
+        current_x = agent_graph.ndata[AgentPropertyKeys.X].long()
+        current_y = agent_graph.ndata[AgentPropertyKeys.Y].long()
+        
+        # Get water status at current agent locations
+        # If agent is at home, water_layer value will be 0 (unless home is on water source, which shouldn't happen)
+        water_layer = grid.grid_tensor[:, :, water_idx]
+        is_at_water_loc = water_layer[current_y, current_x] > 0
+        
+        contaminator_mask = infectious_mask & is_at_water_loc
 
         if not torch.any(contaminator_mask):
             return
@@ -99,10 +110,11 @@ class Rotavirus(Pathogen):
         successful_contaminators = contaminator_mask.nonzero(as_tuple=True)[0][success]
 
         if len(successful_contaminators) > 0:
-            water_points = agent_graph.ndata[AgentPropertyKeys.WATER_LOCATION][successful_contaminators].long()
-            unique_points = torch.unique(water_points, dim=0)
-            if unique_points.shape[0] > 0:
-                grid.grid_tensor[unique_points[:, 0], unique_points[:, 1], water_idx] = WaterStatus.CONTAMINATED
+            # We contaminate the water source at their current location
+            locs = torch.stack((current_y[successful_contaminators], current_x[successful_contaminators]), dim=1)
+            unique_locs = torch.unique(locs, dim=0)
+            if unique_locs.shape[0] > 0:
+                grid.grid_tensor[unique_locs[:, 0], unique_locs[:, 1], water_idx] = WaterStatus.CONTAMINATED
 
     def _water_to_human(self, agent_graph: AgentGraph, grid: Any):
         """Susceptible agents get infected from contaminated water sources."""
@@ -112,10 +124,10 @@ class Rotavirus(Pathogen):
         water_slice = grid.grid_tensor[:, :, water_idx]
         if torch.all(water_slice != WaterStatus.CONTAMINATED): return
 
-        agent_coords = torch.stack(
-            (agent_graph.ndata[AgentPropertyKeys.Y], agent_graph.ndata[AgentPropertyKeys.X]), dim=1
-        ).long()
-        agent_water_status = water_slice[agent_coords[:, 0], agent_coords[:, 1]]
+        current_x = agent_graph.ndata[AgentPropertyKeys.X].long()
+        current_y = agent_graph.ndata[AgentPropertyKeys.Y].long()
+        
+        agent_water_status = water_slice[current_y, current_x]
         at_contaminated_water_mask = (agent_water_status == WaterStatus.CONTAMINATED)
 
         if not torch.any(at_contaminated_water_mask):
@@ -126,10 +138,6 @@ class Rotavirus(Pathogen):
                       (agent_graph.ndata[status_key] != Compartment.EXPOSED) & \
                       at_contaminated_water_mask
 
-        # FIX: Explicitly pass pressure=1 for people at contaminated water
-        # The base logic calculates: (1 - p) ** pressure.
-        # If pressure is 0 (because we used identity matrix on Susceptibles), prob is 0.
-        # Here we force pressure to 1.0 for everyone standing at contaminated water.
         pressure = torch.ones(agent_graph.num_nodes(), device=self.device)
         
         self._apply_new_infections(

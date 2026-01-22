@@ -17,15 +17,30 @@ class Pathogen(ABC):
         self.new_cases_this_step = 0
 
     def reset_incidence(self):
+        """Resets the incidence counter at the start of a simulation step."""
         self.new_cases_this_step = 0
 
     @abstractmethod
-    def update(self, agent_graph: AgentGraph, location_ids: torch.Tensor, num_locations: int, grid: Any):
+    def step_progression(self, agent_graph: AgentGraph):
         """
-        Executes updates. 
-        changed: Accepts location_ids (N,) and num_locations (int) instead of adjacency matrix.
+        Updates internal disease states (timers, recovery).
+        Should run once per full simulation day.
         """
         pass
+
+    @abstractmethod
+    def step_transmission(self, agent_graph: AgentGraph, location_ids: torch.Tensor, num_locations: int, grid: Any):
+        """
+        Calculates infections based on current agent locations.
+        Can run multiple times per day (e.g. Day Phase and Night Phase).
+        """
+        pass
+
+    # Keeping the legacy update method for backward compatibility if needed, 
+    # but the model will now call the split methods.
+    def update(self, agent_graph: AgentGraph, location_ids: torch.Tensor, num_locations: int, grid: Any):
+        self.step_progression(agent_graph)
+        self.step_transmission(agent_graph, location_ids, num_locations, grid)
 
     def _increment_exposure_time(self, agent_graph: AgentGraph):
         from abm.constants import Compartment, AgentPropertyKeys
@@ -46,7 +61,7 @@ class Pathogen(ABC):
         if torch.any(mask):
             agent_graph.ndata[status_key][mask] = Compartment.INFECTIOUS
             agent_graph.ndata[count_key][mask] += 1
-            self.new_cases_this_step += torch.sum(mask).item()
+            # Note: We do NOT count incidence here. Incidence is counted when they become EXPOSED (new infection).
 
     def _infectious_to_recovered(self, agent_graph: AgentGraph):
         from abm.constants import Compartment, AgentPropertyKeys
@@ -73,11 +88,6 @@ class Pathogen(ABC):
     ):
         """
         Calculates infection probability using vectorized scatter/gather operations.
-        
-        Args:
-            location_ids: (N,) tensor of location indices for each agent.
-            num_locations: Total number of unique locations.
-            forced_pressure: Optional (N,) tensor to manually set infection pressure (e.g. for Water).
         """
         from abm.constants import Compartment, AgentPropertyKeys      
         if not torch.any(target_nodes_mask):
@@ -89,22 +99,14 @@ class Pathogen(ABC):
 
         # --- Calculate Infection Pressure ---
         if forced_pressure is not None:
-            # Case: Environmental/Water sources where pressure is pre-calculated
             infection_pressure = forced_pressure[target_indices]
         elif location_ids is not None and num_locations is not None:
-            # Case: H2H Transmission via co-location (Optimized O(N))
+            # Case: H2H Transmission via co-location
             is_infectious = (agent_graph.ndata[status_key] == Compartment.INFECTIOUS).float()
-            
-            # 1. Sum infectious agents per location
             infected_per_location = torch.zeros(num_locations, device=self.device)
             infected_per_location.index_add_(0, location_ids, is_infectious)
-            
-            # 2. Map back to agents
             pressure_per_agent = infected_per_location[location_ids]
-            
-            # 3. Remove self-loop (if agent is infectious, they don't infect themselves)
             pressure_per_agent = pressure_per_agent - is_infectious
-            
             infection_pressure = pressure_per_agent[target_indices]
         else:
             raise ValueError("Must provide either (location_ids, num_locations) or forced_pressure.")
@@ -122,8 +124,7 @@ class Pathogen(ABC):
         final_prob = prob_multiplier * base_prob * immunity_factor * health_factor
         final_prob.clamp_(0.0, 1.0)
 
-        # Probability of NOT getting infected by ANY of the infectious contacts
-        # P(infection) = 1 - (1 - p)^k  where k is infection_pressure
+        # P(infection) = 1 - (1 - p)^k
         prob_not_infected = (1 - final_prob) ** infection_pressure
         prob_getting_infected = 1 - prob_not_infected
 
@@ -132,6 +133,8 @@ class Pathogen(ABC):
         newly_infected_mask = random_samples < prob_getting_infected
         infected_nodes_indices = target_indices[newly_infected_mask]
 
-        if len(infected_nodes_indices) > 0:
+        num_new = len(infected_nodes_indices)
+        if num_new > 0:
             agent_graph.ndata[status_key][infected_nodes_indices] = Compartment.EXPOSED
             agent_graph.ndata[AgentPropertyKeys.exposure_time(self.name)][infected_nodes_indices] = 0
+            self.new_cases_this_step += num_new
