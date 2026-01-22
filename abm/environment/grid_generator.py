@@ -51,7 +51,7 @@ def _place_osm_pois(tags, boundary_info):
     minx, miny, x_step, y_step = boundary_info
     try:
         pois_gdf = ox.features_from_point(AKUSE_CENTER_POINT, tags, dist=POI_FETCH_RADIUS)
-    except ox._errors.InsufficientResponse:
+    except ox._errors.InsufficientResponseError:
         print("  - Warning: OSM did not return any data. Skipping real POIs.")
         return {}, np.zeros((GRID_SIZE, GRID_SIZE), dtype=bool)
 
