@@ -106,6 +106,7 @@ class SVEIRModel(Model):
         from abm.systems.child_illness import ChildIllnessSystem
         from abm.systems.care_seeking import CareSeekingSystem
         from abm.systems.economics import EconomicSystem
+        from abm.systems.household import HouseholdSystem
 
         pathogen_map = {"rota": Rotavirus, "campy": Campylobacter}
         pathogen_config_map = {"rota": RotavirusConfig, "campy": CampylobacterConfig}
@@ -124,6 +125,7 @@ class SVEIRModel(Model):
             ChildIllnessSystem(self.config),
             CareSeekingSystem(self.config),
             EnvironmentSystem(self.config),
+            HouseholdSystem(self.config),
             EconomicSystem(self.config),
         ]
 
