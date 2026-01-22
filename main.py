@@ -61,7 +61,7 @@ def main():
     parser.add_argument('-n', '--agents', type=int, help="Number of agents in the simulation.")
     parser.add_argument('-s', '--steps', type=int, help="Number of simulation steps.")
     parser.add_argument('-g', '--grid-id', type=str, help="REQUIRED for 'simulate': The unique ID of the grid to use.")
-    parser.add_argument('-e', '--experiment-name', type=str, help="REQUIRED for plotting stages: The name of the experiment run to plot.")
+    parser.add_argument('-e', '--experiment-name', type=str, help="Specify a custom name for an experiment run (simulate stage) or identify a run to plot (plotting stages).")
     args = parser.parse_args()
 
     # --- Load base config and override with CLI args where provided ---
@@ -81,8 +81,13 @@ def main():
         if not os.path.exists(grid_path):
             parser.error(f"Grid '{args.grid_id}' not found. Please run 'create-grid' first.")
 
-        timestr = time.strftime("%Y%m%d_%H%M%S")
-        experiment_name = f"run_{timestr}_grid_{args.grid_id}"
+        # --- MODIFIED LOGIC TO USE CUSTOM NAME OR GENERATE ONE ---
+        if args.experiment_name:
+            experiment_name = args.experiment_name
+        else:
+            timestr = time.strftime("%Y%m%d_%H%M%S")
+            experiment_name = f"run_{timestr}_grid_{args.grid_id}"
+        
         print(f"--- Stage: Running Single Simulation ---")
         print(f" Experiment Name:  {experiment_name}")
         print(f" Using Grid:       {args.grid_id}")
