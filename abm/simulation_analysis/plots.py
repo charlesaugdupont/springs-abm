@@ -8,17 +8,19 @@ from matplotlib.colors import LogNorm
 import seaborn as sns
 from typing import Dict
 
-from config import SVEIRConfig
-from .experiment_config import get_full_results_path
+from .experiment_config import get_existing_results_path
 
-def _load_and_aggregate_results(experiment_name: str, config: SVEIRConfig) -> Dict | None:
+def _load_and_aggregate_results(experiment_name: str) -> Dict | None:
     """
     Helper to load full results and aggregate them.
     """
-    full_results_file = get_full_results_path(experiment_name, config)
-    if not os.path.exists(full_results_file):
-        print(f"Error: Full results file not found at '{full_results_file}'.")
+    # Use the new config-agnostic path finder
+    try:
+        full_results_file = get_existing_results_path(experiment_name)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
         return None
+
     with open(full_results_file, 'rb') as f:
         raw_results = pickle.load(f)
 
@@ -32,10 +34,10 @@ def _load_and_aggregate_results(experiment_name: str, config: SVEIRConfig) -> Di
             aggregated['wealth'].extend(res['final_wealth'])
     return aggregated
 
-def plot_epidemic_curves(experiment_name: str, config: SVEIRConfig):
+def plot_epidemic_curves(experiment_name: str):
     """Plots the average epidemic prevalence curve across all repetitions."""
     print(f"Generating epidemic curves for {experiment_name}...")
-    aggregated_results = _load_and_aggregate_results(experiment_name, config)
+    aggregated_results = _load_and_aggregate_results(experiment_name)
     if not aggregated_results or not aggregated_results['prevalence']:
         print("No valid results found to plot.")
         return
@@ -59,16 +61,17 @@ def plot_epidemic_curves(experiment_name: str, config: SVEIRConfig):
     ax.grid(True, which='both', linestyle='--', linewidth=0.5)
     ax.set_ylim(bottom=0)
 
-    output_dir = os.path.dirname(get_full_results_path(experiment_name, config))
+    # Save to the same directory we found the results in
+    output_dir = os.path.dirname(get_existing_results_path(experiment_name))
     output_filename = os.path.join(output_dir, f"prevalence_curves_{experiment_name}.png")
     plt.savefig(output_filename, bbox_inches='tight', dpi=300)
     print(f"Prevalence curves saved to {output_filename}")
     plt.show()
 
-def plot_final_state_violins(experiment_name: str, config: SVEIRConfig):
+def plot_final_state_violins(experiment_name: str):
     """Creates violin plots showing the distribution of final agent health and wealth."""
     print(f"Generating violin plots for {experiment_name}...")
-    aggregated_results = _load_and_aggregate_results(experiment_name, config)
+    aggregated_results = _load_and_aggregate_results(experiment_name)
     if not aggregated_results or not aggregated_results['health']:
         print("No valid results found to plot.")
         return
@@ -97,16 +100,16 @@ def plot_final_state_violins(experiment_name: str, config: SVEIRConfig):
     axes[0].set_ylim(-0.05, 1.05)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
-    output_dir = os.path.dirname(get_full_results_path(experiment_name, config))
+    output_dir = os.path.dirname(get_existing_results_path(experiment_name))
     output_filename = os.path.join(output_dir, f"violin_plots_{experiment_name}.png")
     plt.savefig(output_filename, bbox_inches='tight', dpi=300)
     print(f"Violin plots saved to {output_filename}")
     plt.show()
 
-def plot_final_state_scatter(experiment_name: str, config: SVEIRConfig):
+def plot_final_state_scatter(experiment_name: str):
     """Creates a 2D density scatter plot of final agent states."""
     print(f"Generating scatter plot for {experiment_name}...")
-    aggregated_results = _load_and_aggregate_results(experiment_name, config)
+    aggregated_results = _load_and_aggregate_results(experiment_name)
     if not aggregated_results or not aggregated_results['health']:
         print("No valid results found to plot.")
         return
@@ -126,7 +129,7 @@ def plot_final_state_scatter(experiment_name: str, config: SVEIRConfig):
     ax.set_ylim(-0.05, 1.05)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
-    output_dir = os.path.dirname(get_full_results_path(experiment_name, config))
+    output_dir = os.path.dirname(get_existing_results_path(experiment_name))
     output_filename = os.path.join(output_dir, f"scatter_plot_{experiment_name}.png")
     plt.savefig(output_filename, bbox_inches='tight', dpi=300)
     print(f"Scatter plot saved to {output_filename}")

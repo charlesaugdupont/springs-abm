@@ -112,11 +112,11 @@ def main():
         
         print(f"Plotting results for experiment: {args.experiment_name}")
         if args.stage == "plot-curves":
-            plot_epidemic_curves(args.experiment_name, config)
+            plot_epidemic_curves(args.experiment_name)
         elif args.stage == "plot-violins":
-            plot_final_state_violins(args.experiment_name, config)
+            plot_final_state_violins(args.experiment_name)
         elif args.stage == 'plot-scatter':
-            plot_final_state_scatter(args.experiment_name, config)
+            plot_final_state_scatter(args.experiment_name)
 
 if __name__ == "__main__":
     main()
