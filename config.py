@@ -85,6 +85,16 @@ class SteeringParamsSVEIR(BaseModel):
     max_state_value: float = 1.0
     prior_infection_immunity_factor: float = 1.5
 
+    # --- Care-Seeking Parameters ---
+    moderate_severity_threshold: float = 0.3
+    severe_severity_threshold: float = 0.7
+    cost_of_care: float = 0.15  # Cost as a proportion of max wealth
+    treatment_success_prob: float = 0.80 # Probability care-seeking is effective
+    duration_reduction_on_success: int = 5 # Days illness is shortened
+    natural_worsening_prob: float = 0.25 # Prob illness worsens if untreated
+    parent_stress_health_impact: float = 0.05 # Health drop for parent if child worsens
+    severity_health_impact_factor: float = 0.02 # Daily health reduction per unit of severity
+
 class SVEIRConfig(BaseModel):
     """Main configuration class for the SVEIR model."""
     model_identifier: str = Field("sveir_model", alias='_model_identifier')
