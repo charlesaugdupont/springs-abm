@@ -14,11 +14,6 @@ def cpt_value_function(x: float, params: Dict[str, float]) -> float:
         return x**params["theta"]
     return -params["lambda"] * (-x)**params["eta"]
 
-def compute_new_wealth(w: torch.Tensor, wealth_update_scale: float, utility_val: torch.Tensor) -> torch.Tensor:
-    """Calculates the agent's new wealth based on a utility-driven adjustment."""
-    delta = utility_val - w
-    return w + wealth_update_scale * delta
-
 def utility(w: torch.Tensor, h: torch.Tensor, alpha: torch.Tensor, rate: float = 1.0) -> torch.Tensor:
     """Calculates the Cobb-Douglas utility from wealth and health."""
     # Add a small epsilon to prevent log(0) or power of zero issues

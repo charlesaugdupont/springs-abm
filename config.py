@@ -122,8 +122,6 @@ class SVEIRConfig(BaseModel):
     lambda_range: list[float] = [1.0, 3.0]
 
     steering_parameters: SteeringParamsSVEIR = SteeringParamsSVEIR()
-    checkpoint_period: int = 0
-    milestones: list[PositiveInt] | None = None
 
     model_config = ConfigDict(
         validate_default=True, protected_namespaces=(), populate_by_name=True,
