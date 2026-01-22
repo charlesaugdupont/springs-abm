@@ -41,10 +41,18 @@ class CareSeekingSystem(System):
             parent_hh_id = parent_hh_ids[i].item()
             if parent_hh_id in hh_to_sick_children:
                 # For simplicity, parent makes one decision for the sickest child in the HH
-                children_in_hh = hh_to_sick_children[parent_hh_id]
-                severities = child_severity[children_in_hh]
+                children_in_hh_indices = hh_to_sick_children[parent_hh_id]
+
+                # Convert the list of indices into a single, proper tensor for indexing
+                indices_tensor = torch.tensor(
+                    [idx.item() for idx in children_in_hh_indices],
+                    device=agent_graph.device,
+                    dtype=torch.long
+                )
+                severities = child_severity[indices_tensor]
+
                 sickest_child_local_idx = torch.argmax(severities)
-                sickest_child_idx = children_in_hh[sickest_child_local_idx]
+                sickest_child_idx = children_in_hh_indices[sickest_child_local_idx]
                 
                 self._parent_makes_decision(agent_graph, parent_idx, sickest_child_idx)
 
