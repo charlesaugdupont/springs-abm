@@ -38,7 +38,6 @@ The project is organized into several key directories:
 │ ├── environment/          # Spatial grid creation and generation
 │ ├── factories/            # Factories for building agents and the environment
 │ ├── model/                # The main model class, stepping logic, and data collection
-│ ├── network/              # Social network creation
 │ ├── pathogens/            # Logic for pathogen-specific transmission and progression
 │ ├── systems/              # Core behavioral and environmental processes (movement, etc.)
 │ └── simulation_analysis/  # Plotting and experiment management scripts
