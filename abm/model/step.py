@@ -5,16 +5,13 @@ import torch
 from abm.state import AgentGraph
 from config import SVEIRConfig
 from abm.model.data_collection import data_collection
-from abm.constants import Compartment, EdgePropertyKeys, AgentPropertyKeys
+from abm.constants import Compartment, AgentPropertyKeys
 from abm.pathogens.pathogen import Pathogen
 from abm.systems.system import System
 
 def _get_location_groups(agent_graph: AgentGraph) -> Tuple[torch.Tensor, int]:
     """
     Returns group indices for agents based on co-location.
-    Returns:
-        inverse_indices: Tensor of shape (num_agents) where value is the location ID.
-        num_locations: Integer count of unique locations.
     """
     coords = torch.stack([agent_graph.ndata[AgentPropertyKeys.X], agent_graph.ndata[AgentPropertyKeys.Y]], dim=1)
     
@@ -40,20 +37,13 @@ def sveir_step(
         pathogen.reset_incidence()
 
     # --- 0. DISEASE PROGRESSION (Morning) ---
-    # Update timers, recovery, etc. Once per 24h.
     for pathogen in pathogens:
         pathogen.step_progression(agent_graph)
 
     # --- 1. PHASE 1: DAYTIME (Activity) ---
     
     # a. MOVEMENT (Go to School, Water, Social)
-    # Note: MovementSystem relies on edge_weights for social logic (legacy graph)
-    src, dst = agent_graph.edges()
-    edge_weights = torch.zeros((agent_graph.num_nodes(), agent_graph.num_nodes()), device=config.device)
-    if EdgePropertyKeys.WEIGHT in agent_graph.edata:
-        edge_weights[src, dst] = agent_graph.edata[EdgePropertyKeys.WEIGHT]
-
-    systems[0].update(agent_graph, edge_weights=edge_weights) 
+    systems[0].update(agent_graph)
     
     # b. SPATIAL GROUPING (Daytime)
     location_ids, num_locations = _get_location_groups(agent_graph)
@@ -74,9 +64,7 @@ def sveir_step(
     for pathogen in pathogens:
         pathogen.step_transmission(agent_graph, location_ids, num_locations, grid)
 
-
     # --- 3. DAILY SYSTEMS ---
-    # Illness updates (symptoms), Care Seeking, Environment, etc.
     systems[1].update(agent_graph) # ChildIllnessSystem
     systems[2].update(agent_graph) # CareSeekingSystem
     systems[3].update(agent_graph, grid=grid, timestep=timestep) # EnvironmentSystem

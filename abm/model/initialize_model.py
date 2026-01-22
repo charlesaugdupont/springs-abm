@@ -2,17 +2,17 @@
 """This module contains the primary SVEIRModel class."""
 from pathlib import Path
 import torch
-import numpy as np
 from scipy.stats import qmc
 
 from config import SVEIRConfig, RotavirusConfig, CampylobacterConfig
 from abm.model.step import sveir_step
-from abm.network.network_creation import network_creation
-from abm.constants import AgentPropertyKeys, EdgePropertyKeys
+# [REMOVED] network_creation import
+from abm.constants import AgentPropertyKeys
 from abm.factories.agent_factory import AgentFactory
 from abm.factories.environment_factory import EnvironmentFactory
 from abm.pathogens.rotavirus import Rotavirus
 from abm.pathogens.campylobacter import Campylobacter
+from abm.state import AgentGraph
 
 class Model:
     """Abstract base class for a model."""
@@ -61,21 +61,18 @@ class SVEIRModel(Model):
         self.agent_personas = torch.from_numpy(scaled_samples).float()
 
     def initialize_model(self, verbose: bool = False):
-        """Initializes the entire model state, including agents, network, and environment."""
+        """Initializes the entire model state, including agents and environment."""
         if self.config is None:
             raise RuntimeError("Model parameters have not been set. Call set_model_parameters() first.")
 
         torch.manual_seed(self.config.seed)
         self._load_agent_personas()
 
-        # 1. Create Social Network
+        # 1. Create Agents (Nodes only, no explicit edges)
         household_ids, is_child = self._calculate_demographics(self.config.number_agents)
-        adult_indices = (~is_child).nonzero(as_tuple=True)[0]
-        self.graph = network_creation(
-            self.config.number_agents, self.config.initial_graph_type, verbose,
-            device=self.config.device, active_indices=adult_indices,
-            **self.config.initial_graph_args.model_dump()
-        )
+        
+        # Initialize Graph container
+        self.graph = AgentGraph(self.config.number_agents, device=self.config.device)
         self.graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID] = household_ids
         self.graph.ndata[AgentPropertyKeys.IS_CHILD] = is_child
 
@@ -92,12 +89,6 @@ class SVEIRModel(Model):
 
         # 4. Finalize Graph and Initialize Systems
         self.graph.to(self.config.device)
-
-        if self.graph.num_edges() > 0:
-            self.graph.edata[EdgePropertyKeys.WEIGHT] = torch.ones(
-                self.graph.num_edges(), device=self.config.device, dtype=torch.float
-            )   
-     
         self._initialize_pathogens_and_systems()
 
         if verbose:
@@ -118,7 +109,6 @@ class SVEIRModel(Model):
         for p_config in self.config.pathogens:
             if p_config.name in pathogen_map:
                 pathogen_class = pathogen_map[p_config.name]
-                # Ensure the config object is the specific subclass type
                 typed_config = pathogen_config_map[p_config.name](**p_config.model_dump())
                 self.pathogens.append(pathogen_class(typed_config, self.steering_parameters, self.config.device))
             else:

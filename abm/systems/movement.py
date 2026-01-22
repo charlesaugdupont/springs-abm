@@ -6,19 +6,13 @@ from abm.state import AgentGraph
 from abm.constants import Activity, AgentPropertyKeys
 
 class MovementSystem(System):
-    """Handles agent movement based on their activity choices."""
-
+    """
+    Handles agent movement based on their activity choices and the Day/Night cycle.
+    """
     def update(self, agent_graph: AgentGraph, **kwargs):
         """
-        Updates agent x, y coordinates based on their daily activity choice.
-        (Day Phase Movement)
+        Updates agent x, y coordinates based on their daily activity choice (Day Phase).
         """
-        edge_weights = kwargs.get("edge_weights")
-        # If we haven't removed the network yet, we keep this check for now.
-        if edge_weights is None:
-             # Fallback if weights aren't provided, though step.py usually provides them
-             pass
-
         # 1. Agents choose an activity for the day
         time_use_probs = agent_graph.ndata[AgentPropertyKeys.TIME_USE]
         # Add a small epsilon to prevent error with zero-probability rows
@@ -42,49 +36,68 @@ class MovementSystem(System):
                 agent_graph.ndata[AgentPropertyKeys.Y][mask] = locations[:, 0]
                 agent_graph.ndata[AgentPropertyKeys.X][mask] = locations[:, 1]
 
-        # Handle dynamic social locations
+        # Handle dynamic social locations (Purely Spatial)
         social_mask = (activity_choice == Activity.SOCIAL)
-        if torch.any(social_mask) and edge_weights is not None:
-            self._move_social_agents(agent_graph, social_mask, activity_choice, edge_weights)
+        if torch.any(social_mask):
+            self._move_social_agents_spatial(agent_graph, social_mask)
 
     def reset_to_home(self, agent_graph: AgentGraph):
         """
-        Forces all agents to their home coordinates.
-        (Night Phase Movement)
+        Forces all agents to return to their home location (Night Phase).
         """
-        # Locations are stored as (y, x) in HOME_LOCATION
-        home_locs = agent_graph.ndata[AgentPropertyKeys.HOME_LOCATION]
-        agent_graph.ndata[AgentPropertyKeys.Y] = home_locs[:, 0]
-        agent_graph.ndata[AgentPropertyKeys.X] = home_locs[:, 1]
+        home_locations = agent_graph.ndata[AgentPropertyKeys.HOME_LOCATION]
+        agent_graph.ndata[AgentPropertyKeys.Y] = home_locations[:, 0]
+        agent_graph.ndata[AgentPropertyKeys.X] = home_locations[:, 1]
 
-    def _move_social_agents(self, agent_graph: AgentGraph, social_mask: torch.Tensor,
-                            activity_choice: torch.Tensor, edge_weights: torch.Tensor):
-        """Helper to move agents engaging in social activity."""
-        visiting_agents = social_mask.nonzero(as_tuple=True)[0]
-        is_at_home_mask = (activity_choice == Activity.HOME)
+    def _move_social_agents_spatial(self, agent_graph: AgentGraph, social_mask: torch.Tensor):
+        """
+        Moves agents engaging in social activity to a random neighbor within the interaction radius.
+        """
+        params = self.config.steering_parameters
+        visiting_indices = social_mask.nonzero(as_tuple=True)[0]
+        
+        # Get coordinates of visitors
+        visitor_coords = torch.stack([
+            agent_graph.ndata[AgentPropertyKeys.Y][visiting_indices],
+            agent_graph.ndata[AgentPropertyKeys.X][visiting_indices]
+        ], dim=1)
 
-        # Agents can only visit other agents who are at home
-        social_weights = edge_weights[visiting_agents][:, is_at_home_mask]
+        # Potential hosts are agents currently at home.
+        # Note: At the start of update(), agents moved to activity.
+        # So we look for agents who chose Activity.HOME
+        is_at_home = agent_graph.ndata[AgentPropertyKeys.ACTIVITY_CHOICE] == Activity.HOME
+        host_indices = is_at_home.nonzero(as_tuple=True)[0]
+        
+        if len(host_indices) == 0:
+            return # No one is home to visit
 
-        # Filter out visitors who have no one to visit
-        can_visit_mask = social_weights.sum(dim=1) > 1e-9
-        if not torch.any(can_visit_mask):
+        host_coords = torch.stack([
+            agent_graph.ndata[AgentPropertyKeys.Y][host_indices],
+            agent_graph.ndata[AgentPropertyKeys.X][host_indices]
+        ], dim=1)
+
+        # Calculate distances (M visitors x N hosts)
+        dists = torch.cdist(visitor_coords, host_coords)
+
+        # Create a boolean mask of valid hosts within radius
+        valid_hosts_mask = (dists <= params.social_interaction_radius)
+        
+        # For each visitor, are there any valid hosts?
+        has_neighbors = valid_hosts_mask.any(dim=1)
+        
+        if not torch.any(has_neighbors):
             return
 
-        active_visitors = visiting_agents[can_visit_mask]
-        active_weights = social_weights[can_visit_mask]
+        # Filter down to visitors who actually found a neighbor
+        valid_visitors_indices = visiting_indices[has_neighbors]
+        valid_mask_subset = valid_hosts_mask[has_neighbors].float()
 
-        hosts_at_home_indices = is_at_home_mask.nonzero(as_tuple=True)[0]
-        if len(hosts_at_home_indices) == 0:
-            return
+        # Sample one host per visitor from the valid ones (Uniform probability)
+        # Note: multinomial expects probabilities, so we pass the binary float mask
+        chosen_host_local_idx = torch.multinomial(valid_mask_subset, num_samples=1).squeeze()
+        chosen_host_global_idx = host_indices[chosen_host_local_idx]
 
-        # Normalize weights to form a probability distribution
-        active_weights /= active_weights.sum(dim=1, keepdim=True)
-
-        chosen_local_idx = torch.multinomial(active_weights, num_samples=1).squeeze()
-        visited_host_indices = hosts_at_home_indices[chosen_local_idx]
-
-        # Move visitor to the home of the visited host
-        host_locations = agent_graph.ndata[AgentPropertyKeys.HOME_LOCATION][visited_host_indices]
-        agent_graph.ndata[AgentPropertyKeys.Y][active_visitors] = host_locations[:, 0]
-        agent_graph.ndata[AgentPropertyKeys.X][active_visitors] = host_locations[:, 1]
+        # Move visitor to host's location
+        target_locs = agent_graph.ndata[AgentPropertyKeys.HOME_LOCATION][chosen_host_global_idx]
+        agent_graph.ndata[AgentPropertyKeys.Y][valid_visitors_indices] = target_locs[:, 0]
+        agent_graph.ndata[AgentPropertyKeys.X][valid_visitors_indices] = target_locs[:, 1]

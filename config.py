@@ -13,16 +13,16 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 class PathogenConfig(BaseModel):
     """Base class for pathogen-specific parameters."""
     name: str
-    initial_infected_proportion: float = 0.0
+    initial_infected_proportion: float = 0.03
     recovery_rate: float
     exposure_period: int
 
 class RotavirusConfig(PathogenConfig):
     """Parameters specific to Rotavirus."""
     name: str = "rota"
-    infection_prob_mean: float = 0.002
-    infection_prob_std: float = 0.0002
-    recovery_rate: float = 0.33
+    infection_prob_mean: float = 0.1
+    infection_prob_std: float = 0.02
+    recovery_rate: float = 0.2
     exposure_period: int = 2
     vaccination_rate: float = 0.01
     vaccine_efficacy: float = 0.9
@@ -40,12 +40,6 @@ class CampylobacterConfig(PathogenConfig):
     human_animal_interaction_rate: float = 50.0
 
 # --- General Model Configuration ---
-
-class InitialGraphArgs(BaseModel):
-    """Arguments for the initial social network graph creation."""
-    seed: int = 1
-    new_node_edges: int = 1
-    model_config = ConfigDict(validate_default=True)
 
 class GridCreationParams(BaseModel):
     """Arguments for creating the spatial grid environment."""
@@ -84,6 +78,7 @@ class SteeringParamsSVEIR(BaseModel):
     data_collection_list: list[int] | None = None
     max_state_value: float = 1.0
     prior_infection_immunity_factor: float = 1.5
+    social_interaction_radius: float = 10.0
 
     # --- Care-Seeking Parameters ---
     moderate_severity_threshold: float = 0.3
@@ -107,9 +102,7 @@ class SVEIRConfig(BaseModel):
     seed: int = 42
     number_agents: PositiveInt = 300
     spatial: bool = True
-    spatial_creation_args: GridCreationParams = GridCreationParams()
-    initial_graph_type: str = "barabasi-albert"
-    initial_graph_args: InitialGraphArgs = InitialGraphArgs()
+    spatial_creation_args: GridCreationParams = GridCreationParams()    
     step_target: PositiveInt = 150
 
     # Pathogen Configuration

@@ -76,7 +76,3 @@ class AgentPropertyKeys:
     @staticmethod
     def num_infections(pathogen_name: str) -> str:
         return f"num_infections_{pathogen_name}"
-
-class EdgePropertyKeys:
-    """Centralized string keys for edge properties in AgentGraph.edata."""
-    WEIGHT = "weight"

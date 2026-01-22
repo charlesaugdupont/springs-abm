@@ -36,12 +36,6 @@ class Pathogen(ABC):
         """
         pass
 
-    # Keeping the legacy update method for backward compatibility if needed, 
-    # but the model will now call the split methods.
-    def update(self, agent_graph: AgentGraph, location_ids: torch.Tensor, num_locations: int, grid: Any):
-        self.step_progression(agent_graph)
-        self.step_transmission(agent_graph, location_ids, num_locations, grid)
-
     def _increment_exposure_time(self, agent_graph: AgentGraph):
         from abm.constants import Compartment, AgentPropertyKeys
         status_key = AgentPropertyKeys.status(self.name)
