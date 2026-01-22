@@ -19,18 +19,27 @@ class ChildIllnessSystem(System):
         is_child = agent_graph.ndata[AgentPropertyKeys.IS_CHILD]
         newly_symptomatic_children = self._find_newly_symptomatic(agent_graph, is_child)
 
-        # Process for each pathogen that can cause symptoms
-        for pathogen_name in ['rota', 'campy']: # Hardcoded for now
-             # This mask should be specific to the pathogen causing the new symptom
-            pathogen_status = AgentPropertyKeys.status(pathogen_name)
-            p_mask = (agent_graph.ndata[pathogen_status] == Compartment.INFECTIOUS) & newly_symptomatic_children
+        # Process for each pathogen that can cause symptoms (now dynamically loaded)
+        for pathogen_config in self.config.pathogens:
+            pathogen_name = pathogen_config.name
+            # This mask should be specific to the pathogen causing the new symptom
+            pathogen_status_key = AgentPropertyKeys.status(pathogen_name)
+            p_mask = (agent_graph.ndata[pathogen_status_key] == Compartment.INFECTIOUS) & newly_symptomatic_children
             if torch.any(p_mask):
                 self._initialize_illness(agent_graph, p_mask, pathogen_name)
 
-        # --- 2. Progress Existing Illnesses ---
+        # --- 2. Progress Existing Illnesses & Apply Health Impact ---
         is_sick = agent_graph.ndata[AgentPropertyKeys.ILLNESS_DURATION] > 0
         if torch.any(is_sick):
+            # Apply health degradation due to being sick
+            severity = agent_graph.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][is_sick]
+            health_shock = severity * self.config.steering_parameters.severity_health_impact_factor
+            current_health = agent_graph.ndata[AgentPropertyKeys.HEALTH][is_sick]
+            agent_graph.ndata[AgentPropertyKeys.HEALTH][is_sick] = torch.clamp(current_health - health_shock, min=0.0)
+
+            # Reduce illness duration
             agent_graph.ndata[AgentPropertyKeys.ILLNESS_DURATION][is_sick] -= 1
+
             # When duration ends, reset severity
             illness_ended = (agent_graph.ndata[AgentPropertyKeys.ILLNESS_DURATION] == 0)
             agent_graph.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][illness_ended] = 0.0
