@@ -51,12 +51,12 @@ class ChildIllnessSystem(System):
         vaccine_status_tensor = None
         if pathogen_name == 'rota':
             status_key = AgentPropertyKeys.status('rota')
-            all_statuses = agent_graph.ndata[status_key][mask]
-            vaccine_status_tensor = (all_statuses == Compartment.VACCINATED)
+            vaccine_status_tensor = (agent_graph.ndata[status_key][mask] == Compartment.VACCINATED)
 
         severity = calculate_illness_severity(
             pathogen_name=pathogen_name,
             is_child=agent_graph.ndata[AgentPropertyKeys.IS_CHILD][mask],
+            age=agent_graph.ndata[AgentPropertyKeys.AGE][mask],
             wealth=agent_graph.ndata[AgentPropertyKeys.WEALTH][mask],
             vaccine_status=vaccine_status_tensor,
             num_infections=agent_graph.ndata[AgentPropertyKeys.num_infections(pathogen_name)][mask]

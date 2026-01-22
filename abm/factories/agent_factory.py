@@ -37,6 +37,16 @@ class AgentFactory:
         # --- Demographics ---
         agent_properties[AgentPropertyKeys.HOUSEHOLD_ID] = agent_graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
         is_child = agent_graph.ndata[AgentPropertyKeys.IS_CHILD].bool()
+        num_children = is_child.sum()
+
+        # Default age for adults (e.g., 30 years in months)
+        ages = torch.full((num_agents,), 30 * 12.0)
+
+        # Assign a uniform random age from 0 to 5 years for all children (in month units)
+        child_ages = torch.rand(num_children) * (5 * 12.0)
+        ages[is_child] = child_ages
+        agent_properties[AgentPropertyKeys.AGE] = ages
+
         agent_properties[AgentPropertyKeys.IS_CHILD] = is_child
         # Assign IS_PARENT status to the first adult in any household with children
         is_parent = torch.zeros_like(is_child)

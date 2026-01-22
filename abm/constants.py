@@ -40,6 +40,7 @@ class AgentPropertyKeys:
     HOUSEHOLD_ID = "household_id"
     IS_CHILD = "is_child"
     IS_PARENT = "is_parent"
+    AGE = "age"
 
     # Behavior / CPT
     PERSONA_ID = "persona_id"

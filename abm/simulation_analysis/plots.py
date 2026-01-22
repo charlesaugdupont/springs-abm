@@ -118,7 +118,7 @@ def plot_final_state_scatter(experiment_name: str, config: SVEIRConfig):
     im = ax.hist2d(x=aggregated_results['wealth'], y=aggregated_results['health'],
                    bins=50, range=[[0, 1], [0, 1]], cmap='plasma', norm=LogNorm())
     fig.colorbar(im[3], ax=ax, label='Number of Agents (Log Scale)')
-    ax.set_title(f'Aggregate of {config.experiment_params.repetitions} Repetitions', fontsize=14)
+    ax.set_title(f'Final Agent States from a Single Simulation Run', fontsize=14)
     ax.set_xlabel('Final Wealth (Normalized)', fontsize=12)
     ax.set_ylabel('Final Health (Normalized)', fontsize=12)
 
