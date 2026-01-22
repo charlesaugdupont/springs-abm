@@ -103,4 +103,4 @@ def calculate_illness_duration(severity: torch.Tensor) -> torch.Tensor:
     # severity=0 -> 2 days, severity=1 -> 12 days
     base_duration = 2
     duration_from_severity = torch.floor(severity * 10)
-    return base_duration + duration_from_severity
+    return (base_duration + duration_from_severity).int()
