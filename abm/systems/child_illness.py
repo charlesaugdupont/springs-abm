@@ -56,13 +56,14 @@ class ChildIllnessSystem(System):
         return is_child & is_infectious & ~already_sick
 
     def _initialize_illness(self, agent_state: AgentState, mask: torch.Tensor, pathogen_name: str):
-        """Calculates and sets the initial severity and duration for an illness."""
+        """Calculates and sets the initial severity and duration, taking the MAXIMUM if already sick."""
+        # 1. Calculate the potential new severity and duration for these agents
         vaccine_status_tensor = None
         if pathogen_name == 'rota':
             status_key = AgentPropertyKeys.status('rota')
             vaccine_status_tensor = (agent_state.ndata[status_key][mask] == Compartment.VACCINATED)
 
-        severity = calculate_illness_severity(
+        new_severity = calculate_illness_severity(
             pathogen_name=pathogen_name,
             is_child=agent_state.ndata[AgentPropertyKeys.IS_CHILD][mask],
             age=agent_state.ndata[AgentPropertyKeys.AGE][mask],
@@ -70,7 +71,25 @@ class ChildIllnessSystem(System):
             vaccine_status=vaccine_status_tensor,
             num_infections=agent_state.ndata[AgentPropertyKeys.num_infections(pathogen_name)][mask]
         )
-        duration = calculate_illness_duration(severity)
+        new_duration = calculate_illness_duration(new_severity)
 
-        agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][mask] = severity
-        agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][mask] = duration
+        # 2. Get current severity
+        current_severity = agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][mask]
+
+        # 3. Determine who gets updated (Only if New Severity > Current Severity)
+        update_decision_mask = new_severity > current_severity
+
+        # We need to map the update_decision_mask (which is a subset) back to the full agent list
+        # We do this by applying the values only where update_decision_mask is True within the subset
+        
+        # Get indices of the subset (the agents currently being processed)
+        subset_indices = mask.nonzero(as_tuple=True)[0]
+        
+        # Filter for those who actually need an update
+        final_update_indices = subset_indices[update_decision_mask]
+        
+        # 4. Apply Updates
+        if len(final_update_indices) > 0:
+            # We must index new_severity/new_duration using update_decision_mask to get the matching values
+            agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][final_update_indices] = new_severity[update_decision_mask]
+            agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][final_update_indices] = new_duration[update_decision_mask]
