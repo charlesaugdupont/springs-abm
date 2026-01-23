@@ -66,7 +66,7 @@ class SteeringParamsSVEIR(BaseModel):
     human_to_water_infection_prob: float = 0.00001
     water_to_human_infection_prob: float = 0.5
     water_recovery_prob: float = 0.2
-    shock_daily_prob = 1/30
+    shock_daily_prob: float = 1/30
     shock_infection_prob: float = 1.0
 
     # Other simulation parameters
