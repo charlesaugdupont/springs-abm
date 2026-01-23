@@ -16,7 +16,7 @@ class EnvironmentSystem(System):
         grid = kwargs.get("grid")
         timestep = kwargs.get("timestep")
         if grid is None or timestep is None:
-            raise ValueError("EnvironmentSystem requires 'grid' and 'timestep'.")
+            return
 
         self._water_recovery(grid)
 

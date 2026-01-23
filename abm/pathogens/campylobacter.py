@@ -31,6 +31,9 @@ class Campylobacter(Pathogen):
 
     def _animal_to_human_transmission(self, agent_state: AgentState, grid: Any):
         """Handles Beta-Poisson infection from the animal density environmental layer."""
+        if grid is None:
+            return
+        
         animal_idx = grid.property_to_index.get(GridLayer.ANIMAL_DENSITY)
         if animal_idx is None:
             return

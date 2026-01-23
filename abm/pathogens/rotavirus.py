@@ -84,12 +84,14 @@ class Rotavirus(Pathogen):
         )
 
     def _human_to_water(self, agent_state: AgentState, grid: Any):
+        if grid is None:
+            return
+
         water_idx = grid.property_to_index.get(GridLayer.WATER)
         if water_idx is None: return
 
         status_key = AgentPropertyKeys.status(self.name)
         infectious_mask = agent_state.ndata[status_key] == Compartment.INFECTIOUS
-        at_water_mask = agent_state.ndata[AgentPropertyKeys.ACTIVITY_CHOICE] == Activity.WATER
         
         current_x = agent_state.ndata[AgentPropertyKeys.X].long()
         current_y = agent_state.ndata[AgentPropertyKeys.Y].long()
@@ -118,6 +120,9 @@ class Rotavirus(Pathogen):
 
     def _water_to_human(self, agent_state: AgentState, grid: Any):
         """Susceptible agents get infected from contaminated water sources."""
+        if grid is None: 
+            return
+
         water_idx = grid.property_to_index.get(GridLayer.WATER)
         if water_idx is None: return
 

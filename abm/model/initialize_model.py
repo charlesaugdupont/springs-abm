@@ -80,6 +80,11 @@ class SVEIRModel(Model):
             env_factory.create_grid()
             env_factory.place_agents(self.graph)
             self.grid_environment = env_factory.grid_environment
+        else:
+            self.grid_environment = None
+            # Initialize to 0.0 so keys exist, preventing KeyError in AgentFactory
+            self.graph.ndata[AgentPropertyKeys.X] = torch.zeros(self.config.number_agents, device=self.config.device)
+            self.graph.ndata[AgentPropertyKeys.Y] = torch.zeros(self.config.number_agents, device=self.config.device)
 
         # 3. Initialize Agent Properties
         agent_factory = AgentFactory(self.config, self.agent_personas)

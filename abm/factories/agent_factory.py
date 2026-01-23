@@ -129,6 +129,10 @@ class AgentFactory:
         return tensor
 
     def _find_nearest_locations(self, home_locations, property_name, grid_env) -> torch.Tensor:
+        # handle non-spatial mode
+        if grid_env is None:
+            return home_locations
+        
         prop_idx = grid_env.property_to_index.get(property_name)
         if prop_idx is None:
             print(f"Warning: Property '{property_name}' not in grid. Defaulting to home location.")
