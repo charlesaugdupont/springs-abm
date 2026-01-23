@@ -20,8 +20,8 @@ class PathogenConfig(BaseModel):
 class RotavirusConfig(PathogenConfig):
     """Parameters specific to Rotavirus."""
     name: str = "rota"
-    infection_prob_mean: float = 0.1
-    infection_prob_std: float = 0.02
+    infection_prob_mean: float = 0.01
+    infection_prob_std: float = 0.002
     recovery_rate: float = 0.2
     exposure_period: int = 2
     vaccination_rate: float = 0.01
@@ -63,11 +63,11 @@ class SteeringParamsSVEIR(BaseModel):
     infection_health_shock: float = 0.2
 
     # Water Parameters (Shared Reservoir)
-    human_to_water_infection_prob: float = 0.001
-    water_to_human_infection_prob: float = 0.001
+    human_to_water_infection_prob: float = 0.00001
+    water_to_human_infection_prob: float = 0.5
     water_recovery_prob: float = 0.2
-    shock_frequency: int = 30
-    shock_infection_prob: float = 0.10
+    shock_daily_prob = 1/30
+    shock_infection_prob: float = 1.0
 
     # Other simulation parameters
     truncation_weight: float = 1.0e-10

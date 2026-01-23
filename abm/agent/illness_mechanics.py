@@ -9,6 +9,10 @@ WEALTH_RESILIENCE_FACTOR = 0.5 # Higher wealth improves resilience
 IMMUNITY_FACTOR_VACCINE = 0.3  # Reduction for vaccine
 IMMUNITY_FACTOR_PER_INFECTION = 0.15 # Reduction per prior infection
 
+ROTA_MU = 2.6
+ROTA_SIGMA = 0.4
+ROTA_SCALE = 15.0
+
 def _get_age_effect(pathogen_name: str, age_in_months: torch.Tensor, is_child: torch.Tensor) -> torch.Tensor:
     """
     Calculates a severity multiplier based on age, with pathogen-specific logic.
@@ -26,15 +30,15 @@ def _get_age_effect(pathogen_name: str, age_in_months: torch.Tensor, is_child: t
     if pathogen_name == "rota":
         # Log-normal distribution to model peak risk between 6-24 months.
         # mu and sigma are chosen to center the peak around 12-15 months.
-        mu = torch.tensor(2.6, device=device)   # Corresponds to ~13.5 months
-        sigma = torch.tensor(0.4, device=device)
+        mu = torch.tensor(ROTA_MU, device=device)   # Corresponds to ~13.5 months
+        sigma = torch.tensor(ROTA_SIGMA, device=device)
         
         # Calculate the log-normal PDF value
         pdf_vals = (1 / (child_ages * sigma * torch.sqrt(torch.tensor(2 * torch.pi, device=device)))) * \
                    torch.exp(-((torch.log(child_ages + 1e-9) - mu)**2) / (2 * sigma**2))
         
         # Scale the PDF to create a reasonable multiplier (e.g., peak at ~2.5x)
-        pathogen_multiplier = 1.0 + (pdf_vals * 15.0)
+        pathogen_multiplier = 1.0 + (pdf_vals * ROTA_SCALE)
         multiplier[is_child] = pathogen_multiplier
 
     elif pathogen_name == "campy":

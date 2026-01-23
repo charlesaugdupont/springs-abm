@@ -20,7 +20,7 @@ class EnvironmentSystem(System):
 
         self._water_recovery(grid)
 
-        if (timestep + 1) % self.config.steering_parameters.shock_frequency == 0:
+        if torch.rand(1).item() < self.config.steering_parameters.shock_daily_prob:
             self._water_shock(grid)
 
     def _water_recovery(self, grid: Any):
