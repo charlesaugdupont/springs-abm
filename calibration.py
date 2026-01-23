@@ -21,7 +21,7 @@ def run_sweep(grid_id, sweep_type, steps=150, agents=500):
     elif sweep_type == "campy_env":
         # Sweeping Interaction Rate to find endemic baseline
         param_name = "human_animal_interaction_rate"
-        values = [0.25, 0.5, 1, 2, 4]
+        values = [2, 4, 6, 8]
         print(f"\n--- CALIBRATION: Campylobacter Environmental Risk ({len(values)} runs) ---")
     
     else:
@@ -75,6 +75,7 @@ def run_sweep(grid_id, sweep_type, steps=150, agents=500):
         attack_rate = total_infections / agents
         peak_day = np.argmax(prevalence)
         peak_count = np.max(prevalence)
+        final_prevalence = prevalence[-1] if len(prevalence) > 0 else 0
         
         # Simple R0 estimation (Growth rate in first 10 days)
         # N_t = N_0 * e^(rt) -> r approx slope of log(incidence)
@@ -95,6 +96,7 @@ def run_sweep(grid_id, sweep_type, steps=150, agents=500):
             "Attack Rate %": f"{attack_rate*100:.1f}%",
             "Peak Day": peak_day,
             "Peak Count": peak_count,
+            "Final Day Prevalence": final_prevalence,
             "Est. Growth (r)": f"{r:.3f}"
         })
         print(" Done.")

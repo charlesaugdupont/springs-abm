@@ -148,7 +148,64 @@ def run_sanity_check_epidemic():
     else:
         print("❌ FAIL: No epidemic generated (Check transmission params).")
 
+
+def run_economic_feedback_check():
+    """TEST 4: Component Verification - Health-Based Economics"""
+    print("\n--- TEST 4: Health-Based Economic Feedback ---")
+    
+    # GIVEN: A model with health-based income enabled, but no diseases
+    config = SVEIRCONFIG.model_copy(deep=True)
+    config.number_agents = 100
+    config.step_target = 50  # Run for enough time to see wealth change
+    config.device = 'cpu'
+    config.spatial = False
+    config.steering_parameters.health_based_income = True
+    config.steering_parameters.daily_income_rate = 0.05 # A significant rate
+    
+    # Disable all pathogens to isolate the economic system
+    config.pathogens = []
+
+    model = SVEIRModel(model_identifier="test_economics", root_path="tests/outputs")
+    model.set_model_parameters(**config.model_dump())
+    model.initialize_model(verbose=False)
+    
+    # GIVEN: Two distinct groups of adults
+    # Group A: High Health, Low Wealth (indices 0-49)
+    # Group B: Low Health, High Wealth (indices 50-99)
+    
+    # Ensure all are non-child agents to receive income
+    model.graph.ndata[AgentPropertyKeys.IS_CHILD][:] = False
+    
+    # Group A
+    model.graph.ndata[AgentPropertyKeys.HEALTH][:50] = 0.95
+    model.graph.ndata[AgentPropertyKeys.WEALTH][:50] = 0.1
+    
+    # Group B
+    model.graph.ndata[AgentPropertyKeys.HEALTH][50:] = 0.15
+    model.graph.ndata[AgentPropertyKeys.WEALTH][50:] = 0.9
+
+    initial_wealth_A = model.graph.ndata[AgentPropertyKeys.WEALTH][:50].mean().item()
+    initial_wealth_B = model.graph.ndata[AgentPropertyKeys.WEALTH][50:].mean().item()
+    print(f"Initial Avg Wealth -> Healthy Group: {initial_wealth_A:.2f}, Unhealthy Group: {initial_wealth_B:.2f}")
+
+    # WHEN: The model is run
+    model.run()
+    
+    # THEN: The healthy group should have gained significantly more wealth
+    final_wealth_A = model.graph.ndata[AgentPropertyKeys.WEALTH][:50].mean().item()
+    final_wealth_B = model.graph.ndata[AgentPropertyKeys.WEALTH][50:].mean().item()
+    print(f"Final Avg Wealth   -> Healthy Group: {final_wealth_A:.2f}, Unhealthy Group: {final_wealth_B:.2f}")
+    
+    wealth_gain_A = final_wealth_A - initial_wealth_A
+    wealth_gain_B = final_wealth_B - initial_wealth_B
+    
+    if wealth_gain_A > wealth_gain_B * 2: # Check for a significant difference
+        print(f"✅ PASS: Healthy group gained significantly more wealth ({wealth_gain_A:.2f}) than unhealthy group ({wealth_gain_B:.2f}).")
+    else:
+        print(f"❌ FAIL: Wealth gain was not significantly different, feedback loop may be broken.")
+
 if __name__ == "__main__":
     run_conservation_check()
     run_care_seeking_calibration()
     run_sanity_check_epidemic()
+    run_economic_feedback_check()

@@ -37,7 +37,7 @@ class CampylobacterConfig(PathogenConfig):
     recovery_rate: float = 0.15  # ~1 week duration
     exposure_period: int = 3
     # Environmental
-    human_animal_interaction_rate: float = 50.0
+    human_animal_interaction_rate: float = 2.0
 
 # --- General Model Configuration ---
 
@@ -89,7 +89,8 @@ class SteeringParamsSVEIR(BaseModel):
     severity_health_impact_factor: float = 0.02 # Daily health reduction per unit of severity
 
     # Income and wealth dynamics
-    daily_income_rate: float = 0.1 # Wealth gained per day for a perfectly healthy adult
+    daily_income_rate: float = 0.02 # Wealth gained per day for a perfectly healthy adult
+    daily_cost_of_living: float = 0.01 # daily wealth expense
     health_based_income: bool = True # Flag to enable the feedback loop
 
 class SVEIRConfig(BaseModel):

@@ -56,6 +56,12 @@ class Campylobacter(Pathogen):
         status_key = AgentPropertyKeys.status(self.name)
         susceptible_mask = agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE
 
+        # --- Acquired Immunity ---
+        if torch.any(susceptible_mask):
+            num_prior_infections = agent_state.ndata[AgentPropertyKeys.num_infections(self.name)][susceptible_mask].float()
+            immunity_factor = torch.exp(-self.global_params.prior_infection_immunity_factor * num_prior_infections)
+            prob_infection[susceptible_mask] *= immunity_factor
+
         rand_vals = torch.rand(agent_state.num_nodes(), device=self.device)
         new_infections = (rand_vals < prob_infection) & susceptible_mask
 
