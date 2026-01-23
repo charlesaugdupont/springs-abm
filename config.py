@@ -76,7 +76,7 @@ class SteeringParamsSVEIR(BaseModel):
     data_collection_list: list[int] | None = None
     max_state_value: float = 1.0
     prior_infection_immunity_factor: float = 1.5
-    social_interaction_radius: float = 10.0
+    social_interaction_radius: float = 5.0
 
     # --- Care-Seeking Parameters ---
     moderate_severity_threshold: float = 0.3
