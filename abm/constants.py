@@ -63,6 +63,7 @@ class AgentPropertyKeys:
     # Illness State
     SYMPTOM_SEVERITY = "symptom_severity"
     ILLNESS_DURATION = "illness_duration"
+    CARE_SEEKING_COUNT = "care_seeking_count"
 
     # Dynamic keys for pathogens
     @staticmethod

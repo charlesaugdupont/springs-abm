@@ -8,7 +8,8 @@ import traceback
 from abm.simulation_analysis.plots import (
     plot_epidemic_curves,
     plot_final_state_violins,
-    plot_final_state_scatter
+    plot_final_state_scatter,
+    plot_care_seeking_analysis
 )
 from abm.simulation_analysis.experiment_config import get_full_results_path, get_sim_runs_path
 from abm.model.initialize_model import SVEIRModel
@@ -34,6 +35,13 @@ def run_single_simulation(config, experiment_name: str) -> dict:
             'prevalence_curve': time_series['prevalence'],
             'final_health': final_states['health'],
             'final_wealth': final_states['wealth'],
+            'initial_health': final_states['initial_health'],
+            'initial_wealth': final_states['initial_wealth'],
+            'care_seeking_count': final_states['care_seeking_count'],
+            'is_parent': final_states['is_parent'],
+            'alpha': final_states['alpha'],
+            'gamma': final_states['gamma'],
+            'lambda': final_states['lambda'],
         }
     except Exception:
         print(f"\n--- ERROR IN SIMULATION: {run_name} ---")
@@ -48,7 +56,7 @@ def main():
     )
     parser.add_argument(
         'stage',
-        choices=['create-grid', 'simulate', 'plot-curves', 'plot-violins', 'plot-scatter'],
+        choices=['create-grid', 'simulate', 'plot-curves', 'plot-violins', 'plot-scatter', 'plot-care'],
         help=(
             "The stage of the experiment to run:\n"
             "  'create-grid'  - Generate the realistic base grid (run once).\n"
@@ -56,6 +64,7 @@ def main():
             "  'plot-curves'  - Compare incidence curves.\n"
             "  'plot-violins' - Compare final agent health and wealth.\n"
             "  'plot-scatter' - Generate density scatter plots of final agent states.\n"
+            "  'plot-care'    - Analyze parental care-seeking decisions.\n"
         )
     )
     parser.add_argument('-n', '--agents', type=int, help="Number of agents in the simulation.")
@@ -117,6 +126,9 @@ def main():
             plot_final_state_violins(args.experiment_name)
         elif args.stage == 'plot-scatter':
             plot_final_state_scatter(args.experiment_name)
+        elif args.stage == 'plot-care':
+            plot_care_seeking_analysis(args.experiment_name)
+
 
 if __name__ == "__main__":
     main()

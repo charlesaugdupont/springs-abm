@@ -88,6 +88,9 @@ class AgentFactory:
         agent_properties[AgentPropertyKeys.SYMPTOM_SEVERITY] = torch.zeros(num_agents, dtype=torch.float)
         agent_properties[AgentPropertyKeys.ILLNESS_DURATION] = torch.zeros(num_agents, dtype=torch.int)
 
+        # --- Care Seeking ---
+        agent_properties[AgentPropertyKeys.CARE_SEEKING_COUNT] = torch.zeros(num_agents, dtype=torch.int)
+
         # --- Assign all properties to the graph ---
         for key, value in agent_properties.items():
             agent_state.ndata[key] = value.to(self.config.device)

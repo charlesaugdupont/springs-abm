@@ -115,6 +115,9 @@ class CareSeekingSystem(System):
         params = self.config.steering_parameters
         # Apply cost to parent
         agent_state.ndata[AgentPropertyKeys.WEALTH][parent_idx] -= params.cost_of_care
+
+        # Increment care seeking counter
+        agent_state.ndata[AgentPropertyKeys.CARE_SEEKING_COUNT][parent_idx] += 1
         
         # Apply health outcome to child
         if torch.rand(1).item() < params.treatment_success_prob:

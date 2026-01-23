@@ -196,5 +196,12 @@ class SVEIRModel(Model):
     def get_final_agent_states(self) -> dict:
         return {
             'health': self.graph.ndata[AgentPropertyKeys.HEALTH].cpu().numpy(),
-            'wealth': self.graph.ndata[AgentPropertyKeys.WEALTH].cpu().numpy()
+            'wealth': self.graph.ndata[AgentPropertyKeys.WEALTH].cpu().numpy(),
+            'initial_health': self.graph.ndata[AgentPropertyKeys.INITIAL_HEALTH].cpu().numpy(),
+            'initial_wealth': self.graph.ndata[AgentPropertyKeys.INITIAL_WEALTH].cpu().numpy(),
+            'care_seeking_count': self.graph.ndata[AgentPropertyKeys.CARE_SEEKING_COUNT].cpu().numpy(),
+            'is_parent': self.graph.ndata[AgentPropertyKeys.IS_PARENT].cpu().numpy(),
+            'alpha': self.graph.ndata[AgentPropertyKeys.ALPHA].cpu().numpy(),
+            'gamma': self.graph.ndata[AgentPropertyKeys.GAMMA].cpu().numpy(),
+            'lambda': self.graph.ndata[AgentPropertyKeys.LAMBDA].cpu().numpy(),
         }
