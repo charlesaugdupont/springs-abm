@@ -127,11 +127,25 @@ class SVEIRModel(Model):
         ]
 
     def _calculate_demographics(self, num_agents: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """Generates household IDs and child status for all agents."""
+        """Generates household IDs and child status for all agents robustly."""
         avg_size = float(self.config.average_household_size)
-        est_num_hh = int((num_agents / avg_size) * 1.5)
-        sizes = torch.poisson(torch.full((est_num_hh,), avg_size - 1.0)) + 1.0
+        
+        # Robustly generate households until we have AT LEAST num_agents
+        sizes_list = []
+        total_generated = 0
+        while total_generated < num_agents:
+            # Generate a batch. If we need just a few more, assume avg_size to estimate count, plus padding
+            remaining = num_agents - total_generated
+            batch_count = max(5, int((remaining / avg_size) * 1.5))
+            
+            batch_sizes = torch.poisson(torch.full((batch_count,), avg_size - 1.0)) + 1.0
+            sizes_list.append(batch_sizes)
+            total_generated += batch_sizes.sum().item()
+
+        sizes = torch.cat(sizes_list)
         full_ids = torch.repeat_interleave(torch.arange(len(sizes)), sizes.long())
+        
+        # Slice to the exact number of agents needed
         household_ids = full_ids[:num_agents]
 
         is_child = torch.zeros(num_agents, dtype=torch.bool)
