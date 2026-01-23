@@ -6,7 +6,6 @@ from scipy.stats import qmc
 
 from config import SVEIRConfig, RotavirusConfig, CampylobacterConfig
 from abm.model.step import sveir_step
-# [REMOVED] network_creation import
 from abm.constants import AgentPropertyKeys
 from abm.factories.agent_factory import AgentFactory
 from abm.factories.environment_factory import EnvironmentFactory

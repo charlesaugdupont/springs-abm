@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "springs-abm"
 version = "1.0.0"
@@ -16,3 +20,11 @@ dependencies = [
     "tqdm>=4.67.1",
     "xarray>=2025.12.0",
 ]
+
+# --- Package Discovery ---
+[tool.setuptools]
+py-modules = ["config"] # Include the top-level config.py
+
+[tool.setuptools.packages.find]
+include = ["abm*"]      # Recursively include the abm folder
+exclude = ["grids*", "outputs*", "tests*", "cache*", "venv*"]
