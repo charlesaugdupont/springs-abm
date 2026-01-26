@@ -210,3 +210,5 @@ __marimo__/
 cache/
 grids/
 outputs/
+
+.DS_Store
