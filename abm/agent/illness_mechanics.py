@@ -45,7 +45,7 @@ def _get_age_effect(pathogen_name: str, age_in_months: torch.Tensor, is_child: t
         # Exponential decay model: highest risk for the youngest, decreasing over time.
         # Multiplier starts high (e.g., 2.5x at age 0) and decays.
         max_multiplier = 1.5
-        decay_rate = 0.15
+        decay_rate = 0.08
         pathogen_multiplier = 1.0 + max_multiplier * torch.exp(-decay_rate * child_ages)
         multiplier[is_child] = pathogen_multiplier
 
