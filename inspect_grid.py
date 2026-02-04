@@ -32,7 +32,7 @@ def inspect_grid(grid_id):
     # --- Visualization ---
     cols = int(np.ceil(np.sqrt(num_layers)))
     rows = int(np.ceil(num_layers / cols))
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4))
+    fig, axes = plt.subplots(rows, cols, sharey=True, figsize=(cols * 4, rows * 4))
     axes = axes.flatten()
 
     for i in range(num_layers):
@@ -44,7 +44,7 @@ def inspect_grid(grid_id):
         cmap = 'plasma' if 'density' in layer_name else 'cividis'
         
         im = ax.imshow(layer_data, cmap=cmap, origin='lower')
-        ax.set_title(layer_name.replace('_', ' ').title())
+        ax.set_title(layer_name.replace('_', ' ').title().replace("Residences","Potential Households").replace("Water","Water Collection Points"))
         ax.set_xlabel("Grid X")
         ax.set_ylabel("Grid Y")
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
@@ -52,8 +52,9 @@ def inspect_grid(grid_id):
     for i in range(num_layers, len(axes)):
         axes[i].set_visible(False)
         
-    fig.suptitle(f"Inspection of Grid: {grid_id}", fontsize=16)
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    fig.suptitle(f"Grid Layers", fontsize=16)
+    plt.tight_layout()
+    plt.savefig(os.path.join("grids", grid_id, "layers.pdf"), bbox_inches="tight")
     print("Displaying grid plot.")
     plt.show()
 

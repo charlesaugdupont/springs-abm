@@ -4,7 +4,7 @@ import torch
 
 from .pathogen import Pathogen
 from abm.state import AgentState
-from abm.constants import Compartment, AgentPropertyKeys, Activity, GridLayer, WaterStatus
+from abm.constants import Compartment, AgentPropertyKeys, GridLayer, WaterStatus
 from config import RotavirusConfig, SteeringParamsSVEIR
 
 class Rotavirus(Pathogen):

@@ -1,6 +1,8 @@
 # abm/pathogens/campylobacter.py
 from typing import Any
 import torch
+import numpy as np
+from scipy.special import hyp1f1
 
 from .pathogen import Pathogen
 from abm.state import AgentState
@@ -30,7 +32,10 @@ class Campylobacter(Pathogen):
         self._animal_to_human_transmission(agent_state, grid)
 
     def _animal_to_human_transmission(self, agent_state: AgentState, grid: Any):
-        """Handles Beta-Poisson infection from the animal density environmental layer."""
+        """
+        Handles Exact Beta-Poisson infection from the animal density layer.
+        P(inf) = 1 - 1F1(alpha, alpha + beta, -dose)
+        """
         if grid is None:
             return
         
@@ -47,21 +52,35 @@ class Campylobacter(Pathogen):
         local_density = grid.grid_tensor[y, x, animal_idx]
         dose = local_density * self.config.human_animal_interaction_rate
 
-        # Beta-Poisson dose-response model to calculate probability of infection
-        alpha = self.config.beta_poisson_alpha
-        beta = self.config.beta_poisson_beta
-        prob_infection = 1.0 - torch.pow(1.0 + dose / beta, -alpha)
-
-        # Identify susceptible agents and apply infection probability
+        # 2. Identify susceptible agents
         status_key = AgentPropertyKeys.status(self.name)
         susceptible_mask = agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE
 
-        # --- Acquired Immunity ---
-        if torch.any(susceptible_mask):
-            num_prior_infections = agent_state.ndata[AgentPropertyKeys.num_infections(self.name)][susceptible_mask].float()
-            immunity_factor = torch.exp(-self.global_params.prior_infection_immunity_factor * num_prior_infections)
-            prob_infection[susceptible_mask] *= immunity_factor
+        if not torch.any(susceptible_mask):
+            return
 
+        # 3. Calculate Exact Beta-Poisson Probability
+        # We perform this in numpy/scipy as 1F1 is not native to PyTorch
+        alpha = self.config.beta_poisson_alpha
+        beta = self.config.beta_poisson_beta
+        
+        # Extract doses for susceptible agents only
+        target_doses = dose[susceptible_mask].cpu().numpy()
+        
+        # P(inf) = 1 - 1F1(alpha, alpha + beta, -dose)
+        # Note: hyp1f1(a, b, x) is the Kummer function
+        prob_inf_np = 1.0 - hyp1f1(alpha, alpha + beta, -target_doses)
+        
+        # Convert back to torch
+        prob_infection = torch.zeros(agent_state.num_nodes(), device=self.device)
+        prob_infection[susceptible_mask] = torch.from_numpy(prob_inf_np).to(self.device).float()
+
+        # 4. Apply Acquired Immunity (if applicable)
+        num_prior_infections = agent_state.ndata[AgentPropertyKeys.num_infections(self.name)][susceptible_mask].float()
+        immunity_factor = torch.exp(-self.global_params.prior_infection_immunity_factor * num_prior_infections)
+        prob_infection[susceptible_mask] *= immunity_factor
+
+        # 5. Stochastic infection event
         rand_vals = torch.rand(agent_state.num_nodes(), device=self.device)
         new_infections = (rand_vals < prob_infection) & susceptible_mask
 

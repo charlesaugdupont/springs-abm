@@ -31,8 +31,8 @@ class CampylobacterConfig(PathogenConfig):
     """Parameters specific to Campylobacter."""
     name: str = "campy"
     # Beta-Poisson Dose Response Constants
-    beta_poisson_alpha: float = 0.145
-    beta_poisson_beta: float = 7.59
+    beta_poisson_alpha: float = 0.038
+    beta_poisson_beta: float = 0.022
     # Disease Dynamics
     recovery_rate: float = 0.15  # ~1 week duration
     exposure_period: int = 3
@@ -81,7 +81,7 @@ class SteeringParamsSVEIR(BaseModel):
     # --- Care-Seeking Parameters ---
     moderate_severity_threshold: float = 0.2
     severe_severity_threshold: float = 0.7
-    cost_of_care: float = 0.10  # Cost as a proportion of max wealth
+    cost_of_care: float = 0.05  # Cost as a proportion of max wealth
     treatment_success_prob: float = 0.80 # Probability care-seeking is effective
     duration_reduction_on_success: int = 5 # Days illness is shortened
     natural_worsening_prob: float = 0.35 # Prob illness worsens if untreated

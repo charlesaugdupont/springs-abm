@@ -1,7 +1,6 @@
 # abm/systems/system.py
 from abc import ABC, abstractmethod
 from typing import Any
-import torch
 
 from abm.state import AgentState
 from config import SVEIRConfig
