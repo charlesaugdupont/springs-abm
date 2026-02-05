@@ -21,7 +21,7 @@ class RotavirusConfig(PathogenConfig):
     """Parameters specific to Rotavirus."""
     name: str = "rota"
     infection_prob_mean: float = 0.20
-    infection_prob_std: float = 0.002
+    infection_prob_std: float = 0.02
     recovery_rate: float = 0.2
     exposure_period: int = 2
     vaccination_rate: float = 0.01
@@ -99,7 +99,7 @@ class SVEIRConfig(BaseModel):
     description: str = "Configuration for the SVEIR agent-based model."
     device: str = "cpu"
     seed: int = 42
-    number_agents: PositiveInt = 300
+    number_agents: PositiveInt = 500
     spatial: bool = True
     spatial_creation_args: GridCreationParams = GridCreationParams()    
     step_target: PositiveInt = 150
