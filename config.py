@@ -108,8 +108,8 @@ class SVEIRConfig(BaseModel):
     pathogens: List[Union[RotavirusConfig, CampylobacterConfig]] = [RotavirusConfig(), CampylobacterConfig()]
 
     # Demographic Parameters
-    average_household_size: int = 4
-    child_probability: float = 0.2
+    average_household_size: int = 3.7
+    child_probability: float = 0.145
 
     # Parameters for Agent Personas
     num_agent_personas: int = 32
