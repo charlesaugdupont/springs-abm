@@ -61,17 +61,17 @@ def inspect_grid(grid_id):
         if is_binary:
             im = ax.imshow(layer_data, cmap=binary_cmap, norm=binary_norm, origin='lower', interpolation='nearest')
             cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, ticks=[0.25, 0.75])
-            cbar.ax.set_yticklabels(['Absent', 'Present'])
+            cbar.ax.set_yticklabels(['Absent', 'Present'], rotation=90)
         else:
             # Continuous data (e.g. Animal Density)
             im = ax.imshow(layer_data, cmap='plasma', origin='lower')
             cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-            cbar.set_label('Density', labelpad=15)
+            cbar.set_label('Density')
         
         title = layer_name.replace('_', ' ').title().replace("Residences", "Possible Households")
-        ax.set_title(title, pad=10)
-        ax.set_xlabel(r"$x$")
-        ax.set_ylabel(r"$y$", rotation=0, labelpad=15)
+        ax.set_title(title, pad=10, fontsize=16)
+        ax.set_xlabel(r"$x$", fontsize=12)
+        ax.set_ylabel(r"$y$", rotation=0, labelpad=15, fontsize=12)
 
     # --- 2. Plot Natural OSM View ---
     if bounds is not None:
@@ -82,7 +82,7 @@ def inspect_grid(grid_id):
         ax_map.set_xlim(minx, maxx)
         ax_map.set_ylim(miny, maxy)
         
-        ax_map.set_title("Natural View", fontweight='bold', pad=10)
+        ax_map.set_title("Natural View", pad=10, fontsize=16)
         ax_map.set_xlabel("Longitude")
         ax_map.set_ylabel("Latitude")
         

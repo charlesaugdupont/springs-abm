@@ -109,14 +109,14 @@ class AgentFactory:
         num_children = is_child.sum()
 
         if num_adults > 0:
-            adult_weights = torch.tensor([40.0, 0.0, 10.0, 30.0, 20.0])
+            adult_weights = torch.tensor([30.0, 0.0, 20.0, 20.0, 30.0])
             adult_noise = torch.rand(num_adults, 5) * 10.0
             base_adult = adult_weights.expand(num_adults, 5).clone() + adult_noise
             base_adult[:, Activity.SCHOOL] = 0.0
             time_use[~is_child] = base_adult
 
         if num_children > 0:
-            child_weights = torch.tensor([80.0, 20.0, 0.0, 0.0, 0.0])
+            child_weights = torch.tensor([70.0, 30.0, 0.0, 0.0, 0.0])
             child_noise = torch.rand(num_children, 5) * 5.0
             base_child = child_weights.expand(num_children, 5).clone() + child_noise
             base_child[:, [Activity.WORSHIP, Activity.WATER, Activity.SOCIAL]] = 0.0
