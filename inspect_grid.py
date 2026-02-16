@@ -69,7 +69,7 @@ def inspect_grid(grid_id):
             cbar.set_label('Density', labelpad=15)
         
         title = layer_name.replace('_', ' ').title().replace("Residences", "Possible Households")
-        ax.set_title(title, fontweight='bold', pad=10)
+        ax.set_title(title, pad=10)
         ax.set_xlabel(r"$x$")
         ax.set_ylabel(r"$y$", rotation=0, labelpad=15)
 
@@ -102,7 +102,7 @@ def inspect_grid(grid_id):
         
     plt.tight_layout()
     
-    out_file = os.path.join("grids", grid_id, "layers_context.pdf")
+    out_file = os.path.join("grids", grid_id, "grid_layers.pdf")
     plt.savefig(out_file, bbox_inches="tight")
     print(f"Plot saved to '{out_file}'")
     plt.show()
