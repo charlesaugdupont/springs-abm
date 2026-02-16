@@ -6,7 +6,7 @@ from tabulate import tabulate
 from abm.model.initialize_model import SVEIRModel
 from config import SVEIRCONFIG
 
-def run_sweep(grid_id, sweep_type, steps=150, agents=500):
+def run_sweep(grid_id, sweep_type, steps=150, agents=5000):
     """Runs a parameter sweep for specific calibration targets."""
 
     results = []

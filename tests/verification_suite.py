@@ -15,7 +15,7 @@ def run_conservation_check():
     """TEST 1: Unit Verification - Conservation of Agents"""
     print("\n--- TEST 1: Conservation of Agents ---")
     config = SVEIRCONFIG.model_copy(deep=True)
-    config.number_agents = 500
+    config.number_agents = 5000
     config.step_target = 10
     config.device = 'cpu' # Safer for tests
     config.spatial = False

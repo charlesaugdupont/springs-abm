@@ -98,7 +98,7 @@ This will run a single, complete simulation. A unique Experiment Name (e.g., run
 
 You can override default simulation parameters using command-line arguments:
 
-- `--agents <N>`: Set the number of agents (e.g., `--agents 500`).
+- `--agents <N>`: Set the number of agents (e.g., `--agents 5000`).
 - `--steps <N>`: Set the number of simulation steps (e.g., `--steps 200`).
 
 ### Step 3: Plot the Results

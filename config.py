@@ -99,7 +99,7 @@ class SVEIRConfig(BaseModel):
     description: str = "Configuration for the SVEIR agent-based model."
     device: str = "cpu"
     seed: int = 42
-    number_agents: PositiveInt = 500
+    number_agents: PositiveInt = 5000
     spatial: bool = True
     spatial_creation_args: GridCreationParams = GridCreationParams()    
     step_target: PositiveInt = 150
@@ -108,7 +108,7 @@ class SVEIRConfig(BaseModel):
     pathogens: List[Union[RotavirusConfig, CampylobacterConfig]] = [RotavirusConfig(), CampylobacterConfig()]
 
     # Demographic Parameters
-    average_household_size: int = 3.7
+    average_household_size: int = 3.2
     child_probability: float = 0.145
 
     # Parameters for Agent Personas
