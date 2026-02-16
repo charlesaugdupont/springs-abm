@@ -9,6 +9,7 @@ description = "Agent-based model to simulate diarrheal pathogen spread and human
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "contextily>=1.7.0",
     "matplotlib>=3.10.6",
     "numpy>=2.3.2",
     "osmnx>=2.0.7",
