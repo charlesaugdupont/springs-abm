@@ -113,6 +113,7 @@ class AgentFactory:
             adult_noise = torch.rand(num_adults, 5) * 10.0
             base_adult = adult_weights.expand(num_adults, 5).clone() + adult_noise
             base_adult[:, Activity.SCHOOL] = 0.0
+            base_adult = base_adult / base_adult.sum(dim=1, keepdim=True) * 100.0
             time_use[~is_child] = base_adult
 
         if num_children > 0:
@@ -120,6 +121,7 @@ class AgentFactory:
             child_noise = torch.rand(num_children, 5) * 5.0
             base_child = child_weights.expand(num_children, 5).clone() + child_noise
             base_child[:, [Activity.WORSHIP, Activity.WATER, Activity.SOCIAL]] = 0.0
+            base_child = base_child / base_child.sum(dim=1, keepdim=True) * 100.0
             time_use[is_child] = base_child
 
         return time_use / (time_use.sum(dim=1, keepdim=True) + 1e-9)
