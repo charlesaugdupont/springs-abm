@@ -86,7 +86,9 @@ class SteeringParamsSVEIR(BaseModel):
     duration_reduction_on_success: int = 5 # Days illness is shortened
     natural_worsening_prob: float = 0.35 # Prob illness worsens if untreated
     parent_stress_health_impact: float = 0.10 # Health drop for parent if child worsens
+    untreated_severity_penalty: float = 0.20 # how much child illness severity increases if untreated and worsens
     severity_health_impact_factor: float = 0.02 # Daily health reduction per unit of severity
+    daily_health_recovery_rate: float = 0.005 # base daily recovery when not sick
 
     # Income and wealth dynamics
     daily_income_rate: float = 0.02 # Wealth gained per day for a perfectly healthy adult

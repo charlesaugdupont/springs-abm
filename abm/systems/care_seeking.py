@@ -107,9 +107,21 @@ class CareSeekingSystem(System):
         expected_value_wait = (pi_wait_worsen * cpt_val_wait_worsen) + (pi_wait_stable * cpt_val_wait_stable)
 
         # --- Make Decision ---
+
+        # seek care
         if expected_value_seek_care > expected_value_wait:
             self._apply_treatment_outcome(agent_state, parent_idx, child_idx)
-        # Else, do nothing (wait)
+        # wait
+        else:
+            if torch.rand(1).item() < params.natural_worsening_prob:
+                # Parent takes a stress/health hit
+                current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx]
+                new_health = max(0.0, current_health - params.parent_stress_health_impact)
+                agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx] = new_health
+                
+                # Child's severity increases
+                new_severity = min(1.0, child_severity + params.untreated_severity_penalty)
+                agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][child_idx] = new_severity
 
     def _apply_treatment_outcome(self, agent_state: AgentState, parent_idx: int, child_idx: int):
         params = self.config.steering_parameters

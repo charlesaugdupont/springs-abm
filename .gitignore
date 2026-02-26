@@ -212,3 +212,4 @@ grids/
 outputs/
 
 .DS_Store
+*.pdf

@@ -13,12 +13,11 @@ ROTA_MU = 2.6
 ROTA_SIGMA = 0.4
 ROTA_SCALE = 15.0
 
-def _get_age_effect(pathogen_name: str, age_in_months: torch.Tensor, is_child: torch.Tensor) -> torch.Tensor:
+def _get_age_effect(age_in_months: torch.Tensor, is_child: torch.Tensor) -> torch.Tensor:
     """
     Calculates a severity multiplier based on age, with pathogen-specific logic.
     Assumes `age_in_months` is a tensor for all agents.
     """
-    device = age_in_months.device
     multiplier = torch.ones_like(age_in_months)
 
     # Only apply age effects to children
@@ -27,30 +26,12 @@ def _get_age_effect(pathogen_name: str, age_in_months: torch.Tensor, is_child: t
 
     child_ages = age_in_months[is_child]
 
-    if pathogen_name == "rota":
-        # Log-normal distribution to model peak risk between 6-24 months.
-        # mu and sigma are chosen to center the peak around 12-15 months.
-        mu = torch.tensor(ROTA_MU, device=device)   # Corresponds to ~13.5 months
-        sigma = torch.tensor(ROTA_SIGMA, device=device)
-        
-        # Calculate the log-normal PDF value
-        pdf_vals = (1 / (child_ages * sigma * torch.sqrt(torch.tensor(2 * torch.pi, device=device)))) * \
-                   torch.exp(-((torch.log(child_ages + 1e-9) - mu)**2) / (2 * sigma**2))
-        
-        # Scale the PDF to create a reasonable multiplier (e.g., peak at ~2.5x)
-        pathogen_multiplier = 1.0 + (pdf_vals * ROTA_SCALE)
-        multiplier[is_child] = pathogen_multiplier
-
-    elif pathogen_name == "campy":
-        # Exponential decay model: highest risk for the youngest, decreasing over time.
-        # Multiplier starts high (e.g., 2.5x at age 0) and decays.
-        max_multiplier = 1.5
-        decay_rate = 0.08
-        pathogen_multiplier = 1.0 + max_multiplier * torch.exp(-decay_rate * child_ages)
-        multiplier[is_child] = pathogen_multiplier
-
-    else:
-        multiplier[is_child] = AGE_SEVERITY_MULTIPLIER
+    # Exponential decay model: highest risk for the youngest, decreasing over time.
+    # Multiplier starts high (e.g., 2.5x at age 0) and decays.
+    max_multiplier = 1.5
+    decay_rate = 0.08
+    pathogen_multiplier = 1.0 + max_multiplier * torch.exp(-decay_rate * child_ages)
+    multiplier[is_child] = pathogen_multiplier
 
     return multiplier
 
@@ -89,7 +70,7 @@ def calculate_illness_severity(
     base = PATHOGEN_BASE_SEVERITY.get(pathogen_name, 0.3)
 
     # 2. Combine modular effect multipliers
-    age_effect = _get_age_effect(pathogen_name, age, is_child)
+    age_effect = _get_age_effect(age, is_child)
     resilience_effect = _get_resilience_effect(wealth)
     immunity_effect = _get_immunity_effect(vaccine_status, num_infections)
 

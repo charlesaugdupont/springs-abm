@@ -44,6 +44,21 @@ class ChildIllnessSystem(System):
             illness_ended = (agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] == 0)
             agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][illness_ended] = 0.0
 
+        is_not_sick = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] <= 0
+        if torch.any(is_not_sick):
+            current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][is_not_sick]
+            wealth = agent_state.ndata[AgentPropertyKeys.WEALTH][is_not_sick]
+            
+            base_recovery = self.config.steering_parameters.daily_health_recovery_rate
+            
+            # Wealth modifier: Wealthier agents recover up to 2x faster 
+            # (wealth ranges from 0 to 1, so multiplier is 1.0 to 2.0)
+            wealth_multiplier = 1.0 + wealth 
+
+            # Calculate new health and clamp it at the maximum value of 1.0
+            new_health = current_health + (base_recovery * wealth_multiplier)
+            agent_state.ndata[AgentPropertyKeys.HEALTH][is_not_sick] = torch.clamp(new_health, max=1.0)
+
     def _find_newly_symptomatic(self, agent_state: AgentState, is_child: torch.Tensor) -> torch.Tensor:
         """Identifies child agents who just became infectious and are not already sick."""
         already_sick = agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY] > 0
