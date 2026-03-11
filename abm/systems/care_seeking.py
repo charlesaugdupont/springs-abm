@@ -136,3 +136,7 @@ class CareSeekingSystem(System):
             current_duration = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][child_idx]
             new_duration = max(0, current_duration - params.duration_reduction_on_success)
             agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][child_idx] = new_duration
+
+            # If the illness is fully resolved, clear severity immediately
+            if new_duration <= 0:
+                agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][child_idx] = 0.0

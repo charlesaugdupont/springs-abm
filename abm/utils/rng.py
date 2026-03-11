@@ -27,7 +27,3 @@ def get_np_rng() -> np.random.Generator:
     if _np_rng is None:
         set_global_seed(GRID_GENERATION_SEED)
     return _np_rng
-
-def get_current_seed() -> int | None:
-    """Return the last seed passed to set_global_seed, or None if unset."""
-    return _current_seed

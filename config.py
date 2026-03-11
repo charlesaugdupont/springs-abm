@@ -60,7 +60,6 @@ class SteeringParamsSVEIR(BaseModel):
     infection_reduction_factor_per_health_unit: float = 0.5
     theta: float = 0.88
     eta: float = 0.88
-    infection_health_shock: float = 0.2
 
     # Water Parameters (Shared Reservoir)
     human_to_water_infection_prob: float = 0.0001

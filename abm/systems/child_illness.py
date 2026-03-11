@@ -47,19 +47,18 @@ class ChildIllnessSystem(System):
             # Count down the illness timer
             agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][is_sick] -= 1
 
-            # When the timer reaches zero, clear severity
-            illness_ended = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] == 0
-            agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][illness_ended] = 0.0
+        # Always enforce consistency: if duration <= 0, severity must be 0
+        illness_ended = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] <= 0
+        agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][illness_ended] = 0.0
 
         # --- 3. Passive health recovery for agents who are not currently sick ---
-        is_not_sick = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] <= 0
+        is_not_sick = illness_ended
         if torch.any(is_not_sick):
             current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][is_not_sick]
             wealth = agent_state.ndata[AgentPropertyKeys.WEALTH][is_not_sick]
 
             base_recovery = self.config.steering_parameters.daily_health_recovery_rate
-            # Wealthier agents recover up to 2× faster (wealth ∈ [0, 1] → multiplier ∈ [1, 2])
-            wealth_multiplier = 1.0 + wealth
+            wealth_multiplier = 1.0 + wealth  # up to 2× faster
 
             new_health = current_health + (base_recovery * wealth_multiplier)
             agent_state.ndata[AgentPropertyKeys.HEALTH][is_not_sick] = torch.clamp(
