@@ -352,26 +352,6 @@ def child_metrics(model: SVEIRModel) -> dict:
     age_months = g.ndata[AgentPropertyKeys.AGE].cpu().numpy()
     under5 = is_child & (age_months < 60.0)
 
-    status_rota = g.ndata[AgentPropertyKeys.status("rota")].cpu().numpy()
-    status_campy = g.ndata[AgentPropertyKeys.status("campy")].cpu().numpy()
-
-    ever_infectious_rota = np.any(status_rota[is_child] == Compartment.INFECTIOUS)
-    ever_infectious_campy = np.any(status_campy[is_child] == Compartment.INFECTIOUS)
-
-    st.markdown(
-        f"**DEBUG:** any children infectious at final step? "
-        f"Rota={ever_infectious_rota}, Campy={ever_infectious_campy}"
-    )
-
-    # Final snapshot of severity/duration
-    sev_final = g.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY].cpu().numpy()
-    dur_final = g.ndata[AgentPropertyKeys.ILLNESS_DURATION].cpu().numpy()
-    st.markdown(
-        f"**DEBUG:** final snapshot - max severity={sev_final.max():.4f}, "
-        f"max illness_duration={dur_final.max()}"
-    )
-
-
     n_children_total = is_child.sum()
     n_u5 = under5.sum()
 

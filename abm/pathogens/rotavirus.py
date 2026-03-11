@@ -124,10 +124,12 @@ class Rotavirus(Pathogen):
             return
 
         water_idx = grid.property_to_index.get(GridLayer.WATER)
-        if water_idx is None: return
+        if water_idx is None:
+            return
 
         water_slice = grid.grid_tensor[:, :, water_idx]
-        if torch.all(water_slice != WaterStatus.CONTAMINATED): return
+        if torch.all(water_slice != WaterStatus.CONTAMINATED):
+            return
 
         current_x = agent_state.ndata[AgentPropertyKeys.X].long()
         current_y = agent_state.ndata[AgentPropertyKeys.Y].long()
@@ -139,15 +141,36 @@ class Rotavirus(Pathogen):
             return
 
         status_key = AgentPropertyKeys.status(self.name)
-        target_mask = (agent_state.ndata[status_key] != Compartment.INFECTIOUS) & \
-                      (agent_state.ndata[status_key] != Compartment.EXPOSED) & \
-                      at_contaminated_water_mask
+        status = agent_state.ndata[status_key]
 
+        # Keep current behavior: recovered agents can be re-infected.
+        susceptible_like = (status == Compartment.SUSCEPTIBLE) | (status == Compartment.RECOVERED)
+        susceptible_mask = susceptible_like & at_contaminated_water_mask
+        vaccinated_mask = (status == Compartment.VACCINATED) & at_contaminated_water_mask
+
+        if not torch.any(susceptible_mask) and not torch.any(vaccinated_mask):
+            return
+
+        # Everyone experiences one "contact" with contaminated water
         pressure = torch.ones(agent_state.num_nodes(), device=self.device)
-        
-        self._apply_new_infections(
-            agent_state, 
-            target_nodes_mask=target_mask, 
-            base_prob=self.global_params.water_to_human_infection_prob, 
-            forced_pressure=pressure
-        )
+        base_prob = self.global_params.water_to_human_infection_prob
+
+        # Unvaccinated (S + R): full base probability
+        if torch.any(susceptible_mask):
+            self._apply_new_infections(
+                agent_state,
+                target_nodes_mask=susceptible_mask,
+                base_prob=base_prob,
+                forced_pressure=pressure,
+            )
+
+        # Vaccinated: reduced probability via (1 - vaccine_efficacy)
+        if torch.any(vaccinated_mask):
+            breakthrough_multiplier = 1.0 - self.config.vaccine_efficacy
+            self._apply_new_infections(
+                agent_state,
+                target_nodes_mask=vaccinated_mask,
+                base_prob=base_prob,
+                forced_pressure=pressure,
+                prob_multiplier=breakthrough_multiplier,
+            )

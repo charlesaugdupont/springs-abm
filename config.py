@@ -73,7 +73,7 @@ class SteeringParamsSVEIR(BaseModel):
     data_collection_list: list[int] | None = None
 
     # Immunity
-    prior_infection_immunity_factor: float = 1.5
+    prior_infection_immunity_factor: float = 0.5
 
     # Spatial / social parameters
     social_interaction_radius: float = 5.0

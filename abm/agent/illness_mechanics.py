@@ -13,8 +13,8 @@ AGE_DECAY_RATE: float = 0.08
 WEALTH_RESILIENCE_FACTOR = 0.5
 
 # Immunity reductions: applied multiplicatively to base severity
-IMMUNITY_FACTOR_VACCINE = 0.3
-IMMUNITY_FACTOR_PER_INFECTION = 0.15
+IMMUNITY_FACTOR_VACCINE = 0.4
+IMMUNITY_FACTOR_PER_INFECTION = 0.20
 
 
 def _get_age_effect(age_in_months: torch.Tensor, is_child: torch.Tensor) -> torch.Tensor:
