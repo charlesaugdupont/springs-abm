@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 class PathogenConfig(BaseModel):
     """Base class for pathogen-specific parameters."""
     name: str
-    initial_infected_proportion: float = 0.03
+    initial_exposed_proportion: float = 0.03
     recovery_rate: float
     exposure_period: int
 

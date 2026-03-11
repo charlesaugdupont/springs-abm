@@ -52,7 +52,7 @@ def build_config_from_ui():
     ste = cfg.steering_parameters
 
     # --- Basic run settings ---
-    st.sidebar.markdown("### Run settings")
+    st.sidebar.markdown("# Run Settings")
     cfg.number_agents = st.sidebar.slider(
         "Number of agents",
         min_value=500,
@@ -76,7 +76,7 @@ def build_config_from_ui():
     ste.ndata = None
 
     # --- Demography & global infection modifiers ---
-    st.sidebar.markdown("### Demography & global modifiers")
+    st.sidebar.markdown("# Demography & Global Modifiers")
     cfg.average_household_size = st.sidebar.slider(
         "Average household size",
         min_value=2.0,
@@ -107,12 +107,12 @@ def build_config_from_ui():
     )
 
     # --- Rotavirus parameters ---
-    st.sidebar.markdown("### Rotavirus parameters")
+    st.sidebar.markdown("# Rotavirus")
     rota_init_inf = st.sidebar.slider(
-        "Rota initial infected proportion",
+        "Rota initial exposed proportion",
         min_value=0.0,
         max_value=0.2,
-        value=float(cfg.pathogens[0].initial_infected_proportion),
+        value=float(cfg.pathogens[0].initial_exposed_proportion),
         step=0.005,
     )
     rota_inf_mean = st.sidebar.slider(
@@ -159,12 +159,12 @@ def build_config_from_ui():
     )
 
     # --- Campylobacter parameters ---
-    st.sidebar.markdown("### Campylobacter parameters")
+    st.sidebar.markdown("# Campylobacter")
     campy_init_inf = st.sidebar.slider(
-        "Campy initial infected proportion",
+        "Campy initial exposed proportion",
         min_value=0.0,
         max_value=0.2,
-        value=float(cfg.pathogens[1].initial_infected_proportion),
+        value=float(cfg.pathogens[1].initial_exposed_proportion),
         step=0.005,
     )
     campy_rec = st.sidebar.slider(
@@ -190,7 +190,7 @@ def build_config_from_ui():
     )
 
     # --- Water & environment parameters ---
-    st.sidebar.markdown("### Water & environment")
+    st.sidebar.markdown("# Water & Environment")
     ste.human_to_water_infection_prob = st.sidebar.slider(
         "Human → water infection prob",
         min_value=0.0,
@@ -221,7 +221,7 @@ def build_config_from_ui():
     )
 
     # --- Care seeking parameters ---
-    st.sidebar.markdown("### Care-seeking behavior")
+    st.sidebar.markdown("# Care-Seeking")
     ste.cost_of_care = st.sidebar.slider(
         "Cost of care (fraction of max wealth)",
         min_value=0.0,
@@ -245,7 +245,7 @@ def build_config_from_ui():
     )
 
     # --- Economics parameters ---
-    st.sidebar.markdown("### Economic feedback")
+    st.sidebar.markdown("# Economic Feedback")
     ste.health_based_income = st.sidebar.checkbox(
         "Health-based income",
         value=bool(ste.health_based_income),
@@ -266,7 +266,7 @@ def build_config_from_ui():
     )
 
     # --- Child illness history collection (in-memory, not Zarr) ---
-    st.sidebar.markdown("### Data collection (history)")
+    st.sidebar.markdown("# Data Collection")
     collect_history = st.sidebar.checkbox(
         "Collect full child illness history in memory (slower)",
         value=False,
@@ -277,7 +277,7 @@ def build_config_from_ui():
     # Write back pathogen-specific params
     for p in cfg.pathogens:
         if p.name == "rota":
-            p.initial_infected_proportion = rota_init_inf
+            p.initial_exposed_proportion = rota_init_inf
             p.infection_prob_mean = rota_inf_mean
             p.infection_prob_std = rota_inf_std
             p.recovery_rate = rota_rec
@@ -285,7 +285,7 @@ def build_config_from_ui():
             p.vaccination_rate = rota_vacc_rate
             p.vaccine_efficacy = rota_vacc_eff
         elif p.name == "campy":
-            p.initial_infected_proportion = campy_init_inf
+            p.initial_exposed_proportion = campy_init_inf
             p.recovery_rate = campy_rec
             p.exposure_period = campy_exp
             p.human_animal_interaction_rate = campy_interaction
@@ -623,10 +623,6 @@ if run_button:
     metrics = child_metrics(model)
 
     st.subheader("Children under 5 – summary metrics")
-    ccol1, ccol2 = st.columns(2)
-    ccol1.metric("Total children", f"{metrics['n_children_total']}")
-    ccol2.metric("Children under 5", f"{metrics['n_u5']}")
-
     rota_ever = metrics.get("rota_ever_infected_u5", 0)
     campy_ever = metrics.get("campy_ever_infected_u5", 0)
     if metrics["n_u5"] > 0:

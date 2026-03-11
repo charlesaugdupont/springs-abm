@@ -59,7 +59,7 @@ class AgentFactory:
         # --- Disease States (Initialized for all pathogens in config) ---
         for pathogen_conf in self.config.pathogens:
             p_name = pathogen_conf.name
-            p_prop = pathogen_conf.initial_infected_proportion
+            p_prop = pathogen_conf.initial_exposed_proportion
             agent_properties[AgentPropertyKeys.status(p_name)] = self._initialize_compartment(num_agents, p_prop)
             agent_properties[AgentPropertyKeys.exposure_time(p_name)] = torch.zeros(num_agents, dtype=torch.int)
             agent_properties[AgentPropertyKeys.num_infections(p_name)] = torch.zeros(num_agents, dtype=torch.int)
