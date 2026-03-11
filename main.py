@@ -14,10 +14,12 @@ from abm.simulation_analysis.plots import (
 from abm.simulation_analysis.experiment_config import get_full_results_path, get_sim_runs_path
 from abm.model.initialize_model import SVEIRModel
 from abm.environment.grid_generator import create_and_save_realistic_grid
+from abm.utils.rng import set_global_seed, GRID_GENERATION_SEED
 from config import SVEIRCONFIG
 
 def run_single_simulation(config, experiment_name: str) -> dict:
     """Runs one simulation instance and returns key results."""
+    set_global_seed(config.seed)
     run_name = f"sim_run_{config.seed}"
     sim_runs_path = get_sim_runs_path(experiment_name)
 
@@ -80,6 +82,7 @@ def main():
 
     # --- STAGE 1: CREATE GRID ---
     if args.stage == 'create-grid':
+        set_global_seed(GRID_GENERATION_SEED)
         create_and_save_realistic_grid()
 
     # --- STAGE 2: RUN SIMULATION ---
@@ -103,6 +106,8 @@ def main():
         print(f" Parameters:       {config.number_agents} agents, {config.step_target} steps.\n")
 
         config.spatial_creation_args.grid_id = args.grid_id
+
+        set_global_seed(config.seed)
         
         # Run the simulation
         result = run_single_simulation(config, experiment_name)

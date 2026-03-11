@@ -101,7 +101,7 @@ class SVEIRConfig(BaseModel):
     model_identifier: str = "sveir_model"
     description: str = "Configuration for the SVEIR agent-based model."
     device: str = "cpu"
-    seed: int = 42
+    seed: int = 23
     number_agents: PositiveInt = 5000
     spatial: bool = True
     spatial_creation_args: GridCreationParams = GridCreationParams()    

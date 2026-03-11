@@ -17,6 +17,7 @@ from abm.environment.grid_generator import (
     OSM_POI_TAGS,
     PROCEDURAL_POI_COUNTS,
 )
+from abm.utils.rng import set_global_seed, GRID_GENERATION_SEED
 
 # --------------------------------------------------------------------------------------
 # Helper functions
@@ -37,7 +38,7 @@ def ensure_grid_exists() -> str:
     grid_file = os.path.join(grid_dir, "grid.npz")
 
     if not os.path.exists(grid_file):
-        # First-time creation can take a bit (OSM download)
+        set_global_seed(GRID_GENERATION_SEED)
         create_and_save_realistic_grid()
     return grid_id
 
@@ -66,7 +67,7 @@ def build_config_from_ui():
         value=150,
         step=10,
     )
-    cfg.seed = int(st.sidebar.number_input("Random seed", min_value=0, value=42, step=1))
+    cfg.seed = int(st.sidebar.number_input("Random seed", min_value=0, value=cfg.seed, step=1))
     cfg.device = "cpu"   # safer & simpler for Streamlit
     cfg.spatial = True   # use the spatial grid
 
@@ -296,13 +297,14 @@ def build_config_from_ui():
     return cfg, collect_history
 
 
-def run_simulation(config: SVEIRCONFIG, collect_history: bool):
+def run_simulation(config, collect_history: bool):
     """
     Run a single SVEIRModel simulation with the given config and return:
     - model
     - incidence / prevalence time series
     - history (or None): dict with per-step severity and duration if collect_history=True
     """
+    set_global_seed(config.seed)
     root_path = "streamlit_outputs"
     Path(root_path).mkdir(parents=True, exist_ok=True)
 
