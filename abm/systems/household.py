@@ -4,6 +4,7 @@ import torch
 from .system import System
 from abm.state import AgentState
 from abm.constants import AgentPropertyKeys, Activity, WaterStatus, Compartment, GridLayer
+from abm.pathogens.rotavirus import Rotavirus
 
 class HouseholdSystem(System):
     """
@@ -23,6 +24,7 @@ class HouseholdSystem(System):
         grid = kwargs.get("grid")
         if grid is None:
             return
+        pathogens = kwargs.get("pathogens", None)
 
         pathogen_name = "rota"
         status_key = AgentPropertyKeys.status(pathogen_name)
@@ -80,8 +82,15 @@ class HouseholdSystem(System):
             target_for_infection_mask.nonzero(as_tuple=True)[0][newly_infected_mask]
         )
 
-        if len(infected_agent_indices) > 0:
+        num_new = len(infected_agent_indices)
+        if num_new > 0:
             agent_state.ndata[status_key][infected_agent_indices] = Compartment.EXPOSED
             agent_state.ndata[AgentPropertyKeys.exposure_time(pathogen_name)][infected_agent_indices] = 0
             # Increment infection count at exposure, consistent with the incidence counter.
             agent_state.ndata[AgentPropertyKeys.num_infections(pathogen_name)][infected_agent_indices] += 1
+            # Also record these infections in the Rotavirus incidence counter, if provided.
+            if pathogens is not None:
+                for p in pathogens:
+                    if isinstance(p, Rotavirus):
+                        p.new_cases_this_step += num_new
+                        break

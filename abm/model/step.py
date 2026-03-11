@@ -68,7 +68,7 @@ def sveir_step(
     # Order must match self.systems in initialize_model.py
     systems[1].update(agent_state) # ChildIllnessSystem
     systems[2].update(agent_state) # CareSeekingSystem
-    systems[3].update(agent_state, grid=grid) # HouseholdSystem
+    systems[3].update(agent_state, grid=grid, pathogens=pathogens) # HouseholdSystem
     systems[4].update(agent_state, grid=grid, timestep=timestep) # EnvironmentSystem
     systems[5].update(agent_state) # EconomicSystem
 

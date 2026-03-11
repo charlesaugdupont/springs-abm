@@ -97,7 +97,7 @@ class AgentFactory:
         tensor = torch.zeros(num_agents, dtype=torch.int)
         if num_infected > 0:
             indices = torch.randperm(num_agents)[:num_infected]
-            tensor[indices] = Compartment.INFECTIOUS
+            tensor[indices] = Compartment.EXPOSED
         return tensor
 
     def _initialize_time_use(self, num_agents: int, is_child: torch.Tensor) -> torch.Tensor:
@@ -107,17 +107,20 @@ class AgentFactory:
 
         if num_adults > 0:
             adult_weights = torch.tensor([30.0, 0.0, 20.0, 20.0, 30.0])
+            base_adult = adult_weights.expand(num_adults, 5).clone()
             adult_noise = torch.rand(num_adults, 5) * 10.0
-            base_adult = adult_weights.expand(num_adults, 5).clone() + adult_noise
-            base_adult[:, Activity.SCHOOL] = 0.0
+            adult_noise[:, Activity.SCHOOL] = 0.0
+            base_adult += adult_noise
             base_adult = base_adult / base_adult.sum(dim=1, keepdim=True) * 100.0
             time_use[~is_child] = base_adult
 
         if num_children > 0:
             child_weights = torch.tensor([70.0, 30.0, 0.0, 0.0, 0.0])
+            base_child = child_weights.expand(num_children, 5).clone()
             child_noise = torch.rand(num_children, 5) * 5.0
-            base_child = child_weights.expand(num_children, 5).clone() + child_noise
-            base_child[:, [Activity.WORSHIP, Activity.WATER, Activity.SOCIAL]] = 0.0
+            # Only HOME and SCHOOL get noise; others stay at 0
+            child_noise[:, [Activity.WORSHIP, Activity.WATER, Activity.SOCIAL]] = 0.0
+            base_child += child_noise
             base_child = base_child / base_child.sum(dim=1, keepdim=True) * 100.0
             time_use[is_child] = base_child
 
