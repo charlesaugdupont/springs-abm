@@ -3,14 +3,13 @@ import os
 import numpy as np
 import osmnx as ox
 from shapely.geometry import Polygon, box
-import random
 import json
 import hashlib
 
 from abm.constants import GridLayer
+from abm.utils.rng import set_global_seed, get_np_rng
 
-# These default parameters could be moved to a configuration file
-# for greater flexibility in future studies.
+# Parameters as before
 AKUSE_CENTER_POINT = (6.0993, 0.12821)
 AKUSE_BOUNDARY_COORDS = [
     (0.12162, 6.10505), (0.13480, 6.10505),
@@ -21,12 +20,14 @@ POI_FETCH_RADIUS = 1500
 OSM_POI_TAGS = {"amenity": [GridLayer.SCHOOL, GridLayer.WORSHIP]}
 PROCEDURAL_POI_COUNTS = {GridLayer.SCHOOL: 5, GridLayer.WORSHIP: 5, GridLayer.WATER: 20}
 
+
 def get_grid_id(boundary_coords, grid_size, osm_tags, procedural_counts) -> str:
     """Creates a unique, deterministic hash from all grid generation parameters."""
     params = {
-        "boundary_coords": boundary_coords, "grid_size": grid_size,
-        "osm_poi_tags": osm_tags, "procedural_poi_counts": procedural_counts,
-        "animal_layer_version": "v1.1" # Versioning the logic itself
+        "boundary_coords": boundary_coords,
+        "grid_size": grid_size,
+        "osm_poi_tags": osm_tags,
+        "procedural_poi_counts": procedural_counts
     }
     params_string = json.dumps(params, sort_keys=True)
     return hashlib.sha256(params_string.encode('utf-8')).hexdigest()[:12]
@@ -70,13 +71,14 @@ def _place_osm_pois(tags, boundary_info):
 
 def _place_procedural_pois(counts, valid_cells_mask, occupied_mask):
     """Places randomly located procedural POIs onto grid layers."""
+    rng = get_np_rng()
     procedural_layers = {}
     current_occupied = occupied_mask.copy()
     for amenity, num in counts.items():
         procedural_layers[amenity] = np.zeros((GRID_SIZE, GRID_SIZE), dtype=np.uint8)
         available_cells = np.argwhere(valid_cells_mask & ~current_occupied)
-        if len(available_cells) >= num:
-            selected_indices = random.sample(range(len(available_cells)), num)
+        if len(available_cells) >= num > 0:
+            selected_indices = rng.choice(len(available_cells), size=num, replace=False)
             cells = available_cells[selected_indices]
             procedural_layers[amenity][cells[:, 0], cells[:, 1]] = 1
             current_occupied[cells[:, 0], cells[:, 1]] = True
@@ -84,23 +86,39 @@ def _place_procedural_pois(counts, valid_cells_mask, occupied_mask):
 
 def _place_animal_density(valid_cells):
     """Generates a spatial layer representing poultry/livestock density."""
+    rng = get_np_rng()
+
     density = np.zeros((GRID_SIZE, GRID_SIZE), dtype=np.float32)
-    noise = np.random.uniform(0.0, 0.1, size=(GRID_SIZE, GRID_SIZE))
+
+    # Background noise
+    noise = rng.uniform(0.0, 0.1, size=(GRID_SIZE, GRID_SIZE))
     density += noise
-    for _ in range(15): # Number of clusters
-        cx, cy = np.random.randint(0, GRID_SIZE, 2)
+
+    # Clusters
+    num_clusters = 15
+    for _ in range(num_clusters):
+        cx, cy = rng.integers(0, GRID_SIZE, size=2)
         y, x = np.ogrid[-cx:GRID_SIZE-cx, -cy:GRID_SIZE-cy]
         dist_sq = x**2 + y**2
         radius = 8
         mask = dist_sq <= radius**2
-        cluster_vals = np.exp(-0.5 * dist_sq[mask] / (radius/2)**2)
-        density[mask] += cluster_vals * np.random.uniform(0.4, 0.9)
+        if not np.any(mask):
+            continue
+        cluster_vals = np.exp(-0.5 * dist_sq[mask] / (radius / 2) ** 2)
+        scale = rng.uniform(0.4, 0.9)
+        density[mask] += cluster_vals * scale
+
     return np.clip(density * valid_cells, 0.0, 1.0)
 
 def create_and_save_realistic_grid():
     """Generates and saves a realistic base grid for the model."""
     grid_id = get_grid_id(AKUSE_BOUNDARY_COORDS, GRID_SIZE, OSM_POI_TAGS, PROCEDURAL_POI_COUNTS)
     print(f"1. Generating grid with ID: {grid_id}")
+
+    # Derive a deterministic seed from the grid_id and set the global RNG
+    seed_int = int(grid_id[:8], 16)
+    set_global_seed(seed_int)
+
     valid_cells, boundary_info = _initialize_grid_and_boundary()
     osm_layers, osm_occupied = _place_osm_pois(OSM_POI_TAGS, boundary_info)
     proc_layers = _place_procedural_pois(PROCEDURAL_POI_COUNTS, valid_cells, osm_occupied)
@@ -108,12 +126,12 @@ def create_and_save_realistic_grid():
     print("2. Combining all layers...")
     final_layers, property_map = [], {}
     all_poi_types = set(osm_layers.keys()) | set(proc_layers.keys())
-    
+
     # Layer 0: Residences
     final_layers.append(valid_cells.astype(np.uint8))
     property_map[0] = GridLayer.RESIDENCES
-    
-    # Subsequent layers: POIs
+
+    # POIs
     poi_layers_stack = []
     for amenity in sorted(list(all_poi_types)):
         combined = ((osm_layers.get(amenity, 0) + proc_layers.get(amenity, 0)) > 0).astype(np.uint8)
@@ -122,14 +140,14 @@ def create_and_save_realistic_grid():
         property_map[layer_index] = amenity
         poi_layers_stack.append(combined)
 
-    # Final data layer: Animal density
+    # Animal density
     animal_density = _place_animal_density(valid_cells)
     final_layers.append(animal_density)
     property_map[len(final_layers) - 1] = GridLayer.ANIMAL_DENSITY
-    
+
     final_grid = np.stack(final_layers, axis=-1)
 
-    # Ensure residences are not placed directly on top of POIs
+    # Ensure residences not on top of POIs
     if poi_layers_stack:
         all_poi_mask = np.sum(np.stack(poi_layers_stack, axis=-1), axis=2) > 0
         final_grid[:, :, 0][all_poi_mask] = 0
