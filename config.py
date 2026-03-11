@@ -69,13 +69,14 @@ class SteeringParamsSVEIR(BaseModel):
     shock_daily_prob: float = 1/30
     shock_infection_prob: float = 1.0
 
-    # Other simulation parameters
-    truncation_weight: float = 1.0e-10
-    proximity_decay_rate: float = 0.5
+    # Data collection
     data_collection_period: int = 0
     data_collection_list: list[int] | None = None
-    max_state_value: float = 1.0
+
+    # Immunity
     prior_infection_immunity_factor: float = 1.5
+
+    # Spatial / social parameters
     social_interaction_radius: float = 5.0
 
     # --- Care-Seeking Parameters ---
@@ -97,7 +98,7 @@ class SteeringParamsSVEIR(BaseModel):
 
 class SVEIRConfig(BaseModel):
     """Main configuration class for the SVEIR model."""
-    model_identifier: str = Field("sveir_model", alias='_model_identifier')
+    model_identifier: str = "sveir_model"
     description: str = "Configuration for the SVEIR agent-based model."
     device: str = "cpu"
     seed: int = 42
@@ -122,18 +123,18 @@ class SVEIRConfig(BaseModel):
     steering_parameters: SteeringParamsSVEIR = SteeringParamsSVEIR()
 
     model_config = ConfigDict(
-        validate_default=True, protected_namespaces=(), populate_by_name=True,
-        validate_assignment=True, extra="forbid",
+        validate_default=True,
+        protected_namespaces=(),
+        populate_by_name=True,
+        validate_assignment=True,
+        extra="forbid",
     )
 
     @field_validator('pathogens', mode='before')
     def set_pathogen_types(cls, v):
         if not v:
             return v
-        pathogen_map = {
-            'rota': RotavirusConfig,
-            'campy': CampylobacterConfig
-        }
+        pathogen_map = {'rota': RotavirusConfig, 'campy': CampylobacterConfig}
         return [pathogen_map[p['name']](**p) if isinstance(p, dict) else p for p in v]
 
     @classmethod

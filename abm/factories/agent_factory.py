@@ -30,10 +30,6 @@ class AgentFactory:
         agent_properties[AgentPropertyKeys.GAMMA] = assigned_personas[:, 1]
         agent_properties[AgentPropertyKeys.LAMBDA] = assigned_personas[:, 2]
 
-        # Globally defined behavioral parameters
-        agent_properties[AgentPropertyKeys.ETA] = torch.full((num_agents,), self.config.steering_parameters.eta)
-        agent_properties[AgentPropertyKeys.THETA] = torch.full((num_agents,), self.config.steering_parameters.eta)
-
         # --- Demographics ---
         agent_properties[AgentPropertyKeys.HOUSEHOLD_ID] = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
         is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD].bool()
@@ -48,6 +44,7 @@ class AgentFactory:
         agent_properties[AgentPropertyKeys.AGE] = ages
 
         agent_properties[AgentPropertyKeys.IS_CHILD] = is_child
+
         # Assign IS_PARENT status to the first adult in any household with children
         is_parent = torch.zeros_like(is_child)
         for hh_id in torch.unique(agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]):

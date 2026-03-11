@@ -16,7 +16,18 @@ class Activity(IntEnum):
     SOCIAL = 4
 
 class WaterStatus(IntEnum):
-    """Represents the contamination status of a water source in the grid."""
+    """
+    Represents the contamination status of a water source cell.
+
+    Grid cells use the following encoding:
+      0 = no water source present (empty cell)
+      1 = water source present, clean      (WaterStatus.CLEAN)
+      2 = water source present, contaminated (WaterStatus.CONTAMINATED)
+
+    The grid generator marks water-source cells with 1 on creation, which
+    intentionally matches WaterStatus.CLEAN so that the two systems share
+    a single encoding rather than relying on a coincidental value match.
+    """
     CLEAN = 1
     CONTAMINATED = 2
 

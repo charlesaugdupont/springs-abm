@@ -1,7 +1,6 @@
 # abm/pathogens/campylobacter.py
 from typing import Any
 import torch
-import numpy as np
 from scipy.special import hyp1f1
 
 from .pathogen import Pathogen
@@ -14,11 +13,15 @@ class Campylobacter(Pathogen):
 
     def __init__(self, config: CampylobacterConfig, global_params: SteeringParamsSVEIR, device: torch.device):
         super().__init__(config, global_params, device)
-        # Ensure config is of the correct type for type hinting
         self.config: CampylobacterConfig = config
+        self._newly_exposed_this_day: torch.Tensor | None = None
 
     def step_progression(self, agent_state: AgentState):
         """Internal progression (Once per day)."""
+        # Reset the within-day exposure tracker at the start of each new day
+        self._newly_exposed_this_day = torch.zeros(
+            agent_state.num_nodes(), dtype=torch.bool, device=self.device
+        )
         self._increment_exposure_time(agent_state)
         self._exposed_to_infectious(agent_state)
         self._infectious_to_recovered(agent_state)
@@ -33,54 +36,59 @@ class Campylobacter(Pathogen):
 
     def _animal_to_human_transmission(self, agent_state: AgentState, grid: Any):
         """
-        Handles Exact Beta-Poisson infection from the animal density layer.
-        P(inf) = 1 - 1F1(alpha, alpha + beta, -dose)
+        Exact Beta-Poisson dose-response infection from the animal density layer.
+        P(inf) = 1 − 1F1(alpha, alpha + beta, −dose)
+
+        Agents that were already newly exposed earlier in the same day are
+        excluded so that incidence is not double-counted across the two
+        transmission phases.
         """
-        if grid is None:
+        if grid is None or self._newly_exposed_this_day is None:
             return
-        
+
         animal_idx = grid.property_to_index.get(GridLayer.ANIMAL_DENSITY)
         if animal_idx is None:
             return
 
-        # Get agent locations, ensuring they are within grid bounds
         grid_shape = grid.grid_shape
         x = agent_state.ndata[AgentPropertyKeys.X].long().clamp(0, grid_shape[1] - 1)
         y = agent_state.ndata[AgentPropertyKeys.Y].long().clamp(0, grid_shape[0] - 1)
 
-        # Calculate dose from local animal density
         local_density = grid.grid_tensor[y, x, animal_idx]
         dose = local_density * self.config.human_animal_interaction_rate
 
-        # 2. Identify susceptible agents
         status_key = AgentPropertyKeys.status(self.name)
-        susceptible_mask = agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE
+        count_key = AgentPropertyKeys.num_infections(self.name)
+
+        # Exclude agents already exposed today so we don't double-count them.
+        susceptible_mask = (
+            (agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE)
+            & ~self._newly_exposed_this_day
+        )
 
         if not torch.any(susceptible_mask):
             return
 
-        # 3. Calculate Exact Beta-Poisson Probability
-        # We perform this in numpy/scipy as 1F1 is not native to PyTorch
+        # --- Exact Beta-Poisson probability (via scipy) ---
         alpha = self.config.beta_poisson_alpha
         beta = self.config.beta_poisson_beta
-        
-        # Extract doses for susceptible agents only
-        target_doses = dose[susceptible_mask].cpu().numpy()
-        
-        # P(inf) = 1 - 1F1(alpha, alpha + beta, -dose)
-        # Note: hyp1f1(a, b, x) is the Kummer function
-        prob_inf_np = 1.0 - hyp1f1(alpha, alpha + beta, -target_doses)
-        
-        # Convert back to torch
-        prob_infection = torch.zeros(agent_state.num_nodes(), device=self.device)
-        prob_infection[susceptible_mask] = torch.from_numpy(prob_inf_np).to(self.device).float()
 
-        # 4. Apply Acquired Immunity (if applicable)
-        num_prior_infections = agent_state.ndata[AgentPropertyKeys.num_infections(self.name)][susceptible_mask].float()
-        immunity_factor = torch.exp(-self.global_params.prior_infection_immunity_factor * num_prior_infections)
+        target_doses = dose[susceptible_mask].cpu().numpy()
+        prob_inf_np = 1.0 - hyp1f1(alpha, alpha + beta, -target_doses)
+
+        prob_infection = torch.zeros(agent_state.num_nodes(), device=self.device)
+        prob_infection[susceptible_mask] = (
+            torch.from_numpy(prob_inf_np).to(self.device).float()
+        )
+
+        # --- Acquired immunity ---
+        num_prior = agent_state.ndata[count_key][susceptible_mask].float()
+        immunity_factor = torch.exp(
+            -self.global_params.prior_infection_immunity_factor * num_prior
+        )
         prob_infection[susceptible_mask] *= immunity_factor
 
-        # 5. Stochastic infection event
+        # --- Stochastic infection event ---
         rand_vals = torch.rand(agent_state.num_nodes(), device=self.device)
         new_infections = (rand_vals < prob_infection) & susceptible_mask
 
@@ -88,4 +96,8 @@ class Campylobacter(Pathogen):
         if num_new > 0:
             agent_state.ndata[status_key][new_infections] = Compartment.EXPOSED
             agent_state.ndata[AgentPropertyKeys.exposure_time(self.name)][new_infections] = 0
+            # Increment infection count at exposure (consistent with incidence counter).
+            agent_state.ndata[count_key][new_infections] += 1
             self.new_cases_this_step += num_new
+            # Mark these agents so the second transmission phase skips them.
+            self._newly_exposed_this_day[new_infections] = True
