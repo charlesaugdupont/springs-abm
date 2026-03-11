@@ -93,10 +93,10 @@ class AgentFactory:
             agent_state.ndata[key] = value.to(self.config.device)
 
     def _initialize_compartment(self, num_agents: int, proportion: float) -> torch.Tensor:
-        num_infected = round(num_agents * proportion)
+        num_exposed = round(num_agents * proportion)
         tensor = torch.zeros(num_agents, dtype=torch.int)
-        if num_infected > 0:
-            indices = torch.randperm(num_agents)[:num_infected]
+        if num_exposed > 0:
+            indices = torch.randperm(num_agents)[:num_exposed]
             tensor[indices] = Compartment.EXPOSED
         return tensor
 
