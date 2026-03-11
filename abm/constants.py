@@ -58,8 +58,6 @@ class AgentPropertyKeys:
     ALPHA = "alpha"
     GAMMA = "gamma"
     LAMBDA = "lambda"
-    ETA = "eta"
-    THETA = "theta"
 
     # Location & Activity
     X = "x"
