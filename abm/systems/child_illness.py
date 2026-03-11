@@ -1,4 +1,5 @@
 # abm/systems/child_illness.py
+
 import torch
 
 from .system import System
@@ -18,80 +19,89 @@ class ChildIllnessSystem(System):
         """
         is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
 
-        # --- 1. Initialise illness for children who just became infectious ---
-        # Guard on ILLNESS_DURATION > 0 (not SYMPTOM_SEVERITY > 0) so that
-        # children whose computed severity is 0.0 are not re-initialised every
-        # step they remain infectious.
-        newly_symptomatic_children = self._find_newly_symptomatic(agent_state, is_child)
+        # ------------------------------------------------------------------
+        # 1. Initialise illness for children who just became infectious
+        # ------------------------------------------------------------------
+        # "Already sick" means they currently have an active episode
+        already_sick = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] > 0
 
-        for pathogen_config in self.config.pathogens:
-            pathogen_name = pathogen_config.name
-            pathogen_status_key = AgentPropertyKeys.status(pathogen_name)
+        # Any infectious status across pathogens
+        is_infectious_any = torch.zeros_like(is_child)
+        for p_config in self.config.pathogens:
+            status_key = AgentPropertyKeys.status(p_config.name)
+            is_infectious_any |= (
+                agent_state.ndata[status_key] == Compartment.INFECTIOUS
+            )
+
+        newly_symptomatic_children = (
+            is_child & is_infectious_any & ~already_sick
+        )
+
+        # For each pathogen, initialise illness for the subset of newly
+        # symptomatic children who are infectious with that pathogen.
+        for p_config in self.config.pathogens:
+            pathogen_name = p_config.name
+            status_key = AgentPropertyKeys.status(pathogen_name)
             p_mask = (
-                (agent_state.ndata[pathogen_status_key] == Compartment.INFECTIOUS)
-                & newly_symptomatic_children
+                newly_symptomatic_children
+                & (agent_state.ndata[status_key] == Compartment.INFECTIOUS)
             )
             if torch.any(p_mask):
                 self._initialize_illness(agent_state, p_mask, pathogen_name)
 
-        # --- 2. Progress existing illnesses and apply daily health impact ---
-        is_sick = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] > 0
+        # ------------------------------------------------------------------
+        # 2. Progress existing illnesses and apply daily health impact
+        # ------------------------------------------------------------------
+        duration = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION]
+        is_sick = duration > 0
+
         if torch.any(is_sick):
             severity = agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][is_sick]
-            health_shock = severity * self.config.steering_parameters.severity_health_impact_factor
+            health_shock = (
+                severity
+                * self.config.steering_parameters.severity_health_impact_factor
+            )
             current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][is_sick]
             agent_state.ndata[AgentPropertyKeys.HEALTH][is_sick] = torch.clamp(
                 current_health - health_shock, min=0.0
             )
 
-            # Count down the illness timer
-            agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][is_sick] -= 1
+            # Count down the illness timer (and clamp at 0 to avoid negatives)
+            duration_new = duration.clone()
+            duration_new[is_sick] -= 1
+            duration_new = torch.clamp(duration_new, min=0)
+            agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] = duration_new
 
-        # Always enforce consistency: if duration <= 0, severity must be 0
-        illness_ended = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] <= 0
+        # ------------------------------------------------------------------
+        # 3. Enforce invariant: if duration == 0, severity must be 0
+        # ------------------------------------------------------------------
+        duration = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION]
+        illness_ended = duration == 0
         agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][illness_ended] = 0.0
 
-        # --- 3. Passive health recovery for agents who are not currently sick ---
+        # ------------------------------------------------------------------
+        # 4. Passive health recovery for agents who are not currently sick
+        # ------------------------------------------------------------------
         is_not_sick = illness_ended
         if torch.any(is_not_sick):
             current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][is_not_sick]
             wealth = agent_state.ndata[AgentPropertyKeys.WEALTH][is_not_sick]
 
             base_recovery = self.config.steering_parameters.daily_health_recovery_rate
-            wealth_multiplier = 1.0 + wealth  # up to 2× faster
+            # Wealthier agents recover up to 2× faster (wealth ∈ [0, 1] → multiplier ∈ [1, 2])
+            wealth_multiplier = 1.0 + wealth
 
             new_health = current_health + (base_recovery * wealth_multiplier)
             agent_state.ndata[AgentPropertyKeys.HEALTH][is_not_sick] = torch.clamp(
                 new_health, max=1.0
             )
 
-    def _find_newly_symptomatic(
-        self, agent_state: AgentState, is_child: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Returns a mask of child agents who are currently infectious but do not
-        yet have an active illness episode (ILLNESS_DURATION == 0).
-
-        Using ILLNESS_DURATION as the guard (rather than SYMPTOM_SEVERITY) is
-        correct because severity can legitimately be 0.0 for highly immune
-        children, which would otherwise cause repeated re-initialisation.
-        """
-        already_sick = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] > 0
-
-        is_infectious = torch.zeros_like(is_child)
-        for p_config in self.config.pathogens:
-            is_infectious = is_infectious | (
-                agent_state.ndata[AgentPropertyKeys.status(p_config.name)] == Compartment.INFECTIOUS
-            )
-
-        return is_child & is_infectious & ~already_sick
-
     def _initialize_illness(
         self, agent_state: AgentState, mask: torch.Tensor, pathogen_name: str
     ):
         """
         Calculates and sets the initial severity and duration for newly ill
-        children.  If a child is somehow already sick (duration > 0), the new
+        children. If a child is somehow already sick (duration > 0), the new
         episode only overwrites the existing one when the new severity is higher.
         """
         vaccine_status_tensor = None

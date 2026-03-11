@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
+import torch
 
 from config import SVEIRCONFIG
 from abm.model.initialize_model import SVEIRModel
@@ -301,7 +302,7 @@ def run_simulation(config, collect_history: bool):
     """
     Run a single SVEIRModel simulation with the given config and return:
     - model
-    - incidence / prevalence time series
+    - child_incidence / child_prevalence time series (children only)
     - history (or None): dict with per-step severity and duration if collect_history=True
     """
     set_global_seed(config.seed)
@@ -321,24 +322,55 @@ def run_simulation(config, collect_history: bool):
             "age": model.graph.ndata[AgentPropertyKeys.AGE].cpu().numpy(),
         }
 
-    # Manual loop so we can capture per-step states
+    # --- child-only incidence & prevalence ---
+    g = model.graph
+    is_child_t = g.ndata[AgentPropertyKeys.IS_CHILD].bool()
+
+    # baseline child infection counts per pathogen
+    prev_child_infections = {}
+    for p in model.pathogens:
+        key = AgentPropertyKeys.num_infections(p.name)
+        prev_child_infections[p.name] = g.ndata[key][is_child_t].sum().item()
+
+    child_incidence = []
+    child_prevalence = []
+
     for _ in range(config.step_target):
         model.step()
+
+        # Child-only prevalence: sum of INFECTIOUS children over pathogens
+        child_prev_this_step = 0
+        for p in model.pathogens:
+            status_key = AgentPropertyKeys.status(p.name)
+            status = model.graph.ndata[status_key]
+            child_prev_this_step += (status[is_child_t] == Compartment.INFECTIOUS).sum().item()
+        child_prevalence.append(child_prev_this_step)
+
+        # Child-only incidence: increase in num_infections among children
+        child_inc_this_step = 0
+        for p in model.pathogens:
+            key = AgentPropertyKeys.num_infections(p.name)
+            current = model.graph.ndata[key][is_child_t].sum().item()
+            delta = current - prev_child_infections[p.name]
+            child_inc_this_step += max(0, int(delta))
+            prev_child_infections[p.name] = current
+        child_incidence.append(child_inc_this_step)
+
         if collect_history:
             sev = model.graph.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY].cpu().numpy()
             dur = model.graph.ndata[AgentPropertyKeys.ILLNESS_DURATION].cpu().numpy()
             history["symptom_severity"].append(sev)
             history["illness_duration"].append(dur)
 
-    incidence = np.array(model.infection_incidence)
-    prevalence = np.array(model.prevalence_history)
+    child_incidence = np.array(child_incidence)
+    child_prevalence = np.array(child_prevalence)
 
     if collect_history:
         # Convert lists of (n_agents,) into arrays shape (n_agents, n_time)
         history["symptom_severity"] = np.stack(history["symptom_severity"], axis=1)
         history["illness_duration"] = np.stack(history["illness_duration"], axis=1)
 
-    return model, incidence, prevalence, history
+    return model, child_incidence, child_prevalence, history
 
 
 def child_metrics(model: SVEIRModel) -> dict:
@@ -388,7 +420,7 @@ def plot_epidemic_curves(incidence: np.ndarray, prevalence: np.ndarray):
             "prevalence": prevalence,
         }
     ).set_index("day")
-    st.subheader("Epidemic curves")
+    st.subheader("Epidemic Curves (Children <= 5)")
     st.line_chart(df)
 
 
@@ -421,15 +453,10 @@ def plot_child_histograms(metrics: dict):
 
     rota_inf = metrics["rota_num_infections_u5"]
     campy_inf = metrics["campy_num_infections_u5"]
-    severity = metrics["severity_u5"]
-    duration = metrics["duration_u5"]
 
-    severity_nonzero = severity[severity > 0] if severity.size > 0 else np.array([])
-    duration_nonzero = duration[duration > 0] if duration.size > 0 else np.array([])
+    st.subheader("Children under 5: Infection Distributions")
 
-    st.subheader("Children under 5: infection & illness distributions (final day snapshot)")
-
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.5))
     axes = axes.flatten()
 
     # 1. Rotavirus infections per child (discrete)
@@ -450,35 +477,17 @@ def plot_child_histograms(metrics: dict):
         "Number of children",
     )
 
-    # 3. Final-day symptom severity
-    ax2 = axes[2]
-    if severity_nonzero.size > 0:
-        ax2.hist(severity_nonzero, bins=20, range=(0, 1), edgecolor="black")
-        ax2.set_title("Final-day symptom severity (u5, currently sick)")
-        ax2.set_xlabel("Severity (0–1)")
-        ax2.set_ylabel("Number of children")
-    else:
-        ax2.text(0.5, 0.5, "No sick children at final step", ha="center", va="center")
-        ax2.set_axis_off()
-
-    # 4. Remaining illness duration in days (discrete)
-    _plot_discrete_hist(
-        axes[3],
-        duration_nonzero,
-        "Remaining illness duration (days, final day)",
-        "Days remaining",
-        "Number of children",
-    )
-
     plt.tight_layout()
     st.pyplot(fig)
 
 
 def compute_child_illness_history_from_memory(history: dict):
     """
-    Summarize illness over all timesteps for children under 5.
-    - total_sick_days: days with ILLNESS_DURATION > 0
-    - max_severity: maximum SYMPTOM_SEVERITY over time
+    Summarize illness over all timesteps for children.
+
+    - total_sick_days: days with ILLNESS_DURATION > 0 (per child)
+    - max_severity: maximum SYMPTOM_SEVERITY over time (per child)
+    - episode_durations: list of durations (in days) of individual illness episodes
     """
     if history is None:
         return None
@@ -488,28 +497,48 @@ def compute_child_illness_history_from_memory(history: dict):
     is_child = history["is_child"]
     age = history["age"]
 
+    # In your model, all children are under 5, but we keep the filter explicit.
     under5 = is_child.astype(bool) & (age < 60.0)
     if not under5.any():
         return None
 
-    sev_u5 = sev[under5, :]
-    dur_u5 = dur[under5, :]
+    sev_u5 = sev[under5, :]   # (n_children, T)
+    dur_u5 = dur[under5, :]   # (n_children, T)
 
     # Sick day = any day with illness_duration > 0
     total_sick_days = (dur_u5 > 0).sum(axis=1).astype(int)
 
-    # Max severity across the entire horizon
+    # Max severity across the entire horizon (per child)
     max_severity = sev_u5.max(axis=1)
+
+    # Episode durations (across all children)
+    sick_mask = dur_u5 > 0  # boolean array (n_children, T)
+    episode_durations = []
+
+    for row in sick_mask:
+        ext = np.concatenate([[False], row, [False]]).astype(int)
+        changes = np.diff(ext)
+        starts = np.where(changes == 1)[0]
+        ends = np.where(changes == -1)[0]
+        durations = ends - starts
+        episode_durations.extend(durations.tolist())
+
+    episode_durations = np.array(episode_durations, dtype=int)
 
     return {
         "total_sick_days": total_sick_days,
         "max_severity": max_severity,
+        "episode_durations": episode_durations,
     }
 
 
 def plot_child_illness_history(history_summary: dict):
     """
-    Plot aggregates of illness history across all timesteps for children under 5.
+    Plot aggregates of illness history across all timesteps for children.
+
+    - Total sick days per child (distribution)
+    - Max severity per child (distribution)
+    - Episode durations (distribution over all episodes)
     """
     if history_summary is None:
         st.info(
@@ -520,30 +549,44 @@ def plot_child_illness_history(history_summary: dict):
 
     total_sick_days = history_summary["total_sick_days"]
     max_severity = history_summary["max_severity"]
+    episode_durations = history_summary.get("episode_durations", np.array([]))
 
-    st.subheader("Child illness history (all timesteps, children under 5)")
+    st.subheader("Child illness history over entire simulation (children only)")
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
 
     # 1. Total sick days per child (discrete)
     _plot_discrete_hist(
         axes[0],
         total_sick_days,
-        "Total sick days per child (u5)",
+        "Total sick days per child",
         "Days sick during simulation",
         "Number of children",
     )
 
-    # 2. Max severity
+    # 2. Max severity per child
     max_severity_nonzero = max_severity[max_severity > 0]
     if max_severity_nonzero.size > 0:
         axes[1].hist(max_severity_nonzero, bins=20, range=(0, 1), edgecolor="black")
-        axes[1].set_title("Maximum symptom severity per child (u5)")
+        axes[1].set_title("Maximum symptom severity per child")
         axes[1].set_xlabel("Severity (0–1)")
         axes[1].set_ylabel("Number of children")
     else:
         axes[1].text(0.5, 0.5, "No symptomatic episodes recorded", ha="center", va="center")
         axes[1].set_axis_off()
+
+    # 3. Episode durations (all episodes, discrete)
+    if episode_durations.size > 0:
+        _plot_discrete_hist(
+            axes[2],
+            episode_durations,
+            "Illness episode durations",
+            "Duration (days)",
+            "Number of episodes",
+        )
+    else:
+        axes[2].text(0.5, 0.5, "No illness episodes recorded", ha="center", va="center")
+        axes[2].set_axis_off()
 
     plt.tight_layout()
     st.pyplot(fig)
@@ -590,14 +633,29 @@ if run_button:
     # Epidemic curves
     plot_epidemic_curves(incidence, prevalence)
 
-    # Basic overall metrics
-    st.subheader("Overall infection metrics")
-    total_infections = model.get_total_infections()
-    prop_infected = model.get_proportion_infected_at_least_once()
+    st.subheader("Child Infection Metrics")
+
+    g = model.graph
+    is_child_t = g.ndata[AgentPropertyKeys.IS_CHILD].bool()
+    n_children = int(is_child_t.sum().item())
+
+    # total infections among children (all pathogens)
+    child_total_infections = 0
+    ever_infected_mask = torch.zeros(g.num_nodes(), dtype=torch.bool)
+    for p in model.pathogens:
+        key = AgentPropertyKeys.num_infections(p.name)
+        num_inf = g.ndata[key]
+        child_total_infections += int(num_inf[is_child_t].sum().item())
+        ever_infected_mask |= (num_inf > 0)
+
+    if n_children > 0:
+        prop_children_infected = (ever_infected_mask & is_child_t).sum().item() / n_children
+    else:
+        prop_children_infected = 0.0
 
     mcol1, mcol2 = st.columns(2)
-    mcol1.metric("Total infections (all pathogens)", f"{total_infections}")
-    mcol2.metric("Proportion of agents infected at least once", f"{prop_infected:.2%}")
+    mcol1.metric("Total infections among children (all pathogens)", f"{child_total_infections}")
+    mcol2.metric("Proportion of children infected at least once", f"{prop_children_infected:.2%}")
 
     # Child metrics & histograms (final snapshot)
     metrics = child_metrics(model)
@@ -651,10 +709,6 @@ if run_button:
 
             max_sev_hist = history["symptom_severity"].max()
             max_dur_hist = history["illness_duration"].max()
-            st.markdown(
-                f"**DEBUG:** max severity in history = {max_sev_hist:.4f}, "
-                f"max illness_duration in history = {max_dur_hist}"
-            )
 
             total_sick_days = history_summary["total_sick_days"]
             max_severity = history_summary["max_severity"]
