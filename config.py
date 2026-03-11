@@ -25,7 +25,7 @@ class RotavirusConfig(PathogenConfig):
     recovery_rate: float = 0.2
     exposure_period: int = 2
     vaccination_rate: float = 0.01
-    vaccine_efficacy: float = 0.9
+    vaccine_efficacy: float = 0.55
 
 class CampylobacterConfig(PathogenConfig):
     """Parameters specific to Campylobacter."""
@@ -110,7 +110,7 @@ class SVEIRConfig(BaseModel):
     pathogens: List[Union[RotavirusConfig, CampylobacterConfig]] = [RotavirusConfig(), CampylobacterConfig()]
 
     # Demographic Parameters
-    average_household_size: int = 3.2
+    average_household_size: float = 3.2
     child_probability: float = 0.145
 
     # Parameters for Agent Personas
