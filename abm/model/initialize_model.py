@@ -49,7 +49,7 @@ class SVEIRModel(Model):
         self.model_dir.mkdir(parents=True, exist_ok=True)
         self.steering_parameters.npath = str(self.model_dir / Path(self.steering_parameters.npath).name)
         self.save_model_parameters()
-    
+
     def _load_agent_personas(self):
         """Generates agent behavioral personas using LH sampling."""
         sampler = qmc.LatinHypercube(d=3, seed=self.config.seed)
@@ -66,10 +66,9 @@ class SVEIRModel(Model):
         torch.manual_seed(self.config.seed)
         self._load_agent_personas()
 
-        # 1. Create Agents (Nodes only, no explicit edges)
+        # 1. Create Agents
         household_ids, is_child = self._calculate_demographics(self.config.number_agents)
-        
-        # Initialize Graph container
+
         self.graph = AgentState(self.config.number_agents, device=self.config.device)
         self.graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID] = household_ids
         self.graph.ndata[AgentPropertyKeys.IS_CHILD] = is_child
@@ -82,7 +81,6 @@ class SVEIRModel(Model):
             self.grid_environment = env_factory.grid_environment
         else:
             self.grid_environment = None
-            # Initialize to 0.0 so keys exist, preventing KeyError in AgentFactory
             self.graph.ndata[AgentPropertyKeys.X] = torch.zeros(self.config.number_agents, device=self.config.device)
             self.graph.ndata[AgentPropertyKeys.Y] = torch.zeros(self.config.number_agents, device=self.config.device)
 
@@ -119,7 +117,7 @@ class SVEIRModel(Model):
 
         self.systems = [
             MovementSystem(self.config),
-            ChildIllnessSystem(self.config),
+            ChildIllnessSystem(self.config),   # systems[1] — has episode_log
             CareSeekingSystem(self.config),
             HouseholdSystem(self.config),
             EnvironmentSystem(self.config),
@@ -129,23 +127,18 @@ class SVEIRModel(Model):
     def _calculate_demographics(self, num_agents: int) -> tuple[torch.Tensor, torch.Tensor]:
         """Generates household IDs and child status for all agents robustly."""
         avg_size = float(self.config.average_household_size)
-        
-        # Robustly generate households until we have AT LEAST num_agents
+
         sizes_list = []
         total_generated = 0
         while total_generated < num_agents:
-            # Generate a batch. If we need just a few more, assume avg_size to estimate count, plus padding
             remaining = num_agents - total_generated
             batch_count = max(5, int((remaining / avg_size) * 1.5))
-            
             batch_sizes = torch.poisson(torch.full((batch_count,), avg_size - 1.0)) + 1.0
             sizes_list.append(batch_sizes)
             total_generated += batch_sizes.sum().item()
 
         sizes = torch.cat(sizes_list)
         full_ids = torch.repeat_interleave(torch.arange(len(sizes)), sizes.long())
-        
-        # Slice to the exact number of agents needed
         household_ids = full_ids[:num_agents]
 
         is_child = torch.zeros(num_agents, dtype=torch.bool)
@@ -181,6 +174,7 @@ class SVEIRModel(Model):
         self.step_count += 1
 
     # --- Result-gathering methods ---
+
     def get_total_infections(self) -> int:
         return sum(torch.sum(self.graph.ndata[AgentPropertyKeys.num_infections(p.name)]).item() for p in self.pathogens)
 
@@ -193,6 +187,20 @@ class SVEIRModel(Model):
     def get_time_series_data(self) -> dict:
         return {"incidence": self.infection_incidence, "prevalence": self.prevalence_history}
 
+    def get_child_episode_log(self) -> list[dict]:
+        """
+        Returns the full per-episode illness log collected by ChildIllnessSystem.
+
+        Each entry is a dict with keys:
+            agent_idx, pathogen, initial_severity, initial_duration, timestep
+        """
+        # systems[1] is always ChildIllnessSystem (see _initialize_pathogens_and_systems)
+        from abm.systems.child_illness import ChildIllnessSystem
+        for system in self.systems:
+            if isinstance(system, ChildIllnessSystem):
+                return list(system.episode_log)
+        return []
+
     def get_final_agent_states(self) -> dict:
         return {
             'health': self.graph.ndata[AgentPropertyKeys.HEALTH].cpu().numpy(),
@@ -201,6 +209,8 @@ class SVEIRModel(Model):
             'initial_wealth': self.graph.ndata[AgentPropertyKeys.INITIAL_WEALTH].cpu().numpy(),
             'care_seeking_count': self.graph.ndata[AgentPropertyKeys.CARE_SEEKING_COUNT].cpu().numpy(),
             'is_parent': self.graph.ndata[AgentPropertyKeys.IS_PARENT].cpu().numpy(),
+            'is_child': self.graph.ndata[AgentPropertyKeys.IS_CHILD].cpu().numpy(),
+            'age': self.graph.ndata[AgentPropertyKeys.AGE].cpu().numpy(),
             'alpha': self.graph.ndata[AgentPropertyKeys.ALPHA].cpu().numpy(),
             'gamma': self.graph.ndata[AgentPropertyKeys.GAMMA].cpu().numpy(),
             'lambda': self.graph.ndata[AgentPropertyKeys.LAMBDA].cpu().numpy(),

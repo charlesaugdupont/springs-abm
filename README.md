@@ -111,6 +111,10 @@ Finally, use the experiment name from Step 2 to generate relevant figures.
     ```bash
     python main.py plot-care --experiment-name <EXPERIMENT_NAME_FROM_STEP_2>
     ```
+- **Plot Child Illness Duration and Severity**
+    ```bash
+    python main.py plot-child-illness --experiment-name <EXPERIMENT_NAME_FROM_STEP_2>
+    ```
 
 Plots are displayed on-screen and saved to the `outputs/<experiment_name>/simulation_results/` directory.
 

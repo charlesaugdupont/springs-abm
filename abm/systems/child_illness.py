@@ -7,25 +7,59 @@ from abm.state import AgentState
 from abm.constants import AgentPropertyKeys, Compartment
 from abm.agent.illness_mechanics import calculate_illness_severity, calculate_illness_duration
 
+
 class ChildIllnessSystem(System):
     """
     Manages the state of illness for child agents, including severity and duration.
+
+    Per-episode data collection
+    ---------------------------
+    Each time a new illness episode is initialised for a child, the system
+    appends a record to ``self.episode_log``:
+
+        {
+            'agent_idx':       int,
+            'pathogen':        str,
+            'initial_severity': float,
+            'initial_duration': int,
+            'timestep':        int,   # day the episode started
+        }
+
+    The log is intentionally kept as a plain list of dicts so it is trivially
+    serialisable (pickle / JSON) and does not depend on any fixed agent count.
+    Call ``reset_episode_log()`` between runs if you reuse the same instance.
     """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.episode_log: list[dict] = []
+        self._current_timestep: int = 0  # updated each call to update()
+
+    def reset_episode_log(self):
+        """Clears the episode log (call between independent simulation runs)."""
+        self.episode_log = []
+
+    # ------------------------------------------------------------------
+    # Main update
+    # ------------------------------------------------------------------
 
     def update(self, agent_state: AgentState, **kwargs):
         """
         Updates illness states. Must be called *after* pathogen progression so
         that compartment statuses reflect the current day's transitions.
+
+        Accepts an optional ``timestep`` kwarg so episode records carry the
+        correct simulation day.
         """
+        self._current_timestep = kwargs.get("timestep", self._current_timestep + 1)
+
         is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
 
         # ------------------------------------------------------------------
         # 1. Initialise illness for children who just became infectious
         # ------------------------------------------------------------------
-        # "Already sick" means they currently have an active episode
         already_sick = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION] > 0
 
-        # Any infectious status across pathogens
         is_infectious_any = torch.zeros_like(is_child)
         for p_config in self.config.pathogens:
             status_key = AgentPropertyKeys.status(p_config.name)
@@ -33,12 +67,8 @@ class ChildIllnessSystem(System):
                 agent_state.ndata[status_key] == Compartment.INFECTIOUS
             )
 
-        newly_symptomatic_children = (
-            is_child & is_infectious_any & ~already_sick
-        )
+        newly_symptomatic_children = is_child & is_infectious_any & ~already_sick
 
-        # For each pathogen, initialise illness for the subset of newly
-        # symptomatic children who are infectious with that pathogen.
         for p_config in self.config.pathogens:
             pathogen_name = p_config.name
             status_key = AgentPropertyKeys.status(pathogen_name)
@@ -66,7 +96,6 @@ class ChildIllnessSystem(System):
                 current_health - health_shock, min=0.0
             )
 
-            # Count down the illness timer (and clamp at 0 to avoid negatives)
             duration_new = duration.clone()
             duration_new[is_sick] -= 1
             duration_new = torch.clamp(duration_new, min=0)
@@ -88,7 +117,6 @@ class ChildIllnessSystem(System):
             wealth = agent_state.ndata[AgentPropertyKeys.WEALTH][is_not_sick]
 
             base_recovery = self.config.steering_parameters.daily_health_recovery_rate
-            # Wealthier agents recover up to 2× faster (wealth ∈ [0, 1] → multiplier ∈ [1, 2])
             wealth_multiplier = 1.0 + wealth
 
             new_health = current_health + (base_recovery * wealth_multiplier)
@@ -96,13 +124,16 @@ class ChildIllnessSystem(System):
                 new_health, max=1.0
             )
 
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
     def _initialize_illness(
         self, agent_state: AgentState, mask: torch.Tensor, pathogen_name: str
     ):
         """
         Calculates and sets the initial severity and duration for newly ill
-        children. If a child is somehow already sick (duration > 0), the new
-        episode only overwrites the existing one when the new severity is higher.
+        children, then logs the episode.
         """
         vaccine_status_tensor = None
         if pathogen_name == "rota":
@@ -130,10 +161,25 @@ class ChildIllnessSystem(System):
         subset_indices = mask.nonzero(as_tuple=True)[0]
         final_update_indices = subset_indices[update_decision_mask]
 
-        if len(final_update_indices) > 0:
-            agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][final_update_indices] = (
-                new_severity[update_decision_mask]
-            )
-            agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][final_update_indices] = (
-                new_duration[update_decision_mask]
-            )
+        if len(final_update_indices) == 0:
+            return
+
+        updated_severities = new_severity[update_decision_mask]
+        updated_durations  = new_duration[update_decision_mask]
+
+        agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][final_update_indices] = (
+            updated_severities
+        )
+        agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][final_update_indices] = (
+            updated_durations
+        )
+
+        # --- Episode logging ---
+        for i, agent_idx in enumerate(final_update_indices):
+            self.episode_log.append({
+                'agent_idx':        agent_idx.item(),
+                'pathogen':         pathogen_name,
+                'initial_severity': updated_severities[i].item(),
+                'initial_duration': updated_durations[i].item(),
+                'timestep':         self._current_timestep,
+            })

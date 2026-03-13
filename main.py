@@ -7,7 +7,8 @@ import traceback
 
 from abm.simulation_analysis.plots import (
     plot_epidemic_curves,
-    plot_care_seeking_analysis
+    plot_care_seeking_analysis,
+    plot_child_illness_analysis,
 )
 from abm.simulation_analysis.experiment_config import get_full_results_path, get_sim_runs_path
 from abm.model.initialize_model import SVEIRModel
@@ -29,6 +30,8 @@ def run_single_simulation(config, experiment_name: str) -> dict:
 
         time_series = model.get_time_series_data()
         final_states = model.get_final_agent_states()
+        episode_log = model.get_child_episode_log()
+
         return {
             'run_name': run_name,
             'proportion_infected': model.get_proportion_infected_at_least_once(),
@@ -39,14 +42,18 @@ def run_single_simulation(config, experiment_name: str) -> dict:
             'initial_wealth': final_states['initial_wealth'],
             'care_seeking_count': final_states['care_seeking_count'],
             'is_parent': final_states['is_parent'],
+            'is_child': final_states['is_child'],
+            'age': final_states['age'],
             'alpha': final_states['alpha'],
             'gamma': final_states['gamma'],
             'lambda': final_states['lambda'],
+            # Per-episode child illness data
+            'child_episode_log': episode_log,
         }
     except Exception:
         print(f"\n--- ERROR IN SIMULATION: {run_name} ---")
         traceback.print_exc()
-        return {'run_name': run_name, 'proportion_infected': -1.0}
+        return {'run_name': run_name, 'proportion_infected': -1.0, 'child_episode_log': []}
 
 def main():
     """Provides a command-line interface for the SVEIR model experimental workflow."""
@@ -56,13 +63,14 @@ def main():
     )
     parser.add_argument(
         'stage',
-        choices=['create-grid', 'simulate', 'plot-curves', 'plot-care'],
+        choices=['create-grid', 'simulate', 'plot-curves', 'plot-care', 'plot-child-illness'],
         help=(
             "The stage of the experiment to run:\n"
-            "  'create-grid'  - Generate the realistic base grid (run once).\n"
-            "  'simulate'     - Run a single simulation and save results.\n"
-            "  'plot-curves'  - Compare incidence curves.\n"
-            "  'plot-care'    - Analyze parental care-seeking decisions.\n"
+            "  'create-grid'        - Generate the realistic base grid (run once).\n"
+            "  'simulate'           - Run a single simulation and save results.\n"
+            "  'plot-curves'        - Compare incidence curves.\n"
+            "  'plot-care'          - Analyze parental care-seeking decisions.\n"
+            "  'plot-child-illness' - Analyze child illness episodes (severity & duration).\n"
         )
     )
     parser.add_argument('-n', '--agents', type=int, help="Number of agents in the simulation.")
@@ -71,7 +79,6 @@ def main():
     parser.add_argument('-e', '--experiment-name', type=str, help="Specify a custom name for an experiment run (simulate stage) or identify a run to plot (plotting stages).")
     args = parser.parse_args()
 
-    # --- Load base config and override with CLI args where provided ---
     config = SVEIRCONFIG.model_copy(deep=True)
     if args.agents: config.number_agents = args.agents
     if args.steps: config.step_target = args.steps
@@ -89,26 +96,22 @@ def main():
         if not os.path.exists(grid_path):
             parser.error(f"Grid '{args.grid_id}' not found. Please run 'create-grid' first.")
 
-        # --- MODIFIED LOGIC TO USE CUSTOM NAME OR GENERATE ONE ---
         if args.experiment_name:
             experiment_name = args.experiment_name
         else:
             timestr = time.strftime("%Y%m%d_%H%M%S")
             experiment_name = f"run_{timestr}_grid_{args.grid_id}"
-        
+
         print(f"--- Stage: Running Single Simulation ---")
         print(f" Experiment Name:  {experiment_name}")
         print(f" Using Grid:       {args.grid_id}")
         print(f" Parameters:       {config.number_agents} agents, {config.step_target} steps.\n")
 
         config.spatial_creation_args.grid_id = args.grid_id
-
         set_global_seed(config.seed)
-        
-        # Run the simulation
+
         result = run_single_simulation(config, experiment_name)
-        
-        # Save the result in a list to maintain compatibility with plotting functions
+
         results_list = [result]
         full_results_path = get_full_results_path(experiment_name, config)
         with open(full_results_path, 'wb') as f:
@@ -119,12 +122,14 @@ def main():
     else:
         if not args.experiment_name:
             parser.error(f"The '{args.stage}' stage requires --experiment-name.")
-        
+
         print(f"Plotting results for experiment: {args.experiment_name}")
         if args.stage == "plot-curves":
             plot_epidemic_curves(args.experiment_name)
         elif args.stage == 'plot-care':
             plot_care_seeking_analysis(args.experiment_name)
+        elif args.stage == 'plot-child-illness':
+            plot_child_illness_analysis(args.experiment_name)
 
 
 if __name__ == "__main__":
