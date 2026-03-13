@@ -47,7 +47,6 @@ def run_single_simulation(config, experiment_name: str) -> dict:
             'alpha': final_states['alpha'],
             'gamma': final_states['gamma'],
             'lambda': final_states['lambda'],
-            # Per-episode child illness data
             'child_episode_log': episode_log,
         }
     except Exception:
