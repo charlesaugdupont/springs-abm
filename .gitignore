@@ -209,3 +209,7 @@ __marimo__/
 # data
 cache/
 grids/
+outputs/
+
+.DS_Store
+*.pdf

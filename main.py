@@ -1,158 +1,139 @@
 # main.py
-
 import argparse
 import os
 import time
+import pickle
+import traceback
 
-from abm.policy_computation.sweep_runner import compute_all_policies_for_sweep
-from abm.simulation_analysis.intervention_sweep import run_simulation_sweep
 from abm.simulation_analysis.plots import (
-    plot_heatmap,
     plot_epidemic_curves,
     plot_final_state_violins,
-    plot_final_state_scatter
+    plot_final_state_scatter,
+    plot_care_seeking_analysis
 )
-from abm.simulation_analysis.experiment_config import (
-    get_results_path,
-    get_policy_set_id,
-    get_policy_set_path,
-    COST_SUBSIDY_FACTORS,
-    EFFICACY_MULTIPLIERS,
-    INFECTION_RISK_LEVELS
-)
+from abm.simulation_analysis.experiment_config import get_full_results_path, get_sim_runs_path
+from abm.model.initialize_model import SVEIRModel
 from abm.environment.grid_generator import create_and_save_realistic_grid
+from abm.utils.rng import set_global_seed, GRID_GENERATION_SEED
 from config import SVEIRCONFIG
 
+def run_single_simulation(config, experiment_name: str) -> dict:
+    """Runs one simulation instance and returns key results."""
+    set_global_seed(config.seed)
+    run_name = f"sim_run_{config.seed}"
+    sim_runs_path = get_sim_runs_path(experiment_name)
+
+    try:
+        model = SVEIRModel(model_identifier=run_name, root_path=sim_runs_path)
+        model.set_model_parameters(**config.model_dump())
+        model.initialize_model(verbose=False)
+        model.run()
+
+        time_series = model.get_time_series_data()
+        final_states = model.get_final_agent_states()
+        return {
+            'run_name': run_name,
+            'proportion_infected': model.get_proportion_infected_at_least_once(),
+            'prevalence_curve': time_series['prevalence'],
+            'final_health': final_states['health'],
+            'final_wealth': final_states['wealth'],
+            'initial_health': final_states['initial_health'],
+            'initial_wealth': final_states['initial_wealth'],
+            'care_seeking_count': final_states['care_seeking_count'],
+            'is_parent': final_states['is_parent'],
+            'alpha': final_states['alpha'],
+            'gamma': final_states['gamma'],
+            'lambda': final_states['lambda'],
+        }
+    except Exception:
+        print(f"\n--- ERROR IN SIMULATION: {run_name} ---")
+        traceback.print_exc()
+        return {'run_name': run_name, 'proportion_infected': -1.0}
+
 def main():
-    """
-    Provides a command-line interface to run the different stages of the
-    SVEIR model experimental workflow.
-    """
+    """Provides a command-line interface for the SVEIR model experimental workflow."""
     parser = argparse.ArgumentParser(
         description="Run stages of the SVEIR model experiment.",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument(
         'stage',
-        choices=[
-            'create-grid',
-            'precompute',
-            'simulate',
-            'plot-heatmap',
-            'plot-curves',
-            'plot-violins',
-            'plot-scatter'
-        ],
+        choices=['create-grid', 'simulate', 'plot-curves', 'plot-violins', 'plot-scatter', 'plot-care'],
         help=(
             "The stage of the experiment to run:\n"
-            "  'create-grid'  - Generate the realistic base grid from real-world data (run once).\n"
-            "  'precompute'   - Generate all policy files.\n"
-            "  'simulate'     - Run simulations and save the results.\n"
-            "  'plot-heatmap' - Generate the summary heatmap from saved results.\n"
+            "  'create-grid'  - Generate the realistic base grid (run once).\n"
+            "  'simulate'     - Run a single simulation and save results.\n"
             "  'plot-curves'  - Compare incidence curves.\n"
-            "  'plot-violins' - Compare final agent health and wealth levels.\n"
+            "  'plot-violins' - Compare final agent health and wealth.\n"
             "  'plot-scatter' - Generate density scatter plots of final agent states.\n"
+            "  'plot-care'    - Analyze parental care-seeking decisions.\n"
         )
     )
-
-    parser.add_argument('-n', '--agents', type=int, default=250, help="Number of agents in the simulation.")
-    parser.add_argument('-r', '--repetitions', type=int, default=5, help="Repetitions for each scenario.")
-    parser.add_argument('-c', '--cores', type=int, default=6, help="Number of CPU cores for parallel processing.")
-    parser.add_argument('-s', '--steps', type=int, default=SVEIRCONFIG.step_target, help=f"Simulation steps (default: {SVEIRCONFIG.step_target}).")
+    parser.add_argument('-n', '--agents', type=int, help="Number of agents in the simulation.")
+    parser.add_argument('-s', '--steps', type=int, help="Number of simulation steps.")
     parser.add_argument('-g', '--grid-id', type=str, help="REQUIRED for 'simulate': The unique ID of the grid to use.")
-    parser.add_argument('-p', '--policy-set-id', type=str, help="REQUIRED for 'simulate': The unique ID of the policy set to use for the simulation.")
-    parser.add_argument('-e', '--experiment-name', type=str, help="REQUIRED for 'plot-heatmap': The unique name of the experiment run to plot.")
-
+    parser.add_argument('-e', '--experiment-name', type=str, help="Specify a custom name for an experiment run (simulate stage) or identify a run to plot (plotting stages).")
     args = parser.parse_args()
+
+    # --- Load base config and override with CLI args where provided ---
+    config = SVEIRCONFIG.model_copy(deep=True)
+    if args.agents: config.number_agents = args.agents
+    if args.steps: config.step_target = args.steps
 
     # --- STAGE 1: CREATE GRID ---
     if args.stage == 'create-grid':
+        set_global_seed(GRID_GENERATION_SEED)
         create_and_save_realistic_grid()
 
-    # --- STAGE 2: PRECOMPUTE POLICIES ---
-    elif args.stage == 'precompute':
-        print("--- Stage: Pre-computing Policies ---")
-        # Calculate the ID that WILL be generated, so we can print it for the user.
-        base_config = SVEIRCONFIG
-        policy_set_id = get_policy_set_id(
-            cost_factors=COST_SUBSIDY_FACTORS,
-            efficacy_multipliers=EFFICACY_MULTIPLIERS,
-            risk_levels=INFECTION_RISK_LEVELS,
-            base_config=base_config
-        )
-        print(f"Based on current configs, the Policy Set ID will be: {policy_set_id}")
-        print("Starting computation...")
-        
-        compute_all_policies_for_sweep()
-        
-        print("\n--- Pre-computation Complete ---")
-        print(f"Policy Set ID: {policy_set_id}")
-        print(f"Saved in directory: {get_policy_set_path(policy_set_id)}")
-        print("\nUse this ID for the 'simulate' stage:")
-        print(f"  uv run main.py simulate --policy-set-id {policy_set_id}")
-
-
-    # --- STAGE 3: RUN SIMULATION ---
+    # --- STAGE 2: RUN SIMULATION ---
     elif args.stage == 'simulate':
-        # Check for the required argument
-        if not args.policy_set_id or not args.grid_id:
-            parser.error("The 'simulate' stage requires BOTH --grid-id AND --policy-set-id arguments.")
-
-        # Verify that the chosen policy set actually exists
-        policy_path = get_policy_set_path(args.policy_set_id)
-        if not os.path.exists(policy_path):
-            parser.error(f"The specified policy set '{args.policy_set_id}' was not found in '{policy_path}'. Please run 'precompute' first.")
-
-        # Verify that the chosen grid actually exists
+        if not args.grid_id:
+            parser.error("'simulate' stage requires --grid-id.")
         grid_path = os.path.join("grids", args.grid_id)
         if not os.path.exists(grid_path):
-            parser.error(f"The specified grid '{args.grid_id}' was not found in '{grid_path}'. Please run 'create-grid' first.")
-                    
-        # Make the experiment name even more descriptive
-        timestr = time.strftime("%Y%m%d_%H%M%S")
-        experiment_name = f"run_{timestr}_grid_{args.grid_id}_policies_{args.policy_set_id}"
+            parser.error(f"Grid '{args.grid_id}' not found. Please run 'create-grid' first.")
 
-        print(f"--- Stage: Running Simulation Sweep ---")
+        # --- MODIFIED LOGIC TO USE CUSTOM NAME OR GENERATE ONE ---
+        if args.experiment_name:
+            experiment_name = args.experiment_name
+        else:
+            timestr = time.strftime("%Y%m%d_%H%M%S")
+            experiment_name = f"run_{timestr}_grid_{args.grid_id}"
+        
+        print(f"--- Stage: Running Single Simulation ---")
         print(f" Experiment Name:  {experiment_name}")
         print(f" Using Grid:       {args.grid_id}")
-        print(f" Using Policy Set: {args.policy_set_id}")
-        print(f" Parameters:       {args.agents} agents, {args.steps} steps, {args.repetitions} reps, {args.cores} cores.\n")
+        print(f" Parameters:       {config.number_agents} agents, {config.step_target} steps.\n")
 
-        run_simulation_sweep(
-            number_agents=args.agents,
-            repetitions=args.repetitions,
-            num_cores=args.cores,
-            steps=args.steps,
-            experiment_name=experiment_name,
-            grid_id=args.grid_id,
-            policy_set_id=args.policy_set_id
-        )
-        print("\nTo generate the heatmap for this run, use the following command:")
-        print(f"  uv run main.py plot-heatmap --experiment-name {experiment_name} --agents {args.agents} --repetitions {args.repetitions}")
+        config.spatial_creation_args.grid_id = args.grid_id
 
-    # --- (Optional) PlOTTING STAGES ---
-    elif args.stage == 'plot-heatmap':
+        set_global_seed(config.seed)
+        
+        # Run the simulation
+        result = run_single_simulation(config, experiment_name)
+        
+        # Save the result in a list to maintain compatibility with plotting functions
+        results_list = [result]
+        full_results_path = get_full_results_path(experiment_name, config)
+        with open(full_results_path, 'wb') as f:
+            pickle.dump(results_list, f)
+        print(f"\nFull results saved to: {full_results_path}")
+
+    # --- PLOTTING STAGES ---
+    else:
         if not args.experiment_name:
-            parser.error("The 'plot-heatmap' stage requires the --experiment-name argument.")    
-        results_grid_path = get_results_path(args.experiment_name, args.agents, args.repetitions)
-        if not os.path.exists(results_grid_path):
-            parser.error(f"Results grid file not found at '{results_grid_path}'. Make sure the experiment name and parameters are correct.")
-        plot_heatmap(results_grid_path)
+            parser.error(f"The '{args.stage}' stage requires --experiment-name.")
+        
+        print(f"Plotting results for experiment: {args.experiment_name}")
+        if args.stage == "plot-curves":
+            plot_epidemic_curves(args.experiment_name)
+        elif args.stage == "plot-violins":
+            plot_final_state_violins(args.experiment_name)
+        elif args.stage == 'plot-scatter':
+            plot_final_state_scatter(args.experiment_name)
+        elif args.stage == 'plot-care':
+            plot_care_seeking_analysis(args.experiment_name)
 
-    elif args.stage == "plot-curves":
-        if not args.experiment_name:
-            parser.error("The 'plot-curves' stage requires the --experiment-name argument.")
-        plot_epidemic_curves(args.experiment_name, args.agents, args.repetitions)
-
-    elif args.stage == "plot-violins":
-        if not args.experiment_name:
-            parser.error("The 'plot-violins' stage requires the --experiment-name argument.")
-        plot_final_state_violins(args.experiment_name, args.agents, args.repetitions)
-
-    elif args.stage == 'plot-scatter':
-        if not args.experiment_name:
-            print("The 'plot-scatter' stage requires the --experiment-name argument.")    
-        plot_final_state_scatter(args.experiment_name, args.agents, args.repetitions)
 
 if __name__ == "__main__":
     main()

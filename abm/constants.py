@@ -1,3 +1,4 @@
+# abm/constants.py
 from enum import IntEnum
 
 class Compartment(IntEnum):
@@ -13,3 +14,75 @@ class Activity(IntEnum):
     WORSHIP = 2
     WATER = 3
     SOCIAL = 4
+
+class WaterStatus(IntEnum):
+    """
+    Represents the contamination status of a water source cell.
+
+    Grid cells use the following encoding:
+      0 = no water source present (empty cell)
+      1 = water source present, clean      (WaterStatus.CLEAN)
+      2 = water source present, contaminated (WaterStatus.CONTAMINATED)
+
+    The grid generator marks water-source cells with 1 on creation, which
+    intentionally matches WaterStatus.CLEAN so that the two systems share
+    a single encoding rather than relying on a coincidental value match.
+    """
+    CLEAN = 1
+    CONTAMINATED = 2
+
+class GridLayer:
+    """Centralized string keys for layers in the spatial grid."""
+    RESIDENCES = "residences"
+    SCHOOL = "school"
+    WORSHIP = "place_of_worship"
+    WATER = "water"
+    ANIMAL_DENSITY = "animal_density"
+
+class AgentPropertyKeys:
+    """Centralized string keys for agent properties in AgentState.ndata."""
+    # Core State
+    HEALTH = "health"
+    WEALTH = "wealth"
+    INITIAL_HEALTH = "initial_health"
+    INITIAL_WEALTH = "initial_wealth"
+
+    # Demographics
+    HOUSEHOLD_ID = "household_id"
+    IS_CHILD = "is_child"
+    IS_PARENT = "is_parent"
+    AGE = "age"
+
+    # Behavior / CPT
+    PERSONA_ID = "persona_id"
+    ALPHA = "alpha"
+    GAMMA = "gamma"
+    LAMBDA = "lambda"
+
+    # Location & Activity
+    X = "x"
+    Y = "y"
+    TIME_USE = "time_use"
+    ACTIVITY_CHOICE = "activity_choice"
+    HOME_LOCATION = "home_location"
+    SCHOOL_LOCATION = "school_location"
+    WORSHIP_LOCATION = "worship_location"
+    WATER_LOCATION = "water_location"
+    
+    # Illness State
+    SYMPTOM_SEVERITY = "symptom_severity"
+    ILLNESS_DURATION = "illness_duration"
+    CARE_SEEKING_COUNT = "care_seeking_count"
+
+    # Dynamic keys for pathogens
+    @staticmethod
+    def status(pathogen_name: str) -> str:
+        return f"status_{pathogen_name}"
+
+    @staticmethod
+    def exposure_time(pathogen_name: str) -> str:
+        return f"exposure_time_{pathogen_name}"
+
+    @staticmethod
+    def num_infections(pathogen_name: str) -> str:
+        return f"num_infections_{pathogen_name}"

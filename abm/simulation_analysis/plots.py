@@ -1,5 +1,4 @@
-# simulation_analysis/plots.py
-
+# abm/simulation_analysis/plots.py
 import os
 import pickle
 import numpy as np
@@ -7,286 +6,248 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import seaborn as sns
+from typing import Dict
 
-from config import SVEIRConfig
-from .experiment_config import (
-    COST_SUBSIDY_FACTORS,
-    EFFICACY_MULTIPLIERS,
-    get_full_results_path
-)
+from .experiment_config import get_existing_results_path
 
-def plot_heatmap(results_grid_file: str):
+def _load_and_aggregate_results(experiment_name: str) -> Dict | None:
     """
-    Loads a saved summary grid and generates the analysis heatmap.
+    Helper to load full results and aggregate them.
     """
-    print(f"Loading results from {results_grid_file} to generate heatmap...")
-    results_grid = np.load(results_grid_file)
+    # Use the new config-agnostic path finder
+    try:
+        full_results_file = get_existing_results_path(experiment_name)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return None
 
-    results_grid_flipped = np.flipud(results_grid)
-    plt.figure(figsize=(12, 10))
-    
-    annot_data = np.char.mod('%.2f', results_grid_flipped)
-    annot_data[results_grid_flipped < 0] = 'FAIL'
-
-    ax = sns.heatmap(
-        results_grid_flipped, annot=annot_data, fmt="s", cmap="plasma_r",
-        xticklabels=[f"{x:.2f}" for x in COST_SUBSIDY_FACTORS],
-        yticklabels=[f"{y:.2f}" for y in reversed(EFFICACY_MULTIPLIERS)],
-        linewidths=.5, annot_kws={"size": 12}
-    )
-    ax.set_title("Impact of Interventions on Total Proportion of Population Infected (Attack Rate)", fontsize=16, pad=20)
-    ax.set_xlabel("Cost Subsidy Factor (Lower is Cheaper Healthcare)", fontsize=12)
-    ax.set_ylabel("Health Efficacy Multiplier (Higher is Better Healthcare)", fontsize=12)
-    
-    output_dir = os.path.dirname(results_grid_file)
-    base_name = os.path.basename(results_grid_file)
-    output_filename = os.path.join(output_dir, f"heatmap_{os.path.splitext(base_name)[0]}.png")
-
-    plt.savefig(output_filename, bbox_inches='tight', dpi=300)
-    plt.show()
-
-
-def plot_epidemic_curves(experiment_name: str, agents: int, repetitions: int):
-    """
-    Loads full simulation results and plots the mean number of currently
-    infected agents over time (prevalence) for key scenarios.
-    """
-    full_results_file = get_full_results_path(experiment_name, agents, repetitions)
-    if not os.path.exists(full_results_file):
-        print(f"Error: Full results file not found at '{full_results_file}'.")
-        print("Please ensure the 'simulate' stage was run for this experiment.")
-        return
-        
-    print(f"Loading full results from {full_results_file}...")
     with open(full_results_file, 'rb') as f:
         raw_results = pickle.load(f)
 
-    # --- Aggregate prevalence curves for each scenario ---
-    curves_agg = {}
+    # All results are now part of a single "scenario"
+    aggregated = {
+        'prevalence': [], 'health': [], 'wealth': [], 'initial_health': [], 
+        'initial_wealth': [], 'care_seeking_count': [], 'is_parent': [],
+        'alpha':[], 'gamma':[], 'lambda':[],
+    }
     for res in raw_results:
-        # Ensure the prevalence_curve key exists from the new run
-        if 'prevalence_curve' not in res:
-            print("Error: 'prevalence_curve' not found in results. Please re-run the 'simulate' stage.")
-            return
+        if 'prevalence_curve' in res and res.get('proportion_infected', -1) >= 0:
+            aggregated['prevalence'].append(res['prevalence_curve'])
+        if 'final_health' in res and res.get('proportion_infected', -1) >= 0:
+            aggregated['health'].extend(res['final_health'])
+            aggregated['wealth'].extend(res['final_wealth'])
+            if 'initial_health' in res:
+                aggregated['initial_health'].extend(res['initial_health'])
+                aggregated['initial_wealth'].extend(res['initial_wealth'])
+                aggregated['care_seeking_count'].extend(res['care_seeking_count'])
+                aggregated['is_parent'].extend(res['is_parent'])
+                if 'alpha' in res:
+                    aggregated['alpha'].extend(res['alpha'])
+                    aggregated['gamma'].extend(res['gamma'])
+                    aggregated['lambda'].extend(res['lambda'])
+    return aggregated
 
-        key = (res['efficacy'], res['subsidy'])
-        if key not in curves_agg:
-            curves_agg[key] = []
-        curves_agg[key].append(res['prevalence_curve'])
+def plot_epidemic_curves(experiment_name: str):
+    """Plots the average epidemic prevalence curve across all repetitions."""
+    print(f"Generating epidemic curves for {experiment_name}...")
+    aggregated_results = _load_and_aggregate_results(experiment_name)
+    if not aggregated_results or not aggregated_results['prevalence']:
+        print("No valid results found to plot.")
+        return
 
-    # --- Plotting ---
     plt.style.use('seaborn-v0_8-whitegrid')
     fig, ax = plt.subplots(figsize=(12, 7))
 
-    # Define the key scenarios you want to compare
-    scenarios_to_plot = {
-        "Baseline (No Intervention)": (1.0, 1.0),
-        "Best Intervention": (max(EFFICACY_MULTIPLIERS), min(COST_SUBSIDY_FACTORS)),
-    }
+    curves = aggregated_results['prevalence']
+    max_len = max(len(c) for c in curves) if curves else 0
+    padded = [np.pad(c, (0, max_len - len(c)), 'constant') for c in curves]
+    mean_curve, std_curve = np.mean(padded, axis=0), np.std(padded, axis=0)
+    timesteps = np.arange(len(mean_curve))
 
-    for label, (eff, sub) in scenarios_to_plot.items():
-        # Find the key in your results that is numerically closest to the target scenario
-        closest_key = min(curves_agg.keys(), key=lambda k: abs(k[0]-eff) + abs(k[1]-sub))
-        
-        curves = curves_agg.get(closest_key)
-        if not curves:
-            print(f"Warning: No data found for scenario '{label}'")
-            continue
-        
-        # Curves can have slightly different lengths; pad them to the max length for averaging
-        max_len = max(len(c) for c in curves)
-        padded_curves = [np.pad(c, (0, max_len - len(c)), 'constant') for c in curves]
-        
-        mean_curve = np.mean(padded_curves, axis=0)
-        std_curve = np.std(padded_curves, axis=0)
-        timesteps = np.arange(len(mean_curve))
-        
-        # Plot the mean curve
-        line, = ax.plot(timesteps, mean_curve, label=f"{label}\n(Eff: {closest_key[0]:.2f}, Sub: {closest_key[1]:.2f})", lw=2)
-        # Add a shaded confidence interval (standard deviation)
-        ax.fill_between(timesteps, mean_curve - std_curve, mean_curve + std_curve, alpha=0.15, color=line.get_color())
+    line, = ax.plot(timesteps, mean_curve, label=f"Mean of {len(curves)} repetitions", lw=2)
+    ax.fill_between(timesteps, mean_curve - std_curve, mean_curve + std_curve, alpha=0.15, color=line.get_color())
 
-    ax.set_title("Impact of Interventions on Epidemic Progression (Prevalence)", fontsize=16, pad=15)
+    ax.set_title("Epidemic Progression (Prevalence)", fontsize=16, pad=15)
     ax.set_xlabel("Time (Days)", fontsize=12)
     ax.set_ylabel("Number of Currently Infected Agents", fontsize=12)
-    ax.legend(title="Intervention Scenario", fontsize=10, loc='upper right')
+    ax.legend(title="Scenario", fontsize=10)
     ax.grid(True, which='both', linestyle='--', linewidth=0.5)
     ax.set_ylim(bottom=0)
 
-    # Save the figure
-    output_dir = os.path.dirname(full_results_file)
+    # Save to the same directory we found the results in
+    output_dir = os.path.dirname(get_existing_results_path(experiment_name))
     output_filename = os.path.join(output_dir, f"prevalence_curves_{experiment_name}.png")
     plt.savefig(output_filename, bbox_inches='tight', dpi=300)
-
+    print(f"Prevalence curves saved to {output_filename}")
     plt.show()
 
-
-def plot_final_state_violins(experiment_name: str, agents: int, repetitions: int):
-    """
-    Loads full simulation results and creates violin plots comparing the
-    distribution of final agent health and wealth for key scenarios.
-    """
-    full_results_file = get_full_results_path(experiment_name, agents, repetitions)
-    if not os.path.exists(full_results_file):
-        print(f"Error: Full results file not found at '{full_results_file}'.")
+def plot_final_state_violins(experiment_name: str):
+    """Creates violin plots showing the distribution of final agent health and wealth."""
+    print(f"Generating violin plots for {experiment_name}...")
+    aggregated_results = _load_and_aggregate_results(experiment_name)
+    if not aggregated_results or not aggregated_results['health']:
+        print("No valid results found to plot.")
         return
-        
-    print(f"Loading full results from {full_results_file}...")
-    with open(full_results_file, 'rb') as f:
-        raw_results = pickle.load(f)
 
-    # --- Define Scenarios and Aggregate Data ---
-    baseline_key = min(raw_results, key=lambda r: abs(r['efficacy']-1.0) + abs(r['subsidy']-1.0))
-    best_eff = max(r['efficacy'] for r in raw_results)
-    best_sub = min(r['subsidy'] for r in raw_results)
-    best_case_key = min(raw_results, key=lambda r: abs(r['efficacy']-best_eff) + abs(r['subsidy']-best_sub))
-
-    scenarios = {
-        "Baseline": (baseline_key['efficacy'], baseline_key['subsidy']),
-        "Best Intervention": (best_case_key['efficacy'], best_case_key['subsidy'])
-    }
-    
-    # --- Prepare data for Pandas DataFrame ---
     plot_data = []
-    for res in raw_results:
-        for scenario_name, (eff, sub) in scenarios.items():
-            if res['efficacy'] == eff and res['subsidy'] == sub:
-                # Add every agent's final health to the list
-                for health_val in res.get('final_health', []):
-                    plot_data.append({'value': health_val, 'Metric': 'Health', 'Scenario': scenario_name})
-                # Add every agent's final wealth to the list
-                for wealth_val in res.get('final_wealth', []):
-                    plot_data.append({'value': wealth_val, 'Metric': 'Wealth', 'Scenario': scenario_name})
-
-    if not plot_data:
-        print("Error: Could not find data for the specified scenarios in the results file.")
-        return
-
+    for health_val in aggregated_results['health']:
+        plot_data.append({'Value': health_val, 'Metric': 'Health'})
+    for wealth_val in aggregated_results['wealth']:
+        plot_data.append({'Value': wealth_val, 'Metric': 'Wealth'})
     df = pd.DataFrame(plot_data)
 
-    # --- Generate the Plots ---
     sns.set_theme(style="whitegrid")
-    color_palette = {
-        "Baseline": "dodgerblue",
-        "Best Intervention": "forestgreen"
-    }
+    fig, axes = plt.subplots(1, 2, figsize=(12, 7), sharey=True)
+    fig.suptitle('Distribution of Final Agent States', fontsize=18)
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 7), sharey=True)
-    fig.suptitle('Distribution of Final Agent States by Intervention Scenario', fontsize=18, y=0.98)
-
-    # Health Plot
-    sns.violinplot(ax=axes[0], data=df[df['Metric'] == 'Health'], x='Scenario', y='value',
-                   hue='Scenario', palette=color_palette, inner='quartile', legend=False, alpha=0.7)
-    axes[0].set_title('Final Health Distribution', fontsize=14)
-    axes[0].set_ylabel('State Value (1-100)', fontsize=12)
+    sns.violinplot(ax=axes[0], data=df[df['Metric'] == 'Health'], y='Value', inner='quartile')
+    axes[0].set_title('Final Health', fontsize=14)
+    axes[0].set_ylabel('State Value (Normalized)', fontsize=12)
     axes[0].set_xlabel(None)
 
-    # Wealth Plot
-    sns.violinplot(ax=axes[1], data=df[df['Metric'] == 'Wealth'], x='Scenario', y='value',
-                   hue='Scenario', palette=color_palette, inner='quartile', legend=False, alpha=0.7)
-    axes[1].set_title('Final Wealth Distribution', fontsize=14)
+    sns.violinplot(ax=axes[1], data=df[df['Metric'] == 'Wealth'], y='Value', inner='quartile')
+    axes[1].set_title('Final Wealth', fontsize=14)
     axes[1].set_ylabel(None)
     axes[1].set_xlabel(None)
+
+    axes[0].set_ylim(-0.05, 1.05)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    output_dir = os.path.dirname(get_existing_results_path(experiment_name))
+    output_filename = os.path.join(output_dir, f"violin_plots_{experiment_name}.png")
+    plt.savefig(output_filename, bbox_inches='tight', dpi=300)
+    print(f"Violin plots saved to {output_filename}")
+    plt.show()
+
+def plot_final_state_scatter(experiment_name: str):
+    """Creates a 2D density scatter plot of final agent states."""
+    print(f"Generating scatter plot for {experiment_name}...")
+    aggregated_results = _load_and_aggregate_results(experiment_name)
+    if not aggregated_results or not aggregated_results['health']:
+        print("No valid results found to plot.")
+        return
+
+    sns.set_theme(style="whitegrid")
+    fig, ax = plt.subplots(figsize=(9, 7))
+    fig.suptitle('Distribution of Final Agent States', fontsize=18)
+
+    im = ax.hist2d(x=aggregated_results['wealth'], y=aggregated_results['health'],
+                   bins=50, range=[[0, 1], [0, 1]], cmap='plasma', norm=LogNorm())
+    fig.colorbar(im[3], ax=ax, label='Number of Agents (Log Scale)')
+    ax.set_title(f'Final Agent States from a Single Simulation Run', fontsize=14)
+    ax.set_xlabel('Final Wealth (Normalized)', fontsize=12)
+    ax.set_ylabel('Final Health (Normalized)', fontsize=12)
+
+    ax.set_xlim(-0.05, 1.05)
+    ax.set_ylim(-0.05, 1.05)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    output_dir = os.path.dirname(get_existing_results_path(experiment_name))
+    output_filename = os.path.join(output_dir, f"scatter_plot_{experiment_name}.png")
+    plt.savefig(output_filename, bbox_inches='tight', dpi=300)
+    print(f"Scatter plot saved to {output_filename}")
+    plt.show()
+
+def plot_care_seeking_analysis(experiment_name: str):
+    """Analyzes and plots care-seeking behavior against agent endowments and personas."""
+    print(f"Generating care-seeking analysis plots for {experiment_name}...")
+    aggregated_results = _load_and_aggregate_results(experiment_name)
     
-    # Set the y-axis limit based on the model's max state value
-    max_val = SVEIRConfig().steering_parameters.max_state_value
-    axes[0].set_ylim(0, max_val + 5)
+    if not aggregated_results or not aggregated_results.get('care_seeking_count'):
+        print("No valid care-seeking results found to plot.")
+        return
+
+    # Create a DataFrame for easier analysis
+    df = pd.DataFrame({
+        'initial_wealth': aggregated_results['initial_wealth'],
+        'final_wealth': aggregated_results['wealth'],
+        'final_health': aggregated_results['health'],
+        'care_seeking_count': aggregated_results['care_seeking_count'],
+        'is_parent': aggregated_results['is_parent'],
+        'alpha': aggregated_results.get('alpha', []),
+        'gamma': aggregated_results.get('gamma', []),
+        'lambda': aggregated_results.get('lambda', [])
+    })
+
+    # Filter for only parents, as they are the decision-makers
+    parents_df = df[df['is_parent']].copy()
+    if parents_df.empty:
+        print("No parent agents found in the simulation results.")
+        return
+        
+    # Add jitter for better visualization in scatter plots
+    parents_df['care_seeking_jitter'] = parents_df['care_seeking_count'] + np.random.normal(0, 0.1, size=len(parents_df))
+
+    # --- Plotting ---
+    sns.set_theme(style="whitegrid")
+    # MODIFIED: Changed to a 3x2 grid and increased figsize
+    fig, axes = plt.subplots(3, 2, figsize=(16, 18))
+    fig.suptitle('Analysis of Parental Care-Seeking Decisions', fontsize=20)
+
+    # --- ROW 1: CORE METRICS ---
+    # 1. Distribution of Care-Seeking Choices
+    ax1 = axes[0, 0]
+    sns.histplot(data=parents_df, x='care_seeking_count', discrete=True, ax=ax1, stat="percent")
+    ax1.set_title('Frequency of Care-Seeking Decisions', fontsize=14)
+    ax1.set_xlabel('Number of Times Care Was Sought', fontsize=12)
+    ax1.set_ylabel('Percentage of Parents (%)', fontsize=12)
+    if not parents_df.empty:
+        max_count = parents_df['care_seeking_count'].max()
+        if not np.isnan(max_count) and max_count > 0:
+            ax1.set_xticks(np.arange(max_count + 1))
+
+    # 2. Initial Wealth vs. Care-Seeking
+    ax2 = axes[0, 1]
+    sns.regplot(data=parents_df, x='initial_wealth', y='care_seeking_jitter', ax=ax2,
+                scatter_kws={'alpha': 0.4, 's': 15}, line_kws={'color': 'red'})
+    ax2.set_title('Initial Wealth vs. Care-Seeking', fontsize=14)
+    ax2.set_xlabel('Initial Wealth', fontsize=12)
+    ax2.set_ylabel('Number of Times Care Was Sought', fontsize=12)
+    ax2.set_ylim(bottom=-0.5)
+
+    # --- ROW 2: BEHAVIORAL PERSONAS ---
+    # 3. Alpha (Utility) vs. Care-Seeking
+    ax3 = axes[1, 0]
+    sns.regplot(data=parents_df, x='alpha', y='care_seeking_jitter', ax=ax3,
+                scatter_kws={'alpha': 0.4, 's': 15}, line_kws={'color': 'green'})
+    ax3.set_title('Alpha (Health/Wealth Utility) vs. Care-Seeking', fontsize=14)
+    ax3.set_xlabel('Alpha Value (Higher = More Wealth-Focused)', fontsize=12)
+    ax3.set_ylabel('Number of Times Care Was Sought', fontsize=12)
+    ax3.set_ylim(bottom=-0.5)
+
+    # 4. Lambda (Loss Aversion) vs. Care-Seeking
+    ax4 = axes[1, 1]
+    sns.regplot(data=parents_df, x='lambda', y='care_seeking_jitter', ax=ax4,
+                scatter_kws={'alpha': 0.4, 's': 15}, line_kws={'color': 'green'})
+    ax4.set_title('Lambda (Loss Aversion) vs. Care-Seeking', fontsize=14)
+    ax4.set_xlabel('Lambda Value (Higher = More Loss Averse)', fontsize=12)
+    ax4.set_ylabel('Number of Times Care Was Sought', fontsize=12)
+    ax4.set_ylim(bottom=-0.5)
+
+    # --- ROW 3: OUTCOMES ---
+    # 5. Final Wealth vs. Care-Seeking
+    ax5 = axes[2, 0]
+    sns.regplot(data=parents_df, x='final_wealth', y='care_seeking_jitter', ax=ax5,
+                scatter_kws={'alpha': 0.4, 's': 15}, line_kws={'color': 'purple'})
+    ax5.set_title('Outcome: Final Wealth vs. Care-Seeking', fontsize=14)
+    ax5.set_xlabel('Final Wealth', fontsize=12)
+    ax5.set_ylabel('Number of Times Care Was Sought', fontsize=12)
+    ax5.set_ylim(bottom=-0.5)
+
+    # 6. Gamma (Probability Weighting) vs. Care-Seeking
+    ax6 = axes[2, 1]
+    sns.regplot(data=parents_df, x='gamma', y='care_seeking_jitter', ax=ax6,
+                scatter_kws={'alpha': 0.4, 's': 15}, line_kws={'color': 'green'})
+    ax6.set_title('Gamma (Risk Perception) vs. Care-Seeking', fontsize=14)
+    ax6.set_xlabel('Gamma Value (Lower = More Pessimistic)', fontsize=12)
+    ax6.set_ylabel('Number of Times Care Was Sought', fontsize=12)
+    ax6.set_ylim(bottom=-0.5)
 
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     
-    # Save the figure
-    output_dir = os.path.dirname(full_results_file)
-    output_filename = os.path.join(output_dir, f"violin_plots_{experiment_name}.png")
+    # Save the plot
+    output_dir = os.path.dirname(get_existing_results_path(experiment_name))
+    output_filename = os.path.join(output_dir, f"care_seeking_analysis_{experiment_name}.png")
     plt.savefig(output_filename, bbox_inches='tight', dpi=300)
-    
-    plt.show()
-
-def plot_final_state_scatter(experiment_name: str, agents: int, repetitions: int):
-    """
-    Loads full simulation results and creates 2D density scatter plots 
-    comparing the final agent health and wealth for key scenarios.
-    """
-    full_results_file = get_full_results_path(experiment_name, agents, repetitions)
-    if not os.path.exists(full_results_file):
-        print(f"Error: Full results file not found at '{full_results_file}'.")
-        return
-        
-    with open(full_results_file, 'rb') as f:
-        raw_results = pickle.load(f)
-
-    # --- Define Scenarios and Aggregate Data ---
-    baseline_key = min(raw_results, key=lambda r: abs(r['efficacy']-1.0) + abs(r['subsidy']-1.0))
-    best_eff = max(r['efficacy'] for r in raw_results)
-    best_sub = min(r['subsidy'] for r in raw_results)
-    best_case_key = min(raw_results, key=lambda r: abs(r['efficacy']-best_eff) + abs(r['subsidy']-best_sub))
-
-    scenarios = {
-        "Baseline": (baseline_key['efficacy'], baseline_key['subsidy']),
-        "Best Intervention": (best_case_key['efficacy'], best_case_key['subsidy'])
-    }
-    
-    # Aggregate all health and wealth data for each scenario
-    plot_data = {
-        "Baseline": {"health": [], "wealth": []},
-        "Best Intervention": {"health": [], "wealth": []}
-    }
-
-    for res in raw_results:
-        for scenario_name, (eff, sub) in scenarios.items():
-            if res['efficacy'] == eff and res['subsidy'] == sub:
-                plot_data[scenario_name]['health'].extend(res.get('final_health', []))
-                plot_data[scenario_name]['wealth'].extend(res.get('final_wealth', []))
-    
-    if not plot_data["Baseline"]["health"]:
-        print("Error: Could not find data for the specified scenarios.")
-        return
-
-    # --- Generate the Plots ---
-    sns.set_theme(style="whitegrid")
-    fig, axes = plt.subplots(1, 2, figsize=(16, 7), sharex=True, sharey=True)
-    fig.suptitle('Distribution of Final Agent States by Intervention Scenario', fontsize=18, y=0.98)
-
-    max_val = SVEIRConfig().steering_parameters.max_state_value
-    num_bins = 50 # Adjust bin count for more or less detail
-
-    # --- Plot 1: Baseline Scenario ---
-    ax1 = axes[0]
-    baseline_health = plot_data["Baseline"]["health"]
-    baseline_wealth = plot_data["Baseline"]["wealth"]
-    
-    # Use hist2d for a density heatmap. LogNorm helps visualize sparse points.
-    counts, xedges, yedges, im = ax1.hist2d(
-        x=baseline_wealth, y=baseline_health, bins=num_bins,
-        range=[[0, max_val], [0, max_val]], cmap='plasma', norm=LogNorm()
-    )
-    fig.colorbar(im, ax=ax1, label='Number of Agents (Log Scale)')
-    ax1.set_title('Baseline Scenario', fontsize=14)
-    ax1.set_xlabel('Final Wealth', fontsize=12)
-    ax1.set_ylabel('Final Health', fontsize=12)
-
-    # --- Plot 2: Best Intervention Scenario ---
-    ax2 = axes[1]
-    best_health = plot_data["Best Intervention"]["health"]
-    best_wealth = plot_data["Best Intervention"]["wealth"]
-    
-    counts, xedges, yedges, im = ax2.hist2d(
-        x=best_wealth, y=best_health, bins=num_bins,
-        range=[[0, max_val], [0, max_val]], cmap='plasma', norm=LogNorm()
-    )
-    fig.colorbar(im, ax=ax2, label='Number of Agents (Log Scale)')
-    ax2.set_title('Best Intervention Scenario', fontsize=14)
-    ax2.set_xlabel('Final Wealth', fontsize=12)
-    ax2.set_ylabel(None) # Hide redundant y-axis label
-
-    # Set consistent axis limits
-    axes[0].set_xlim(0, max_val + 5)
-    axes[0].set_ylim(0, max_val + 5)
-
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    
-    # Save the figure
-    output_dir = os.path.dirname(full_results_file)
-    output_filename = os.path.join(output_dir, f"scatter_plots_{experiment_name}.png")
-    plt.savefig(output_filename, bbox_inches='tight', dpi=300)
-    
+    print(f"Care-seeking analysis plot saved to {output_filename}")
     plt.show()

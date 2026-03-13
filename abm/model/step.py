@@ -1,109 +1,94 @@
 # abm/model/step.py
-
-"""Time-stepping module for the SVEIR model."""
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, List
 import torch
-from abm.agent.agent_update import sveir_agent_update
+
+from abm.state import AgentState
+from config import SVEIRConfig
 from abm.model.data_collection import data_collection
-from abm.state import AgentGraph
-from abm.constants import Compartment
+from abm.constants import Compartment, AgentPropertyKeys
+from abm.pathogens.pathogen import Pathogen
+from abm.systems.system import System
 
-
-def _calculate_adjacency(agent_graph: AgentGraph) -> torch.Tensor:
-    """Calculates dense adjacency matrix based on co-location."""
-    num_nodes = agent_graph.num_nodes()
-    device = agent_graph.device
-
-    # Stack coordinates
-    coords = torch.stack([agent_graph.ndata['x'], agent_graph.ndata['y']], dim=1)
-    unique_coords, inverse_indices = torch.unique(coords, dim=0, return_inverse=True)
-
-    src_nodes, dst_nodes = [], []
-    for loc_id in range(len(unique_coords)):
-        agent_indices_in_group = (inverse_indices == loc_id).nonzero(as_tuple=True)[0]
-        if len(agent_indices_in_group) > 1:
-            combinations = torch.combinations(agent_indices_in_group, r=2, with_replacement=False)
-            src_nodes.append(combinations[:, 0])
-            dst_nodes.append(combinations[:, 1])
-            src_nodes.append(combinations[:, 1])
-            dst_nodes.append(combinations[:, 0])
-
-    adjacency_matrix = torch.zeros((num_nodes, num_nodes), device=device)
-    if src_nodes:
-        all_src = torch.cat(src_nodes)
-        all_dst = torch.cat(dst_nodes)
-        adjacency_matrix[all_src, all_dst] = 1.0
-
-    return adjacency_matrix
+def _get_location_groups(agent_state: AgentState) -> Tuple[torch.Tensor, int]:
+    """
+    Returns group indices for agents based on co-location.
+    """
+    coords = torch.stack([agent_state.ndata[AgentPropertyKeys.X], agent_state.ndata[AgentPropertyKeys.Y]], dim=1)
+    
+    # Efficiently find unique locations and assign each agent a location index
+    _, inverse_indices = torch.unique(coords, dim=0, return_inverse=True)
+    num_locations = inverse_indices.max().item() + 1
+    
+    return inverse_indices, num_locations
 
 def sveir_step(
-    agent_graph: AgentGraph,
-    device: torch.device,
+    agent_state: AgentState,
     timestep: int,
-    params: Dict[str, Any],
+    config: SVEIRConfig,
     grid: Any,
-    policy_library: dict,
-    risk_levels: torch.Tensor
-) -> Tuple[int, Dict[str, int]]:
+    pathogens: List[Pathogen],
+    systems: List[System]
+) -> Tuple[Dict[str, int], Dict[str, int]]:
     
-    num_nodes = agent_graph.num_nodes()
-    
-    # Update global risk param
-    mean_prob = params["infection_prob_mean"]
-    std_prob = params["infection_prob_std"]
-    params['infection_probability'] = max(0.001, torch.normal(mean=mean_prob, std=std_prob, size=(1,)).item())
+    params = config.steering_parameters
 
-    # Map persistent social edges to dense weights for movement logic
-    src, dst = agent_graph.edges()
-    edge_weights = torch.zeros((num_nodes, num_nodes), device=device)
-    if "weight" in agent_graph.edata:
-        edge_weights[src, dst] = agent_graph.edata["weight"].to(device)
+    # Reset incidence for the new day
+    for pathogen in pathogens:
+        pathogen.reset_incidence()
 
-    # Agent Updates
-    sveir_agent_update("move", agent_graph, edge_weights=edge_weights)
-    
-    sveir_agent_update("exposure_increment", agent_graph)
-    
-    newly_infectious_count = sveir_agent_update("exposed_to_infectious", agent_graph, params=params)
-    
-    sveir_agent_update("infectious_to_recovered", agent_graph, params=params, num_nodes=num_nodes)
-    sveir_agent_update("susceptible_to_vaccinated", agent_graph, params=params, num_nodes=num_nodes)
-    sveir_agent_update("health_investment", agent_graph, params=params, policy=policy_library, risk_levels=risk_levels)
+    # --- 0. DISEASE PROGRESSION (Morning) ---
+    for pathogen in pathogens:
+        pathogen.step_progression(agent_state)
 
-    # Dynamic Adjacency based on new locations
-    adjacency = _calculate_adjacency(agent_graph)
+    # --- 1. PHASE 1: DAYTIME (Activity) ---
     
-    sveir_agent_update("susceptible_to_exposed", agent_graph, params=params, num_nodes=num_nodes, adjacency=adjacency)
-    sveir_agent_update("vaccinated_to_exposed", agent_graph, params=params, num_nodes=num_nodes, adjacency=adjacency)
+    # a. MOVEMENT (Go to School, Water, Social)
+    systems[0].update(agent_state)
     
-    sveir_agent_update("water_to_human_transmission", agent_graph, params=params, grid=grid)
-    sveir_agent_update("human_to_water_transmission", agent_graph, params=params, grid=grid)
+    # b. SPATIAL GROUPING (Daytime)
+    location_ids, num_locations = _get_location_groups(agent_state)
+
+    # c. TRANSMISSION (Daytime)
+    for pathogen in pathogens:
+        pathogen.step_transmission(agent_state, location_ids, num_locations, grid)
+
+    # --- 2. PHASE 2: NIGHTTIME (Home) ---
+
+    # a. MOVEMENT (Return to Home)
+    systems[0].reset_to_home(agent_state)
+
+    # b. SPATIAL GROUPING (Nighttime/Household)
+    location_ids, num_locations = _get_location_groups(agent_state)
+
+    # c. TRANSMISSION (Nighttime)
+    for pathogen in pathogens:
+        pathogen.step_transmission(agent_state, location_ids, num_locations, grid)
+
+    # --- 3. DAILY SYSTEMS ---
+    # Order must match self.systems in initialize_model.py
+    systems[1].update(agent_state) # ChildIllnessSystem
+    systems[2].update(agent_state) # CareSeekingSystem
+    systems[3].update(agent_state, grid=grid, pathogens=pathogens) # HouseholdSystem
+    systems[4].update(agent_state, grid=grid, timestep=timestep) # EnvironmentSystem
+    systems[5].update(agent_state) # EconomicSystem
+
+    # --- 4. DATA COLLECTION ---
+    if (params.data_collection_period > 0 and (timestep % params.data_collection_period == 0)) or \
+       (params.data_collection_list and (timestep in params.data_collection_list)):
+        data_collection(agent_state, timestep=timestep + 1, npath=params.npath, ndata=params.ndata, mode=params.mode)
+
+    # --- 5. GATHER STATISTICS ---
+    new_cases_by_pathogen: Dict[str, int] = {}
+    compartment_counts = {}
     
-    sveir_agent_update("water_recovery", agent_graph, params=params, grid=grid)
-    if (timestep + 1) % params["shock_frequency"] == 0:
-        sveir_agent_update("shock", agent_graph, params=params, grid=grid)
+    for p in pathogens:
+        new_cases_by_pathogen[p.name] = p.new_cases_this_step
+        
+        status = agent_state.ndata[f"status_{p.name}"]
+        compartment_counts[f"{p.name}_S"] = torch.sum(status == Compartment.SUSCEPTIBLE).item()
+        compartment_counts[f"{p.name}_E"] = torch.sum(status == Compartment.EXPOSED).item()
+        compartment_counts[f"{p.name}_I"] = torch.sum(status == Compartment.INFECTIOUS).item()
+        compartment_counts[f"{p.name}_R"] = torch.sum(status == Compartment.RECOVERED).item()
+        compartment_counts[f"{p.name}_V"] = torch.sum(status == Compartment.VACCINATED).item()
 
-    # Data Collection
-    if (params['data_collection_period'] > 0 and (timestep % params['data_collection_period'] == 0)) or \
-       (params['data_collection_list'] and (timestep in params['data_collection_list'])):
-        data_collection(
-            agent_graph,
-            timestep=timestep + 1,
-            npath=params['npath'],
-            epath=params['epath'],
-            ndata=params['ndata'],
-            edata=params['edata'],
-            mode=params['mode']
-        )
-
-    # Counts
-    compartments = agent_graph.ndata["compartments"]
-    compartment_counts = {
-        "S": torch.sum(compartments == Compartment.SUSCEPTIBLE).item(),
-        "V": torch.sum(compartments == Compartment.VACCINATED).item(),
-        "E": torch.sum(compartments == Compartment.EXPOSED).item(),
-        "I": torch.sum(compartments == Compartment.INFECTIOUS).item(),
-        "R": torch.sum(compartments == Compartment.RECOVERED).item(),
-    }
-
-    return newly_infectious_count, compartment_counts
+    return new_cases_by_pathogen, compartment_counts
