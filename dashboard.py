@@ -47,7 +47,7 @@ def ensure_grid_exists() -> str:
 def build_config_from_ui():
     """
     Take the base SVEIRCONFIG and override values based on UI controls.
-    Returns (config, collect_history_flag).
+    Returns config.
     """
     cfg = SVEIRCONFIG.model_copy(deep=True)
     ste = cfg.steering_parameters
@@ -266,15 +266,6 @@ def build_config_from_ui():
         step=0.005,
     )
 
-    # --- Child illness history collection (in-memory, not Zarr) ---
-    st.sidebar.markdown("# Data Collection")
-    collect_history = st.sidebar.checkbox(
-        "Collect full child illness history in memory (slower)",
-        value=False,
-        help="Stores symptom severity and illness duration each day in memory; "
-             "used to summarize total sick days and peak severity for children under 5."
-    )
-
     # Write back pathogen-specific params
     for p in cfg.pathogens:
         if p.name == "rota":
@@ -295,15 +286,14 @@ def build_config_from_ui():
     grid_id = ensure_grid_exists()
     cfg.spatial_creation_args.grid_id = grid_id
 
-    return cfg, collect_history
+    return cfg
 
 
-def run_simulation(config, collect_history: bool):
+def run_simulation(config):
     """
     Run a single SVEIRModel simulation with the given config and return:
     - model
     - child_incidence / child_prevalence time series (children only)
-    - history (or None): dict with per-step severity and duration if collect_history=True
     """
     set_global_seed(config.seed)
     root_path = "streamlit_outputs"
@@ -312,15 +302,6 @@ def run_simulation(config, collect_history: bool):
     model = SVEIRModel(model_identifier="ui_run", root_path=root_path)
     model.set_model_parameters(**config.model_dump())
     model.initialize_model(verbose=False)
-
-    history = None
-    if collect_history:
-        history = {
-            "symptom_severity": [],   # list of arrays (n_agents,) per step
-            "illness_duration": [],
-            "is_child": model.graph.ndata[AgentPropertyKeys.IS_CHILD].cpu().numpy(),
-            "age": model.graph.ndata[AgentPropertyKeys.AGE].cpu().numpy(),
-        }
 
     # --- child-only incidence & prevalence ---
     g = model.graph
@@ -356,21 +337,10 @@ def run_simulation(config, collect_history: bool):
             prev_child_infections[p.name] = current
         child_incidence.append(child_inc_this_step)
 
-        if collect_history:
-            sev = model.graph.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY].cpu().numpy()
-            dur = model.graph.ndata[AgentPropertyKeys.ILLNESS_DURATION].cpu().numpy()
-            history["symptom_severity"].append(sev)
-            history["illness_duration"].append(dur)
-
     child_incidence = np.array(child_incidence)
     child_prevalence = np.array(child_prevalence)
 
-    if collect_history:
-        # Convert lists of (n_agents,) into arrays shape (n_agents, n_time)
-        history["symptom_severity"] = np.stack(history["symptom_severity"], axis=1)
-        history["illness_duration"] = np.stack(history["illness_duration"], axis=1)
-
-    return model, child_incidence, child_prevalence, history
+    return model, child_incidence, child_prevalence
 
 
 def child_metrics(model: SVEIRModel) -> dict:
@@ -441,157 +411,6 @@ def _plot_discrete_hist(ax, data, title, xlabel, ylabel):
     ax.set_ylabel(ylabel)
 
 
-def plot_child_histograms(metrics: dict):
-    """
-    Plot histograms for infections / severity / duration among children under 5.
-    Uses discrete bar plots for count variables.
-    """
-    n_u5 = metrics["n_u5"]
-    if n_u5 == 0:
-        st.info("No children under 5 in this simulation (check demographic parameters).")
-        return
-
-    rota_inf = metrics["rota_num_infections_u5"]
-    campy_inf = metrics["campy_num_infections_u5"]
-
-    st.subheader("Children under 5: Infection Distributions")
-
-    fig, axes = plt.subplots(1, 2, figsize=(10, 3.5))
-    axes = axes.flatten()
-
-    # 1. Rotavirus infections per child (discrete)
-    _plot_discrete_hist(
-        axes[0],
-        rota_inf,
-        "Rotavirus infections per child (u5)",
-        "Number of infections over simulation",
-        "Number of children",
-    )
-
-    # 2. Campylobacter infections per child (discrete)
-    _plot_discrete_hist(
-        axes[1],
-        campy_inf,
-        "Campylobacter infections per child (u5)",
-        "Number of infections over simulation",
-        "Number of children",
-    )
-
-    plt.tight_layout()
-    st.pyplot(fig)
-
-
-def compute_child_illness_history_from_memory(history: dict):
-    """
-    Summarize illness over all timesteps for children.
-
-    - total_sick_days: days with ILLNESS_DURATION > 0 (per child)
-    - max_severity: maximum SYMPTOM_SEVERITY over time (per child)
-    - episode_durations: list of durations (in days) of individual illness episodes
-    """
-    if history is None:
-        return None
-
-    sev = history["symptom_severity"]      # (n_agents, n_time)
-    dur = history["illness_duration"]      # (n_agents, n_time)
-    is_child = history["is_child"]
-    age = history["age"]
-
-    # In your model, all children are under 5, but we keep the filter explicit.
-    under5 = is_child.astype(bool) & (age < 60.0)
-    if not under5.any():
-        return None
-
-    sev_u5 = sev[under5, :]   # (n_children, T)
-    dur_u5 = dur[under5, :]   # (n_children, T)
-
-    # Sick day = any day with illness_duration > 0
-    total_sick_days = (dur_u5 > 0).sum(axis=1).astype(int)
-
-    # Max severity across the entire horizon (per child)
-    max_severity = sev_u5.max(axis=1)
-
-    # Episode durations (across all children)
-    sick_mask = dur_u5 > 0  # boolean array (n_children, T)
-    episode_durations = []
-
-    for row in sick_mask:
-        ext = np.concatenate([[False], row, [False]]).astype(int)
-        changes = np.diff(ext)
-        starts = np.where(changes == 1)[0]
-        ends = np.where(changes == -1)[0]
-        durations = ends - starts
-        episode_durations.extend(durations.tolist())
-
-    episode_durations = np.array(episode_durations, dtype=int)
-
-    return {
-        "total_sick_days": total_sick_days,
-        "max_severity": max_severity,
-        "episode_durations": episode_durations,
-    }
-
-
-def plot_child_illness_history(history_summary: dict):
-    """
-    Plot aggregates of illness history across all timesteps for children.
-
-    - Total sick days per child (distribution)
-    - Max severity per child (distribution)
-    - Episode durations (distribution over all episodes)
-    """
-    if history_summary is None:
-        st.info(
-            "No child illness history found. Enable "
-            "'Collect full child illness history in memory' before running."
-        )
-        return
-
-    total_sick_days = history_summary["total_sick_days"]
-    max_severity = history_summary["max_severity"]
-    episode_durations = history_summary.get("episode_durations", np.array([]))
-
-    st.subheader("Child illness history over entire simulation (children only)")
-
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-
-    # 1. Total sick days per child (discrete)
-    _plot_discrete_hist(
-        axes[0],
-        total_sick_days,
-        "Total sick days per child",
-        "Days sick during simulation",
-        "Number of children",
-    )
-
-    # 2. Max severity per child
-    max_severity_nonzero = max_severity[max_severity > 0]
-    if max_severity_nonzero.size > 0:
-        axes[1].hist(max_severity_nonzero, bins=20, range=(0, 1), edgecolor="black")
-        axes[1].set_title("Maximum symptom severity per child")
-        axes[1].set_xlabel("Severity (0–1)")
-        axes[1].set_ylabel("Number of children")
-    else:
-        axes[1].text(0.5, 0.5, "No symptomatic episodes recorded", ha="center", va="center")
-        axes[1].set_axis_off()
-
-    # 3. Episode durations (all episodes, discrete)
-    if episode_durations.size > 0:
-        _plot_discrete_hist(
-            axes[2],
-            episode_durations,
-            "Illness episode durations",
-            "Duration (days)",
-            "Number of episodes",
-        )
-    else:
-        axes[2].text(0.5, 0.5, "No illness episodes recorded", ha="center", va="center")
-        axes[2].set_axis_off()
-
-    plt.tight_layout()
-    st.pyplot(fig)
-
-
 # --------------------------------------------------------------------------------------
 # Streamlit UI
 # --------------------------------------------------------------------------------------
@@ -606,14 +425,13 @@ This interface wraps the existing SPRINGS-ABM model.
 **Workflow:**
 
 1. Adjust parameters in the sidebar (demography, pathogens, water, care-seeking, economics).
-2. Optionally enable *Data collection* to record full child illness history in memory (slower).
-3. Press **▶ Run simulation** to run a single full simulation.
-4. Inspect epidemic curves and child-level outcome summaries.
+2. Press **▶ Run simulation** to run a single full simulation.
+3. Inspect epidemic curves
 """
 )
 
 # Build config from UI
-config, collect_history = build_config_from_ui()
+config = build_config_from_ui()
 
 col_run, col_info = st.columns([1, 3])
 with col_run:
@@ -626,7 +444,7 @@ with col_info:
 
 if run_button:
     with st.spinner("Running simulation... this may take a moment."):
-        model, incidence, prevalence, history = run_simulation(config, collect_history)
+        model, incidence, prevalence = run_simulation(config)
 
     st.success("Simulation finished.")
 
@@ -698,30 +516,5 @@ if run_button:
         f"over {config.step_target} days (~{campy_ep_yr:.2f} episodes/child-year)."
     )
 
-    plot_child_histograms(metrics)
-
-    # Illness history across all timesteps (if collected)
-    if collect_history:
-        history_summary = compute_child_illness_history_from_memory(history)
-        plot_child_illness_history(history_summary)
-
-        if history_summary is not None:
-
-            max_sev_hist = history["symptom_severity"].max()
-            max_dur_hist = history["illness_duration"].max()
-
-            total_sick_days = history_summary["total_sick_days"]
-            max_severity = history_summary["max_severity"]
-            n_children_hist = len(total_sick_days)
-
-            mean_sick_days = total_sick_days.mean() if n_children_hist > 0 else 0.0
-            sick_days_per_year = mean_sick_days / sim_years if sim_years > 0 else 0.0
-            mean_max_sev = max_severity.mean() if n_children_hist > 0 else 0.0
-
-            st.markdown(
-                f"- **Mean total sick days per child (u5)**: {mean_sick_days:.1f} "
-                f"over {config.step_target} days (~{sick_days_per_year:.1f} days/child-year).\n"
-                f"- **Mean maximum severity per child (u5)**: {mean_max_sev:.2f} (0–1 scale)."
-            )
 else:
     st.info("Adjust parameters in the sidebar and press **▶ Run simulation** to start.")

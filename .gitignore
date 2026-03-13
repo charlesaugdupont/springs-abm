@@ -214,3 +214,4 @@ outputs/
 .DS_Store
 *.pdf
 *.png
+streamlit_outputs/
