@@ -100,12 +100,16 @@ You can override default simulation parameters using command-line arguments:
 
 ### Step 3: Plot the Results
 
-Finally, use the experiment name from Step 2 to generate the incidence curve from the simulation output.
+Finally, use the experiment name from Step 2 to generate relevant figures.
 
 
 - **Plot Epidemic Curves (Prevalence vs. Time)**
     ```bash
     python main.py plot-curves --experiment-name <EXPERIMENT_NAME_FROM_STEP_2>
+    ```
+- **Plot Care-Seeking Behavior**
+    ```bash
+    python main.py plot-care --experiment-name <EXPERIMENT_NAME_FROM_STEP_2>
     ```
 
 Plots are displayed on-screen and saved to the `outputs/<experiment_name>/simulation_results/` directory.
