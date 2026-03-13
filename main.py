@@ -56,13 +56,12 @@ def main():
     )
     parser.add_argument(
         'stage',
-        choices=['create-grid', 'simulate', 'plot-curves', 'plot-scatter', 'plot-care'],
+        choices=['create-grid', 'simulate', 'plot-curves', 'plot-care'],
         help=(
             "The stage of the experiment to run:\n"
             "  'create-grid'  - Generate the realistic base grid (run once).\n"
             "  'simulate'     - Run a single simulation and save results.\n"
             "  'plot-curves'  - Compare incidence curves.\n"
-            "  'plot-scatter' - Generate density scatter plots of final agent states.\n"
             "  'plot-care'    - Analyze parental care-seeking decisions.\n"
         )
     )

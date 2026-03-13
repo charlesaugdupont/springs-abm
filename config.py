@@ -24,7 +24,7 @@ class RotavirusConfig(PathogenConfig):
     infection_prob_std: float = 0.02
     recovery_rate: float = 0.2
     exposure_period: int = 2
-    vaccination_rate: float = 0.01
+    vaccination_rate: float = 0.005
     vaccine_efficacy: float = 0.55
 
 class CampylobacterConfig(PathogenConfig):
