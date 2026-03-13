@@ -7,8 +7,6 @@ import traceback
 
 from abm.simulation_analysis.plots import (
     plot_epidemic_curves,
-    plot_final_state_violins,
-    plot_final_state_scatter,
     plot_care_seeking_analysis
 )
 from abm.simulation_analysis.experiment_config import get_full_results_path, get_sim_runs_path
@@ -58,13 +56,12 @@ def main():
     )
     parser.add_argument(
         'stage',
-        choices=['create-grid', 'simulate', 'plot-curves', 'plot-violins', 'plot-scatter', 'plot-care'],
+        choices=['create-grid', 'simulate', 'plot-curves', 'plot-scatter', 'plot-care'],
         help=(
             "The stage of the experiment to run:\n"
             "  'create-grid'  - Generate the realistic base grid (run once).\n"
             "  'simulate'     - Run a single simulation and save results.\n"
             "  'plot-curves'  - Compare incidence curves.\n"
-            "  'plot-violins' - Compare final agent health and wealth.\n"
             "  'plot-scatter' - Generate density scatter plots of final agent states.\n"
             "  'plot-care'    - Analyze parental care-seeking decisions.\n"
         )
@@ -127,10 +124,6 @@ def main():
         print(f"Plotting results for experiment: {args.experiment_name}")
         if args.stage == "plot-curves":
             plot_epidemic_curves(args.experiment_name)
-        elif args.stage == "plot-violins":
-            plot_final_state_violins(args.experiment_name)
-        elif args.stage == 'plot-scatter':
-            plot_final_state_scatter(args.experiment_name)
         elif args.stage == 'plot-care':
             plot_care_seeking_analysis(args.experiment_name)
 

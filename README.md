@@ -1,12 +1,13 @@
 # SPRINGS-ABM: A Spatial Agent-Based Model of Diarrheal Disease Transmission
 
+*SPRINGS-ABM was developed as part of the SPRINGS project (Horizon Europe, grant No. 101057764). It models diarrheal disease transmission in Akuse, Ghana, to evaluate the health and economic impact of WASH, vaccination, and infrastructure interventions.*
+
 ## 1. Overview
 
 SPRINGS-ABM is a high-performance, agent-based model designed to simulate the spread of diarrheal pathogens within a realistic, spatially explicit community. The model captures the dynamics of household structures, agent movement, environmental factors, and behavioral economics to provide a detailed view of disease transmission.
 
 The simulation is set in a geographical context inspired by Akuse, Ghana, using real-world data from OpenStreetMap to generate the environment. The model is built with a modular architecture, making it extensible and maintainable for future research.
 
----
 
 ## 2. Core Features
 
@@ -22,14 +23,13 @@ The simulation is set in a geographical context inspired by Akuse, Ghana, using 
     *   Configuration is managed via **Pydantic**, ensuring type safety and clear parameter definition.
     *   Simulation output is handled by **Zarr** and **XArray**, allowing for efficient storage and analysis of large-scale, multi-dimensional data.
 
----
-
-## 3. Project Stucture
+## 3. Project Structure
 The project is organized into several key directories:
 
 ```
-└── charlesaugdupont-springs-abm/
 ├── README.md
+├── requirements.txt
+├── inspect_grid.py         # Script to inspect spatial layers
 ├── main.py                 # Main entry point for running the simulation workflow
 ├── config.py               # Pydantic-based configuration for all model parameters
 ├── pyproject.toml          # Project dependencies and metadata
@@ -39,12 +39,12 @@ The project is organized into several key directories:
 │ ├── factories/            # Factories for building agents and the environment
 │ ├── model/                # The main model class, stepping logic, and data collection
 │ ├── pathogens/            # Logic for pathogen-specific transmission and progression
+│ ├── simulation_analysis/  # Plotting and experiment management scripts
 │ ├── systems/              # Core behavioral and environmental processes (movement, etc.)
-│ └── simulation_analysis/  # Plotting and experiment management scripts
+│ └── utils/                # Utilities (RNG)
 ├── grids/                  # Output directory for generated spatial grids
 └── outputs/                # Output directory for simulation results and plots
 ```
----
 
 ## 4. Setup and Installation
 
@@ -52,7 +52,7 @@ The model requires Python >= 3.13.
 
 1.  **Clone the Repository:**
     ```bash
-    git clone <repository_url>
+    git clone https://github.com/charlesaugdupont/springs-abm.git
     cd charlesaugdupont-springs-abm
     ```
 
@@ -62,13 +62,10 @@ The model requires Python >= 3.13.
     source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
     ```
 
-3.  **Install Dependencies:**
-    The project uses `pyproject.toml` to manage dependencies. Install the project and all required libraries with pip:
+3.  **Install Dependencies**
     ```bash
-    pip install .
+    pip install -r requirements.txt
     ```
-
----
 
 ## 5. Simulation Workflow
 
@@ -103,26 +100,21 @@ You can override default simulation parameters using command-line arguments:
 
 ### Step 3: Plot the Results
 
-Finally, use the experiment name from Step 2 to generate plots from the simulation output.
+Finally, use the experiment name from Step 2 to generate the incidence curve from the simulation output.
 
 
-- **Plot Epidemic Curves (Prevalence vs. Time):**
+- **Plot Epidemic Curves (Prevalence vs. Time)**
     ```bash
     python main.py plot-curves --experiment-name <EXPERIMENT_NAME_FROM_STEP_2>
-    ```
-- **Plot Final Agent State Distributions (Violin Plots):**
-    ```bash
-    python main.py plot-violins --experiment-name <EXPERIMENT_NAME_FROM_STEP_2>
-    ```
-- **Plot Final Health vs. Wealth (2D Density Scatter Plot):**
-    ```bash
-    python main.py plot-scatter --experiment-name <EXPERIMENT_NAME_FROM_STEP_2>
     ```
 
 Plots are displayed on-screen and saved to the `outputs/<experiment_name>/simulation_results/` directory.
 
----
-
 ## 6. Configuration
 
 All model parameters are defined in `config.py` using Pydantic models. To alter the model's behavior (e.g., pathogen infectiousness, number of agents, agent persona ranges), you can modify the values in this file before running a simulation.
+
+## Contact
+Charles Dupont - c.a.dupont@uva.nl
+
+Computational Science Lab, University of Amsterdam
