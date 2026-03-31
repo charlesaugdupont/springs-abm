@@ -9,9 +9,7 @@ from abm.pathogens.pathogen import Pathogen
 from abm.systems.system import System
 
 def _get_location_groups(agent_state: AgentState) -> Tuple[torch.Tensor, int]:
-    """
-    Returns group indices for agents based on co-location.
-    """
+    """Returns group indices for agents based on co-location."""
     coords = torch.stack([agent_state.ndata[AgentPropertyKeys.X], agent_state.ndata[AgentPropertyKeys.Y]], dim=1)
     _, inverse_indices = torch.unique(coords, dim=0, return_inverse=True)
     num_locations = inverse_indices.max().item() + 1
@@ -23,10 +21,8 @@ def sveir_step(
     config: SVEIRConfig,
     grid: Any,
     pathogens: List[Pathogen],
-    systems: List[System]
+    systems: List[System],
 ) -> Tuple[Dict[str, int], Dict[str, int]]:
-
-    params = config.steering_parameters
 
     # Reset incidence for the new day
     for pathogen in pathogens:
@@ -62,15 +58,15 @@ def sveir_step(
 
     # --- 3. DAILY SYSTEMS ---
     # Order must match self.systems in initialize_model.py
-    systems[1].update(agent_state, timestep=timestep)  # ChildIllnessSystem — receives timestep
-    systems[2].update(agent_state)                     # CareSeekingSystem
-    systems[3].update(agent_state, grid=grid, pathogens=pathogens)  # HouseholdSystem
-    systems[4].update(agent_state, grid=grid, timestep=timestep)    # EnvironmentSystem
-    systems[5].update(agent_state)                     # EconomicSystem
+    systems[1].update(agent_state, timestep=timestep) # ChildIllnessSystem
+    systems[2].update(agent_state) # CareSeekingSystem
+    systems[3].update(agent_state, grid=grid, pathogens=pathogens) # HouseholdSystem
+    systems[4].update(agent_state, grid=grid, timestep=timestep) # EnvironmentSystem
+    systems[5].update(agent_state) # EconomicSystem
 
     # --- 4. GATHER STATISTICS ---
     new_cases_by_pathogen: Dict[str, int] = {}
-    compartment_counts = {}
+    compartment_counts: Dict[str, int] = {}
 
     for p in pathogens:
         new_cases_by_pathogen[p.name] = p.new_cases_this_step

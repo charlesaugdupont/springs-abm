@@ -46,9 +46,7 @@ class Pathogen(ABC):
     def _exposed_to_infectious(self, agent_state: AgentState):
         """
         Transitions agents from EXPOSED → INFECTIOUS once the exposure period
-        has elapsed. Note: num_infections is incremented when an agent first
-        becomes EXPOSED (in _apply_new_infections / _animal_to_human_transmission),
-        so that incidence counts and infection counts refer to the same event.
+        has elapsed.
         """
         from abm.constants import Compartment, AgentPropertyKeys
         status_key = AgentPropertyKeys.status(self.name)
@@ -58,7 +56,6 @@ class Pathogen(ABC):
             (agent_state.ndata[status_key] == Compartment.EXPOSED)
             & (agent_state.ndata[timer_key] >= self.config.exposure_period)
         )
-
         if torch.any(mask):
             agent_state.ndata[status_key][mask] = Compartment.INFECTIOUS
 
@@ -88,10 +85,9 @@ class Pathogen(ABC):
         """
         Calculates and applies new infections using vectorised scatter/gather ops.
 
-        When an agent is newly infected it is moved to EXPOSED and its
-        num_infections counter is incremented immediately (same timestep as
-        the incidence count), so that get_proportion_infected_at_least_once()
-        and the incidence time-series measure the same event.
+        Susceptibility is determined solely by prior-infection immunity.
+        Health is intentionally excluded here: its effect on outcomes is
+        captured through care-seeking and economic dynamics only.
         """
         from abm.constants import Compartment, AgentPropertyKeys
         if not torch.any(target_nodes_mask):
@@ -118,18 +114,13 @@ class Pathogen(ABC):
         if torch.sum(infection_pressure) == 0:
             return
 
-        # --- Calculate Individual Susceptibility ---
+        # --- Individual susceptibility: prior-infection immunity only ---
         num_prior_infections = agent_state.ndata[count_key][target_indices].float()
-        health = agent_state.ndata[AgentPropertyKeys.HEALTH][target_indices].float()
-
         immunity_factor = torch.exp(
             -self.global_params.prior_infection_immunity_factor * num_prior_infections
         )
-        health_factor = torch.exp(
-            -self.global_params.infection_reduction_factor_per_health_unit * health
-        )
 
-        final_prob = prob_multiplier * base_prob * immunity_factor * health_factor
+        final_prob = prob_multiplier * base_prob * immunity_factor
         final_prob.clamp_(0.0, 1.0)
 
         # P(infection) = 1 - (1 - p)^k
@@ -145,7 +136,5 @@ class Pathogen(ABC):
         if num_new > 0:
             agent_state.ndata[status_key][infected_nodes_indices] = Compartment.EXPOSED
             agent_state.ndata[AgentPropertyKeys.exposure_time(self.name)][infected_nodes_indices] = 0
-            # Increment infection count at exposure so it is consistent with
-            # the incidence counter (both count the moment of new infection).
             agent_state.ndata[count_key][infected_nodes_indices] += 1
             self.new_cases_this_step += num_new
