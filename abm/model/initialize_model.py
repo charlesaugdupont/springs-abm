@@ -6,12 +6,13 @@ from scipy.stats import qmc
 
 from config import SVEIRConfig, RotavirusConfig, CampylobacterConfig
 from abm.model.step import sveir_step
-from abm.constants import AgentPropertyKeys
+from abm.constants import AgentPropertyKeys, Compartment
 from abm.factories.agent_factory import AgentFactory
 from abm.factories.environment_factory import EnvironmentFactory
 from abm.pathogens.rotavirus import Rotavirus
 from abm.pathogens.campylobacter import Campylobacter
 from abm.state import AgentState
+
 
 class Model:
     """Abstract base class for a model."""
@@ -24,10 +25,12 @@ class Model:
 
     def save_model_parameters(self):
         """Saves the model's configuration to a YAML file."""
-        if self.config is None: return
+        if self.config is None:
+            return
         self.model_dir.mkdir(parents=True, exist_ok=True)
         cfg_filename = self.model_dir / f"{self._model_identifier}.yaml"
         self.config.to_yaml(cfg_filename)
+
 
 class SVEIRModel(Model):
     """The main class for the SVEIR agent-based model."""
@@ -36,7 +39,7 @@ class SVEIRModel(Model):
         self.steering_parameters = None
         self.graph = None
         self.infection_incidence = []
-        self.prevalence_history = []
+        self.u5_prevalence_history: dict[str, list[float]] = {}
         self.pathogens = []
         self.systems = []
         self.grid_environment = None
@@ -60,7 +63,9 @@ class SVEIRModel(Model):
     def initialize_model(self, verbose: bool = False):
         """Initializes the entire model state, including agents and environment."""
         if self.config is None:
-            raise RuntimeError("Model parameters have not been set. Call set_model_parameters() first.")
+            raise RuntimeError(
+                "Model parameters have not been set. Call set_model_parameters() first."
+            )
 
         torch.manual_seed(self.config.seed)
         self._load_agent_personas()
@@ -80,8 +85,12 @@ class SVEIRModel(Model):
             self.grid_environment = env_factory.grid_environment
         else:
             self.grid_environment = None
-            self.graph.ndata[AgentPropertyKeys.X] = torch.zeros(self.config.number_agents, device=self.config.device)
-            self.graph.ndata[AgentPropertyKeys.Y] = torch.zeros(self.config.number_agents, device=self.config.device)
+            self.graph.ndata[AgentPropertyKeys.X] = torch.zeros(
+                self.config.number_agents, device=self.config.device
+            )
+            self.graph.ndata[AgentPropertyKeys.Y] = torch.zeros(
+                self.config.number_agents, device=self.config.device
+            )
 
         # 3. Initialize Agent Properties
         agent_factory = AgentFactory(self.config, self.agent_personas)
@@ -110,7 +119,9 @@ class SVEIRModel(Model):
             if p_config.name in pathogen_map:
                 pathogen_class = pathogen_map[p_config.name]
                 typed_config = pathogen_config_map[p_config.name](**p_config.model_dump())
-                self.pathogens.append(pathogen_class(typed_config, self.steering_parameters, self.config.device))
+                self.pathogens.append(
+                    pathogen_class(typed_config, self.steering_parameters, self.config.device)
+                )
             else:
                 print(f"Warning: Pathogen '{p_config.name}' not implemented.")
 
@@ -148,14 +159,53 @@ class SVEIRModel(Model):
                 is_child[others] = (torch.rand(len(others)) < self.config.child_probability)
         return household_ids, is_child
 
+    # ------------------------------------------------------------------
+    # Under-5 prevalence tracking helpers
+    # ------------------------------------------------------------------
+
+    def _build_u5_mask(self) -> torch.Tensor:
+        """
+        Boolean mask for agents who are children under 5 years old.
+        Age is stored in months; under-5 means age < 60.
+        Computed once per run and reused across steps.
+        """
+        is_child = self.graph.ndata[AgentPropertyKeys.IS_CHILD]
+        age      = self.graph.ndata[AgentPropertyKeys.AGE]
+        return is_child & (age < 60.0)
+
+    def _record_u5_prevalence(self, u5_mask: torch.Tensor):
+        """
+        Appends the current fraction of under-5s who are infectious for each
+        pathogen to u5_prevalence_history.  Called at the end of every step.
+        """
+        n_u5 = u5_mask.sum().item()
+        if n_u5 == 0:
+            for p in self.pathogens:
+                self.u5_prevalence_history[p.name].append(0.0)
+            return
+
+        for p in self.pathogens:
+            status_key  = AgentPropertyKeys.status(p.name)
+            status_u5   = self.graph.ndata[status_key][u5_mask]
+            n_infectious = (status_u5 == Compartment.INFECTIOUS).sum().item()
+            self.u5_prevalence_history[p.name].append(n_infectious / n_u5)
+
+    # ------------------------------------------------------------------
+    # Run / step
+    # ------------------------------------------------------------------
+
     def run(self, verbose: bool = False):
         """Runs the simulation from the current step_count to the step_target."""
         self.infection_incidence.clear()
-        self.prevalence_history.clear()
-        while self.step_count < self.config.step_target:
-            self.step(verbose)
+        # Initialise per-pathogen under-5 prevalence lists
+        self.u5_prevalence_history = {p.name: [] for p in self.pathogens}
+        # Pre-compute the under-5 mask once — demographics don't change mid-run
+        u5_mask = self._build_u5_mask()
 
-    def step(self, verbose: bool = False):
+        while self.step_count < self.config.step_target:
+            self.step(verbose, u5_mask=u5_mask)
+
+    def step(self, verbose: bool = False, u5_mask: torch.Tensor | None = None):
         """Executes one full timestep of the simulation."""
         if verbose:
             print(f'Performing step {self.step_count} of {self.config.step_target}')
@@ -164,27 +214,43 @@ class SVEIRModel(Model):
                 self.graph, self.step_count, self.config,
                 self.grid_environment, self.pathogens, self.systems
             )
-            total_new_cases = sum(new_cases_by_pathogen.values())
+            total_new_cases  = sum(new_cases_by_pathogen.values())
             total_prevalence = sum(v for k, v in compartment_counts.items() if k.endswith("_I"))
             self.infection_incidence.append(total_new_cases)
-            self.prevalence_history.append(total_prevalence)
+
+            # Record under-5 prevalence if a mask was supplied (i.e. called from run())
+            if u5_mask is not None:
+                self._record_u5_prevalence(u5_mask)
+
         except Exception as e:
             raise RuntimeError(f'Execution of step {self.step_count} failed.') from e
         self.step_count += 1
 
-    # --- Result-gathering methods ---
+    # ------------------------------------------------------------------
+    # Result-gathering methods
+    # ------------------------------------------------------------------
 
     def get_total_infections(self) -> int:
-        return sum(torch.sum(self.graph.ndata[AgentPropertyKeys.num_infections(p.name)]).item() for p in self.pathogens)
+        return sum(
+            torch.sum(self.graph.ndata[AgentPropertyKeys.num_infections(p.name)]).item()
+            for p in self.pathogens
+        )
 
     def get_proportion_infected_at_least_once(self) -> float:
-        if not self.pathogens: return 0.0
-        infected_masks = [(self.graph.ndata[AgentPropertyKeys.num_infections(p.name)] > 0) for p in self.pathogens]
+        if not self.pathogens:
+            return 0.0
+        infected_masks = [
+            (self.graph.ndata[AgentPropertyKeys.num_infections(p.name)] > 0)
+            for p in self.pathogens
+        ]
         combined_mask = torch.stack(infected_masks).any(dim=0)
         return torch.sum(combined_mask).item() / self.graph.num_nodes()
 
     def get_time_series_data(self) -> dict:
-        return {"incidence": self.infection_incidence, "prevalence": self.prevalence_history}
+        return {
+            "incidence": self.infection_incidence,
+            "u5_prevalence": self.u5_prevalence_history,
+        }
 
     def get_child_episode_log(self) -> list[dict]:
         """
@@ -193,7 +259,6 @@ class SVEIRModel(Model):
         Each entry is a dict with keys:
             agent_idx, pathogen, initial_severity, initial_duration, timestep
         """
-        # systems[1] is always ChildIllnessSystem (see _initialize_pathogens_and_systems)
         from abm.systems.child_illness import ChildIllnessSystem
         for system in self.systems:
             if isinstance(system, ChildIllnessSystem):
