@@ -47,7 +47,6 @@ class SVEIRModel(Model):
         self.config = SVEIRConfig.from_dict(kwargs)
         self.steering_parameters = self.config.steering_parameters
         self.model_dir.mkdir(parents=True, exist_ok=True)
-        self.steering_parameters.npath = str(self.model_dir / Path(self.steering_parameters.npath).name)
         self.save_model_parameters()
 
     def _load_agent_personas(self):

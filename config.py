@@ -17,18 +17,18 @@ CPT_ETA: float = 0.88 # loss sensitivity exponent in the value function
 class PathogenConfig(BaseModel):
     """Base class for pathogen-specific parameters."""
     name: str
-    initial_exposed_proportion: float = 0.03
+    initial_exposed_proportion: float = 0.01
     recovery_rate: float
     exposure_period: int
 
 class RotavirusConfig(PathogenConfig):
     """Parameters specific to Rotavirus."""
     name: str = "rota"
-    infection_prob_mean: float = 0.20
-    infection_prob_std: float = 0.02
+    infection_prob_mean: float = 0.015
+    infection_prob_std: float = 0.005
     recovery_rate: float = 0.2
     exposure_period: int = 2
-    vaccination_rate: float = 0.005
+    vaccination_rate: float = 0.0
     vaccine_efficacy: float = 0.55
 
 class CampylobacterConfig(PathogenConfig):
@@ -41,7 +41,7 @@ class CampylobacterConfig(PathogenConfig):
     recovery_rate: float = 0.15 # ~1 week duration
     exposure_period: int = 3
     # Environmental
-    human_animal_interaction_rate: float = 2.0
+    human_animal_interaction_rate: float = 0.25
     # Fecal-oral (household) route
     fecal_oral_prob: float = 0.03 # per-contact probability within household
 
@@ -86,7 +86,7 @@ class SteeringParamsSVEIR(BaseModel):
 
     # Water Parameters (Shared Reservoir)
     human_to_water_infection_prob: float = 0.0001
-    water_to_human_infection_prob: float = 0.05
+    water_to_human_infection_prob: float = 0.01
     water_recovery_prob: float = 0.2
     shock_daily_prob: float = 1/30
 

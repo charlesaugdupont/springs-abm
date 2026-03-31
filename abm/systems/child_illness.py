@@ -18,11 +18,11 @@ class ChildIllnessSystem(System):
     appends a record to ``self.episode_log``:
 
         {
-            'agent_idx':       int,
-            'pathogen':        str,
+            'agent_idx':        int,
+            'pathogen':         str,
             'initial_severity': float,
             'initial_duration': int,
-            'timestep':        int,   # day the episode started
+            'timestep':         int,   # day the episode started
         }
 
     The log is intentionally kept as a plain list of dicts so it is trivially
@@ -33,7 +33,7 @@ class ChildIllnessSystem(System):
     def __init__(self, config):
         super().__init__(config)
         self.episode_log: list[dict] = []
-        self._current_timestep: int = 0  # updated each call to update()
+        self._current_timestep: int = 0
 
     def reset_episode_log(self):
         """Clears the episode log (call between independent simulation runs)."""
@@ -47,13 +47,11 @@ class ChildIllnessSystem(System):
         """
         Updates illness states. Must be called *after* pathogen progression so
         that compartment statuses reflect the current day's transitions.
-
-        Accepts an optional ``timestep`` kwarg so episode records carry the
-        correct simulation day.
         """
         self._current_timestep = kwargs.get("timestep", self._current_timestep + 1)
 
-        is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
+        illness_cfg = self.config.illness_mechanics
+        is_child    = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
 
         # ------------------------------------------------------------------
         # 1. Initialise illness for children who just became infectious
@@ -71,26 +69,25 @@ class ChildIllnessSystem(System):
 
         for p_config in self.config.pathogens:
             pathogen_name = p_config.name
-            status_key = AgentPropertyKeys.status(pathogen_name)
+            status_key    = AgentPropertyKeys.status(pathogen_name)
             p_mask = (
                 newly_symptomatic_children
                 & (agent_state.ndata[status_key] == Compartment.INFECTIOUS)
             )
             if torch.any(p_mask):
-                self._initialize_illness(agent_state, p_mask, pathogen_name)
+                self._initialize_illness(agent_state, p_mask, pathogen_name, illness_cfg)
 
         # ------------------------------------------------------------------
         # 2. Progress existing illnesses and apply daily health impact
         # ------------------------------------------------------------------
         duration = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION]
-        is_sick = duration > 0
+        is_sick  = duration > 0
 
         if torch.any(is_sick):
             severity = agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][is_sick]
-            health_shock = (
-                severity
-                * self.config.steering_parameters.severity_health_impact_factor
-            )
+            health_shock = severity * illness_cfg.severity_health_impact_factor \
+                if hasattr(illness_cfg, "severity_health_impact_factor") \
+                else severity * self.config.steering_parameters.severity_health_impact_factor
             current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][is_sick]
             agent_state.ndata[AgentPropertyKeys.HEALTH][is_sick] = torch.clamp(
                 current_health - health_shock, min=0.0
@@ -104,7 +101,7 @@ class ChildIllnessSystem(System):
         # ------------------------------------------------------------------
         # 3. Enforce invariant: if duration == 0, severity must be 0
         # ------------------------------------------------------------------
-        duration = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION]
+        duration    = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION]
         illness_ended = duration == 0
         agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][illness_ended] = 0.0
 
@@ -114,9 +111,9 @@ class ChildIllnessSystem(System):
         is_not_sick = illness_ended
         if torch.any(is_not_sick):
             current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][is_not_sick]
-            wealth = agent_state.ndata[AgentPropertyKeys.WEALTH][is_not_sick]
+            wealth         = agent_state.ndata[AgentPropertyKeys.WEALTH][is_not_sick]
 
-            base_recovery = self.config.steering_parameters.daily_health_recovery_rate
+            base_recovery    = self.config.steering_parameters.daily_health_recovery_rate
             wealth_multiplier = 1.0 + wealth
 
             new_health = current_health + (base_recovery * wealth_multiplier)
@@ -129,7 +126,11 @@ class ChildIllnessSystem(System):
     # ------------------------------------------------------------------
 
     def _initialize_illness(
-        self, agent_state: AgentState, mask: torch.Tensor, pathogen_name: str
+        self,
+        agent_state: AgentState,
+        mask: torch.Tensor,
+        pathogen_name: str,
+        illness_cfg,
     ):
         """
         Calculates and sets the initial severity and duration for newly ill
@@ -143,39 +144,35 @@ class ChildIllnessSystem(System):
             )
 
         new_severity = calculate_illness_severity(
-            pathogen_name=pathogen_name,
-            is_child=agent_state.ndata[AgentPropertyKeys.IS_CHILD][mask],
-            age=agent_state.ndata[AgentPropertyKeys.AGE][mask],
-            wealth=agent_state.ndata[AgentPropertyKeys.WEALTH][mask],
-            vaccine_status=vaccine_status_tensor,
-            num_infections=agent_state.ndata[
+            pathogen_name  = pathogen_name,
+            is_child       = agent_state.ndata[AgentPropertyKeys.IS_CHILD][mask],
+            age            = agent_state.ndata[AgentPropertyKeys.AGE][mask],
+            vaccine_status = vaccine_status_tensor,
+            num_infections = agent_state.ndata[
                 AgentPropertyKeys.num_infections(pathogen_name)
             ][mask],
+            cfg            = illness_cfg,
         )
-        new_duration = calculate_illness_duration(new_severity)
+        new_duration = calculate_illness_duration(new_severity, illness_cfg)
 
         current_severity = agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][mask]
 
         # Only update agents for whom the new episode is more severe
-        update_decision_mask = new_severity > current_severity
-        subset_indices = mask.nonzero(as_tuple=True)[0]
-        final_update_indices = subset_indices[update_decision_mask]
+        update_mask     = new_severity > current_severity
+        subset_indices  = mask.nonzero(as_tuple=True)[0]
+        final_indices   = subset_indices[update_mask]
 
-        if len(final_update_indices) == 0:
+        if len(final_indices) == 0:
             return
 
-        updated_severities = new_severity[update_decision_mask]
-        updated_durations  = new_duration[update_decision_mask]
+        updated_severities = new_severity[update_mask]
+        updated_durations  = new_duration[update_mask]
 
-        agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][final_update_indices] = (
-            updated_severities
-        )
-        agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][final_update_indices] = (
-            updated_durations
-        )
+        agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][final_indices] = updated_severities
+        agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][final_indices] = updated_durations
 
         # --- Episode logging ---
-        for i, agent_idx in enumerate(final_update_indices):
+        for i, agent_idx in enumerate(final_indices):
             self.episode_log.append({
                 'agent_idx':        agent_idx.item(),
                 'pathogen':         pathogen_name,

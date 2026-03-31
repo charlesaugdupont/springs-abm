@@ -8,18 +8,21 @@ Two independent routes operate each day:
    Agents are exposed to a dose derived from the local animal-density layer.
    Infection probability follows the exact Beta-Poisson dose-response model.
    This route fires during both the Day Phase (activity location) and the
-   Night Phase (home location), so agents are exposed to whatever animal
-   density exists at their current grid cell.
+   Night Phase (home location).
 
 2. Fecal-oral (household) route
-   Infectious agents contaminate their household environment. Susceptible
+   Infectious agents contaminate their household environment.  Susceptible
    household members are exposed with a fixed per-contact probability
-   `fecal_oral_prob`. This route runs once per day (after agents have
-   returned home) and represents the dominant within-household pathway
-   (contaminated hands, shared food/water, inadequate sanitation).
+   `fecal_oral_prob`.  This route runs once per day during the Night Phase.
 
-An agent that is already newly exposed during the Day Phase zoonotic step is
-excluded from further exposure that day to avoid double-counting incidence.
+Route tracking
+--------------
+Each new infection is attributed to exactly one route.  The counters
+``cases_zoonotic`` and ``cases_fecal_oral`` are incremented accordingly and
+are reset at the start of each day alongside ``new_cases_this_step``.
+Over the full simulation, ``total_zoonotic`` and ``total_fecal_oral``
+accumulate the lifetime totals, which are used to compute the zoonotic
+fraction at the end of a run.
 """
 
 from typing import Any
@@ -43,13 +46,28 @@ class Campylobacter(Pathogen):
     ):
         super().__init__(config, global_params, device)
         self.config: CampylobacterConfig = config
-        # Tracks agents newly exposed *within the current day* so that the
-        # two transmission phases do not double-count the same infection event.
+
+        # Per-step route counters (reset each day)
+        self.cases_zoonotic: int = 0
+        self.cases_fecal_oral: int = 0
+
+        # Lifetime route totals (accumulate across all steps)
+        self.total_zoonotic: int = 0
+        self.total_fecal_oral: int = 0
+
+        # Tracks agents newly exposed within the current day to prevent
+        # double-counting across the two transmission phases.
         self._newly_exposed_this_day: torch.Tensor | None = None
 
     # ------------------------------------------------------------------
     # Pathogen interface
     # ------------------------------------------------------------------
+
+    def reset_incidence(self):
+        """Reset per-step counters. Called once at the start of each day."""
+        super().reset_incidence()
+        self.cases_zoonotic = 0
+        self.cases_fecal_oral = 0
 
     def step_progression(self, agent_state: AgentState):
         """Disease-state progression — called once per day."""
@@ -70,21 +88,24 @@ class Campylobacter(Pathogen):
         """
         Transmission — called twice per day (Day Phase and Night Phase).
 
-        The zoonotic route uses the agent's current grid cell each time.
-        The fecal-oral household route is appended only during the Night
-        Phase (when all agents are at home), identified by checking whether
-        all agents share their home coordinates. We use a simple flag
-        approach: the household route fires when ``_newly_exposed_this_day``
-        already exists but agents are back at home (Night Phase).
+        The zoonotic route fires on both calls.
+        The fecal-oral route fires only during the Night Phase.
         """
         self._zoonotic_transmission(agent_state, grid)
-        # Fecal-oral route: run once per day, during the Night Phase.
-        # We detect the Night Phase by checking whether this is the second
-        # call (i.e. _newly_exposed_this_day is already populated).
-        # A cleaner alternative would be an explicit phase flag passed in
-        # via kwargs, but this avoids changing the Pathogen interface.
         if self._is_night_phase(agent_state):
             self._fecal_oral_transmission(agent_state)
+
+    @property
+    def zoonotic_fraction(self) -> float | None:
+        """
+        Fraction of all campylobacter infections attributable to the zoonotic
+        route over the lifetime of the simulation.  Returns None if no
+        infections have occurred yet.
+        """
+        total = self.total_zoonotic + self.total_fecal_oral
+        if total == 0:
+            return None
+        return self.total_zoonotic / total
 
     # ------------------------------------------------------------------
     # Private: zoonotic route
@@ -131,7 +152,6 @@ class Campylobacter(Pathogen):
             torch.from_numpy(prob_inf_np).to(self.device).float()
         )
 
-        # Acquired immunity
         num_prior = agent_state.ndata[count_key][susceptible_mask].float()
         immunity_factor = torch.exp(
             -self.global_params.prior_infection_immunity_factor * num_prior
@@ -141,12 +161,14 @@ class Campylobacter(Pathogen):
         rand_vals = torch.rand(agent_state.num_nodes(), device=self.device)
         new_infections = (rand_vals < prob_infection) & susceptible_mask
 
-        num_new = torch.sum(new_infections).item()
+        num_new = int(torch.sum(new_infections).item())
         if num_new > 0:
             agent_state.ndata[status_key][new_infections] = Compartment.EXPOSED
             agent_state.ndata[AgentPropertyKeys.exposure_time(self.name)][new_infections] = 0
             agent_state.ndata[count_key][new_infections] += 1
             self.new_cases_this_step += num_new
+            self.cases_zoonotic += num_new
+            self.total_zoonotic += num_new
             self._newly_exposed_this_day[new_infections] = True
 
     # ------------------------------------------------------------------
@@ -160,26 +182,20 @@ class Campylobacter(Pathogen):
         For each household containing at least one infectious agent, every
         susceptible household member faces a Bernoulli trial with probability
         `fecal_oral_prob`. Agents already exposed today are excluded.
-
-        This is intentionally simple: it does not scale with the number of
-        infectious members (one infectious person is sufficient to contaminate
-        a shared latrine / food preparation area).
         """
         if self._newly_exposed_this_day is None:
             return
 
         status_key = AgentPropertyKeys.status(self.name)
-        count_key = AgentPropertyKeys.num_infections(self.name)
+        count_key  = AgentPropertyKeys.num_infections(self.name)
         hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
 
         is_infectious = agent_state.ndata[status_key] == Compartment.INFECTIOUS
         if not torch.any(is_infectious):
             return
 
-        # Households with at least one infectious member
         infectious_hh = torch.unique(hh_ids[is_infectious])
 
-        # Susceptible agents in those households who have not been exposed today
         is_susceptible = (
             (agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE)
             & ~self._newly_exposed_this_day
@@ -192,7 +208,6 @@ class Campylobacter(Pathogen):
 
         target_indices = target_mask.nonzero(as_tuple=True)[0]
 
-        # Acquired immunity
         num_prior = agent_state.ndata[count_key][target_indices].float()
         immunity_factor = torch.exp(
             -self.global_params.prior_infection_immunity_factor * num_prior
@@ -209,6 +224,8 @@ class Campylobacter(Pathogen):
             agent_state.ndata[AgentPropertyKeys.exposure_time(self.name)][infected_indices] = 0
             agent_state.ndata[count_key][infected_indices] += 1
             self.new_cases_this_step += num_new
+            self.cases_fecal_oral    += num_new
+            self.total_fecal_oral    += num_new
             self._newly_exposed_this_day[infected_indices] = True
 
     # ------------------------------------------------------------------
@@ -216,14 +233,8 @@ class Campylobacter(Pathogen):
     # ------------------------------------------------------------------
 
     def _is_night_phase(self, agent_state: AgentState) -> bool:
-        """
-        Returns True when agents are in the Night Phase (all at home).
-
-        We compare current (x, y) against home locations. If every agent's
-        current position matches their home position, we are in the Night
-        Phase. This is O(N) but runs only twice per step.
-        """
-        home = agent_state.ndata[AgentPropertyKeys.HOME_LOCATION]
+        """Returns True when all agents are at their home location."""
+        home  = agent_state.ndata[AgentPropertyKeys.HOME_LOCATION]
         cur_y = agent_state.ndata[AgentPropertyKeys.Y]
         cur_x = agent_state.ndata[AgentPropertyKeys.X]
         at_home = (cur_y == home[:, 0]) & (cur_x == home[:, 1])
