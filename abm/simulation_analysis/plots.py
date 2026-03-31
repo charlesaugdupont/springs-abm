@@ -21,7 +21,7 @@ def _load_and_aggregate_results(experiment_name: str) -> Dict | None:
         raw_results = pickle.load(f)
 
     aggregated = {
-        'prevalence': [], 'health': [], 'wealth': [], 'initial_health': [],
+        'u5_prevalence': [], 'health': [], 'wealth': [], 'initial_health': [],
         'initial_wealth': [], 'care_seeking_count': [], 'is_parent': [],
         'is_child': [], 'age': [],
         'alpha': [], 'gamma': [], 'lambda': [],
@@ -31,7 +31,7 @@ def _load_and_aggregate_results(experiment_name: str) -> Dict | None:
         if res.get('proportion_infected', -1) < 0:
             continue
         if 'prevalence_curve' in res:
-            aggregated['prevalence'].append(res['prevalence_curve'])
+            aggregated['u5_prevalence'].append(res['prevalence_curve'])
         if 'final_health' in res:
             aggregated['health'].extend(res['final_health'])
             aggregated['wealth'].extend(res['final_wealth'])
@@ -62,25 +62,22 @@ def plot_epidemic_curves(experiment_name: str):
     """Plots the average epidemic prevalence curve across all repetitions."""
     print(f"Generating epidemic curves for {experiment_name}...")
     aggregated_results = _load_and_aggregate_results(experiment_name)
-    if not aggregated_results or not aggregated_results['prevalence']:
+    if not aggregated_results or not aggregated_results['u5_prevalence']:
         print("No valid results found to plot.")
         return
 
     plt.style.use('seaborn-v0_8-whitegrid')
     fig, ax = plt.subplots(figsize=(12, 7))
 
-    curves = aggregated_results['prevalence']
-    max_len = max(len(c) for c in curves) if curves else 0
-    padded = [np.pad(c, (0, max_len - len(c)), 'constant') for c in curves]
-    mean_curve, std_curve = np.mean(padded, axis=0), np.std(padded, axis=0)
-    timesteps = np.arange(len(mean_curve))
+    rota = aggregated_results['u5_prevalence'][0]["rota"]
+    campy = aggregated_results['u5_prevalence'][0]["campy"]
 
-    line, = ax.plot(timesteps, mean_curve, label=f"Mean of {len(curves)} repetitions", lw=2)
-    ax.fill_between(timesteps, mean_curve - std_curve, mean_curve + std_curve, alpha=0.15, color=line.get_color())
+    line1, = ax.plot(np.arange(len(rota)), rota, label=f"Rotavirus", lw=2, color="dodgerblue")
+    line2, = ax.plot(np.arange(len(campy)), campy, label=f"Campylobacter", lw=2, color="crimson")
 
-    ax.set_title("Epidemic Progression (Prevalence)", fontsize=16, pad=15)
+    ax.set_title("Epidemic Progression (<5 Prevalence)", fontsize=16, pad=15)
     ax.set_xlabel("Time (Days)", fontsize=12)
-    ax.set_ylabel("Number of Currently Infected Agents", fontsize=12)
+    ax.set_ylabel("Proportion of <5 Infected", fontsize=12)
     ax.legend(title="Scenario", fontsize=10)
     ax.grid(True, which='both', linestyle='--', linewidth=0.5)
     ax.set_ylim(bottom=0)

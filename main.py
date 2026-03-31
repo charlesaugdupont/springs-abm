@@ -35,7 +35,7 @@ def run_single_simulation(config, experiment_name: str) -> dict:
         return {
             'run_name': run_name,
             'proportion_infected': model.get_proportion_infected_at_least_once(),
-            'prevalence_curve': time_series['prevalence'],
+            'prevalence_curve': time_series['u5_prevalence'],
             'final_health': final_states['health'],
             'final_wealth': final_states['wealth'],
             'initial_health': final_states['initial_health'],
