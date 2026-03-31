@@ -24,7 +24,7 @@ class PathogenConfig(BaseModel):
 class RotavirusConfig(PathogenConfig):
     """Parameters specific to Rotavirus."""
     name: str = "rota"
-    infection_prob_mean: float = 0.015
+    infection_prob_mean: float = 0.02
     infection_prob_std: float = 0.005
     recovery_rate: float = 0.2
     exposure_period: int = 2

@@ -81,38 +81,25 @@ TARGETS = {
 SWEEP_PARAMS = {
     # --- Rotavirus ---
     "pathogens[rota].infection_prob_mean": [
-        0.001, 0.005, 0.01, 0.015, 0.02, 0.025, 0.03,
+        0.005, 0.01, 0.015, 0.02, 0.025
     ],
     "steering_parameters.water_to_human_infection_prob": [
-        0.0025, 0.005, 0.01, 0.02, 0.05, 0.10,
-    ],
-    "steering_parameters.human_to_water_infection_prob": [
-        0.00001, 0.0001, 0.001, 0.005, 0.01,
+        0.001, 0.005, 0.01, 0.02, 0.03
     ],
     # --- Campylobacter ---
     "pathogens[campy].human_animal_interaction_rate": [
-        0.01, 0.1, 0.2, 0.3, 0.4, 0.5,
+        0.15, 0.2, 0.25, 0.3, 0.35
     ],
     "pathogens[campy].fecal_oral_prob": [
-        0.005, 0.01, 0.02, 0.03, 0.05, 0.08, 0.12,
-    ],
-    # --- Shared ---
-    "steering_parameters.prior_infection_immunity_factor": [
-        0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0,
-    ],
-    "steering_parameters.shock_daily_prob": [
-        1/60, 1/30, 1/15, 1/7,
+        0.01, 0.02, 0.03, 0.04, 0.05, 0.06
     ],
 }
 
 PARAM_LABELS = {
     "pathogens[rota].infection_prob_mean":                  "Rota H2H infection prob",
     "steering_parameters.water_to_human_infection_prob":    "Water → human infection prob",
-    "steering_parameters.human_to_water_infection_prob":    "Human → water infection prob",
     "pathogens[campy].human_animal_interaction_rate":       "Campy animal interaction rate",
     "pathogens[campy].fecal_oral_prob":                     "Campy fecal-oral prob",
-    "steering_parameters.prior_infection_immunity_factor":  "Prior-infection immunity factor",
-    "steering_parameters.shock_daily_prob":                 "Daily water shock prob",
 }
 
 METRIC_LABELS = {
@@ -120,9 +107,9 @@ METRIC_LABELS = {
     "campy_episodes_per_child_year": "Campy episodes / child-year (u5)",
     "rota_peak_prevalence":          "Rota peak prevalence (u5 fraction)",
     "campy_peak_prevalence":         "Campy peak prevalence (u5 fraction)",
-    "rota_peak_day":                 "Rota peak prevalence day",
-    "campy_peak_day":                "Campy peak prevalence day",
     "campy_zoonotic_fraction":       "Campy zoonotic fraction",
+    "rota_peak_day": "Rota peak day",
+    "campy_peak_day": "Campy peak day"
 }
 
 # ---------------------------------------------------------------------------
@@ -431,72 +418,6 @@ def plot_sensitivity(args):
         print(f"Saved: {out_file}")
         plt.show()
 
-    _plot_tornado(df, params_present, output_dir)
-
-
-def _plot_tornado(df: pd.DataFrame, params_present, output_dir: str):
-    all_metrics = [m for g in PLOT_GROUPS for m in g["metrics"]]
-    n_metrics   = len(all_metrics)
-
-    fig, axes = plt.subplots(
-        1, n_metrics,
-        figsize=(4.5 * n_metrics, 0.55 * len(params_present) + 2.0),
-        squeeze=False,
-    )
-    fig.suptitle("Tornado Plot — Parameter Influence on Each Metric", fontsize=13)
-
-    for col_idx, metric in enumerate(all_metrics):
-        ax       = axes[0, col_idx]
-        mean_col = f"{metric}_mean"
-
-        influences = []
-        for param_path in params_present:
-            sub  = df[df["param"] == param_path]
-            if mean_col not in sub.columns:
-                continue
-            vals = sub[mean_col].dropna()
-            if len(vals) < 2:
-                continue
-            influences.append((PARAM_LABELS.get(param_path, param_path), vals.max() - vals.min()))
-
-        if not influences:
-            ax.set_visible(False)
-            continue
-
-        influences.sort(key=lambda x: x[1])
-        labels, values = zip(*influences)
-        bars = ax.barh(labels, values, color="#2196F3", edgecolor="white", height=0.6)
-
-        if metric in TARGETS:
-            lo, hi = TARGETS[metric]
-            for bar, (plabel, _) in zip(bars, influences):
-                matching = [p for p in params_present if PARAM_LABELS.get(p, p) == plabel]
-                if not matching:
-                    continue
-                sub = df[df["param"] == matching[0]]
-                if mean_col in sub.columns:
-                    if sub[mean_col].min() <= hi and sub[mean_col].max() >= lo:
-                        bar.set_color("#4CAF50")
-
-        ax.set_title(METRIC_LABELS.get(metric, metric), fontsize=9)
-        ax.set_xlabel("Max − Min (mean metric)", fontsize=8)
-        ax.tick_params(axis="y", labelsize=7)
-        ax.tick_params(axis="x", labelsize=7)
-
-    blue_patch  = mpatches.Patch(color="#2196F3", label="Parameter influence")
-    green_patch = mpatches.Patch(color="#4CAF50", label="Sweep range overlaps target")
-    fig.legend(
-        handles=[blue_patch, green_patch],
-        loc="lower center", ncol=2, fontsize=9,
-        bbox_to_anchor=(0.5, -0.04),
-    )
-
-    plt.tight_layout()
-    out_file = os.path.join(output_dir, "sensitivity_tornado.png")
-    plt.savefig(out_file, bbox_inches="tight", dpi=180)
-    print(f"Saved: {out_file}")
-    plt.show()
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -515,9 +436,9 @@ def main():
         ),
     )
     parser.add_argument("-g", "--grid-id", type=str,  help="Grid ID (required for 'sensitivity')")
-    parser.add_argument("-r", "--reps",    type=int,  default=5,    help="Replicates per parameter value (default: 5)")
+    parser.add_argument("-r", "--reps",    type=int,  default=10,    help="Replicates per parameter value (default: 5)")
     parser.add_argument("-s", "--steps",   type=int,  default=200,  help="Simulation steps / days (default: 200)")
-    parser.add_argument("-n", "--agents",  type=int,  default=3000, help="Number of agents (default: 3000)")
+    parser.add_argument("-n", "--agents",  type=int,  default=4000, help="Number of agents (default: 3000)")
     parser.add_argument("-o", "--output",  type=str,  default=DEFAULT_OUTPUT_DIR,
                         help=f"Output directory (default: {DEFAULT_OUTPUT_DIR})")
     args = parser.parse_args()
