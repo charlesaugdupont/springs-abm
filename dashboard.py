@@ -73,7 +73,6 @@ def build_config_from_ui():
     cfg.spatial = True   # use the spatial grid
 
     # We disable the built-in Zarr data collection in the model
-    ste.data_collection_period = 0
     ste.ndata = None
 
     # --- Demography & global infection modifiers ---

@@ -357,7 +357,7 @@ def plot_child_illness_analysis(experiment_name: str):
                 ax.plot(x_line, np.polyval(z, x_line),
                         color=pathogen_palette.get(p), linewidth=2)
     ax.set_title('Severity vs. Duration per Episode', fontsize=14)
-    ax.set_xlabel('Initial Severity (0–1)', fontsize=12)
+    ax.set_xlabel('Initial Severity (0-1)', fontsize=12)
     ax.set_ylabel('Initial Duration (Days)', fontsize=12)
     ax.legend(title='Pathogen', fontsize=10)
     ax.set_xlim(0, 1)

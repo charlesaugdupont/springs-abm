@@ -4,7 +4,6 @@ import torch
 
 from abm.state import AgentState
 from config import SVEIRConfig
-from abm.model.data_collection import data_collection
 from abm.constants import Compartment, AgentPropertyKeys
 from abm.pathogens.pathogen import Pathogen
 from abm.systems.system import System
@@ -69,12 +68,7 @@ def sveir_step(
     systems[4].update(agent_state, grid=grid, timestep=timestep)    # EnvironmentSystem
     systems[5].update(agent_state)                     # EconomicSystem
 
-    # --- 4. DATA COLLECTION ---
-    if (params.data_collection_period > 0 and (timestep % params.data_collection_period == 0)) or \
-       (params.data_collection_list and (timestep in params.data_collection_list)):
-        data_collection(agent_state, timestep=timestep + 1, npath=params.npath, ndata=params.ndata, mode=params.mode)
-
-    # --- 5. GATHER STATISTICS ---
+    # --- 4. GATHER STATISTICS ---
     new_cases_by_pathogen: Dict[str, int] = {}
     compartment_counts = {}
 
