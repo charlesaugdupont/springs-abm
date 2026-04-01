@@ -1,10 +1,20 @@
 # abm/factories/agent_factory.py
 from typing import Dict
 import torch
+from scipy.stats import truncnorm
 
 from abm.state import AgentState
 from abm.constants import Activity, AgentPropertyKeys, Compartment, GridLayer
 from config import SVEIRConfig
+
+
+def _truncated_normal(mean: float, std: float, low: float, high: float, size: int) -> torch.Tensor:
+    """Sample from a truncated normal distribution, returned as a float32 tensor."""
+    a = (low  - mean) / std
+    b = (high - mean) / std
+    samples = truncnorm.rvs(a, b, loc=mean, scale=std, size=size)
+    return torch.from_numpy(samples).float()
+
 
 class AgentFactory:
     """A class to handle the initialization of agent properties."""
@@ -74,8 +84,19 @@ class AgentFactory:
         agent_properties[AgentPropertyKeys.ACTIVITY_CHOICE] = torch.zeros(num_agents, dtype=torch.int)
 
         # --- Health and Wealth ---
-        wealth = torch.rand(num_agents, dtype=torch.float)
-        health = torch.rand(num_agents, dtype=torch.float)
+        # Sampled independently from truncated normals
+        #
+        # Wealth ~ TruncNormal(mean=0.3, std=0.15, low=0, high=1)
+        #   Most agents start in the lower-middle range with a right tail of
+        #   wealthier households, reflecting Akuse's income distribution.
+        #
+        # Health ~ TruncNormal(mean=0.6, std=0.2, low=0, high=1)
+        #   Agents start moderately healthy on average, with meaningful
+        #   variance to allow health-wealth feedback loops to differentiate
+        #   trajectories from day 1.
+        wealth = _truncated_normal(mean=0.3, std=0.15, low=0.0, high=1.0, size=num_agents)
+        health = _truncated_normal(mean=0.6, std=0.20, low=0.0, high=1.0, size=num_agents)
+
         agent_properties[AgentPropertyKeys.WEALTH] = wealth
         agent_properties[AgentPropertyKeys.HEALTH] = health
         agent_properties[AgentPropertyKeys.INITIAL_WEALTH] = wealth.clone()
@@ -118,7 +139,6 @@ class AgentFactory:
             child_weights = torch.tensor([70.0, 30.0, 0.0, 0.0, 0.0])
             base_child = child_weights.expand(num_children, 5).clone()
             child_noise = torch.rand(num_children, 5) * 5.0
-            # Only HOME and SCHOOL get noise; others stay at 0
             child_noise[:, [Activity.WORSHIP, Activity.WATER, Activity.SOCIAL]] = 0.0
             base_child += child_noise
             base_child = base_child / base_child.sum(dim=1, keepdim=True) * 100.0
@@ -128,16 +148,14 @@ class AgentFactory:
 
     def _initialize_home_location(self, agent_state: AgentState) -> torch.Tensor:
         tensor = torch.zeros((agent_state.num_nodes(), 2), dtype=torch.float)
-        # Note: Grid is (row, col) which corresponds to (y, x)
         tensor[:, 0] = agent_state.ndata[AgentPropertyKeys.Y]
         tensor[:, 1] = agent_state.ndata[AgentPropertyKeys.X]
         return tensor
 
     def _find_nearest_locations(self, home_locations, property_name, grid_env) -> torch.Tensor:
-        # handle non-spatial mode
         if grid_env is None:
             return home_locations
-        
+
         prop_idx = grid_env.property_to_index.get(property_name)
         if prop_idx is None:
             print(f"Warning: Property '{property_name}' not in grid. Defaulting to home location.")
@@ -150,7 +168,6 @@ class AgentFactory:
             print(f"Warning: No grid locations found for '{property_name}'. Defaulting to home location.")
             return home_locations
 
-        # Ensure home_locations is on the correct device for cdist
         home_locations_dev = home_locations.to(self.config.device)
         distances = torch.cdist(home_locations_dev, property_locations)
         return property_locations[torch.argmin(distances, dim=1)]

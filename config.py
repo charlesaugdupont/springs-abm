@@ -96,18 +96,18 @@ class SteeringParamsSVEIR(BaseModel):
     # --- Care-Seeking Parameters ---
     moderate_severity_threshold: float = 0.2
     severe_severity_threshold: float = 0.7
-    cost_of_care: float = 0.05 # Cost as a proportion of max wealth
+    cost_of_care: float = 0.025 # Cost as a proportion of max wealth
     treatment_success_prob: float = 0.80
     duration_reduction_on_success: int = 5 # Days illness is shortened on successful treatment
     natural_worsening_prob: float = 0.35 # Prob illness worsens if untreated
-    parent_stress_health_impact: float = 0.10
+    parent_stress_health_impact: float = 0.30
     untreated_severity_penalty: float = 0.20
-    severity_health_impact_factor: float = 0.02 # Daily health reduction per unit of severity
-    daily_health_recovery_rate: float = 0.005 # Base daily recovery when not sick
+    severity_health_impact_factor: float = 0.05 # Daily health reduction per unit of severity
+    daily_health_recovery_rate: float = 0.001 # Base daily recovery when not sick
 
     # Income and wealth dynamics
-    daily_income_rate: float = 0.02
-    daily_cost_of_living: float = 0.01
+    daily_income_rate: float = 0.03
+    daily_cost_of_living: float = 0.025
     health_based_income: bool = True
 
 class SVEIRConfig(BaseModel):

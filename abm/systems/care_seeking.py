@@ -32,6 +32,22 @@ the higher CPT value.
 Severe cases (severity >= severe_severity_threshold) bypass CPT: the parent
 seeks care automatically if they can afford it, reflecting the near-certain
 decision to act in a crisis.
+
+Counters
+--------
+Three counters are maintained and reset between runs via reset_counters():
+
+  decisions_faced   : number of times _parent_makes_decision() was called,
+                      i.e. a parent had a child sick enough to trigger the
+                      decision tree (severity > moderate_severity_threshold).
+
+  care_sought       : number of times the parent chose to seek care
+                      (both CPT branch and severe auto-seek).
+
+  could_not_afford  : number of times the parent wanted to seek care
+                      (severe case) but could not afford it.
+
+The conditional care rate is: care_sought / decisions_faced.
 """
 
 import torch
@@ -44,6 +60,25 @@ from abm.agent.health_cpt_utils import utility, cpt_value_function, probability_
 
 class CareSeekingSystem(System):
     """Handles parent agent decision-making for sick children."""
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.decisions_faced:   int = 0
+        self.care_sought:       int = 0
+        self.could_not_afford:  int = 0
+
+    def reset_counters(self):
+        """Reset all counters — call between independent simulation runs."""
+        self.decisions_faced  = 0
+        self.care_sought      = 0
+        self.could_not_afford = 0
+
+    @property
+    def conditional_care_rate(self) -> float:
+        """Fraction of triggered decisions that resulted in care being sought."""
+        if self.decisions_faced == 0:
+            return 0.0
+        return self.care_sought / self.decisions_faced
 
     def update(self, agent_state: AgentState, **kwargs):
         params = self.config.steering_parameters
@@ -86,6 +121,8 @@ class CareSeekingSystem(System):
             severities = child_severity[indices_tensor]
             sickest_child_idx = children[torch.argmax(severities).item()]
 
+            # Increment decisions_faced before calling the decision method
+            self.decisions_faced += 1
             self._parent_makes_decision(agent_state, parent_idx, sickest_child_idx)
 
     # ------------------------------------------------------------------
@@ -107,8 +144,10 @@ class CareSeekingSystem(System):
         # --- Severe cases: automatic decision (no CPT) ---
         if child_severity >= params.severe_severity_threshold:
             if parent_wealth >= params.cost_of_care:
+                self.care_sought += 1
                 self._apply_treatment_outcome(agent_state, parent_idx, child_idx)
-            # If unaffordable, do nothing — parent cannot act
+            else:
+                self.could_not_afford += 1
             return
 
         # --- Cannot afford care: forced to wait ---
@@ -128,26 +167,11 @@ class CareSeekingSystem(System):
         ).item()
 
         # ---- Prospect A: Seek Care ----------------------------------------
-        #
-        # Outcome A1 (prob = p_success):
-        #   Parent pays cost c. Child's illness is shortened, which we
-        #   represent as a health improvement for the child — but the parent's
-        #   utility is over their own (w, h), so the gain here is the avoided
-        #   stress: parent health is preserved at its current level.
-        #   Net change for parent: wealth −c, health unchanged.
-        #
-        # Outcome A2 (prob = 1 − p_success):
-        #   Parent pays cost c but treatment fails. Child continues at the
-        #   same severity, so the parent still faces the stress of an ongoing
-        #   sick child: we model this as the same stress health hit as waiting
-        #   and worsening (parent absorbs the disappointment/continued worry).
-        #   Net change for parent: wealth −c, health −stress.
-
         w_after_cost = parent_wealth - params.cost_of_care
 
         u_A1 = utility(
             torch.tensor(w_after_cost),
-            torch.tensor(parent_health), # health preserved on success
+            torch.tensor(parent_health),
             torch.tensor(alpha),
         ).item()
 
@@ -160,22 +184,12 @@ class CareSeekingSystem(System):
         pi_A1 = probability_weighting(params.treatment_success_prob, gamma)
         pi_A2 = probability_weighting(1.0 - params.treatment_success_prob, gamma)
 
-        # Apply CPT value function with per-agent loss aversion
         v_A1 = _cpt_v(u_A1 - ref_u, lam)
         v_A2 = _cpt_v(u_A2 - ref_u, lam)
 
         ev_seek_care = pi_A1 * v_A1 + pi_A2 * v_A2
 
         # ---- Prospect B: Wait ---------------------------------------------
-        #
-        # Outcome B1 (prob = p_worsen):
-        #   Child's severity increases; parent takes a stress health hit.
-        #   Net change for parent: wealth unchanged, health −stress.
-        #
-        # Outcome B2 (prob = 1 − p_worsen):
-        #   Child stays the same. No change for parent.
-        #   Net change: zero → CPT value = 0.
-
         u_B1 = utility(
             torch.tensor(parent_wealth),
             torch.tensor(max(0.0, parent_health - params.parent_stress_health_impact)),
@@ -183,13 +197,12 @@ class CareSeekingSystem(System):
         ).item()
 
         pi_B1 = probability_weighting(params.natural_worsening_prob, gamma)
-
-        v_B1 = _cpt_v(u_B1 - ref_u, lam)
-
+        v_B1  = _cpt_v(u_B1 - ref_u, lam)
         ev_wait = pi_B1 * v_B1
 
         # ---- Choose -------------------------------------------------------
         if ev_seek_care >= ev_wait:
+            self.care_sought += 1
             self._apply_treatment_outcome(agent_state, parent_idx, child_idx)
         else:
             self._apply_waiting_outcome(agent_state, parent_idx, child_idx)
@@ -211,14 +224,12 @@ class CareSeekingSystem(System):
         agent_state.ndata[AgentPropertyKeys.CARE_SEEKING_COUNT][parent_idx] += 1
 
         if torch.rand(1).item() < params.treatment_success_prob:
-            # Shorten illness
             current_duration = agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][child_idx].item()
             new_duration = max(0, current_duration - params.duration_reduction_on_success)
             agent_state.ndata[AgentPropertyKeys.ILLNESS_DURATION][child_idx] = new_duration
             if new_duration <= 0:
                 agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][child_idx] = 0.0
         else:
-            # Treatment failed: parent absorbs stress
             current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx].item()
             agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx] = max(
                 0.0, current_health - params.parent_stress_health_impact
@@ -234,21 +245,14 @@ class CareSeekingSystem(System):
         params = self.config.steering_parameters
 
         if torch.rand(1).item() < params.natural_worsening_prob:
-            # Parent stress
             current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx].item()
             agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx] = max(
                 0.0, current_health - params.parent_stress_health_impact
             )
-            # Child worsens
             current_severity = agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][child_idx].item()
             agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][child_idx] = min(
                 1.0, current_severity + params.untreated_severity_penalty
             )
-
-
-# ---------------------------------------------------------------------------
-# Module-level helper — keeps the decision method readable
-# ---------------------------------------------------------------------------
 
 def _cpt_v(delta_u: float, lam: float) -> float:
     """
@@ -256,8 +260,6 @@ def _cpt_v(delta_u: float, lam: float) -> float:
     by the agent's personal loss-aversion coefficient lambda.
     """
     raw = cpt_value_function(delta_u)
-    # cpt_value_function already returns a negative value for losses;
-    # we scale the magnitude by lambda to reflect loss aversion.
     if delta_u < 0:
-        return lam * raw # raw is negative, lam > 1 makes it more negative
+        return lam * raw
     return raw
