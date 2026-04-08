@@ -94,8 +94,6 @@ class SteeringParamsSVEIR(BaseModel):
     social_interaction_radius: float = 5.0
 
     # --- Care-Seeking Parameters ---
-    moderate_severity_threshold: float = 0.2
-    severe_severity_threshold: float = 0.7
     cost_of_care: float = 0.025 # Cost as a proportion of max wealth
     treatment_success_prob: float = 0.80
     duration_reduction_on_success: int = 5 # Days illness is shortened on successful treatment

@@ -4,8 +4,9 @@ Parental care-seeking decisions via Cumulative Prospect Theory (CPT).
 
 Decision frame
 --------------
-Each day, a parent with at least one sick child above the moderate-severity
-threshold evaluates two prospects:
+Each day, for each child with a non-zero severity, the parent stochastically
+"notices" the child as sick with probability equal to the child's current
+severity score. If noticed, the parent evaluates two prospects:
 
   Seek care
     Cost c is paid immediately (certain wealth loss).
@@ -29,23 +30,22 @@ function and Prelec probability weighting are applied to each outcome before
 summing to form the prospect value. The parent chooses the prospect with
 the higher CPT value.
 
-Severe cases (severity >= severe_severity_threshold) bypass CPT: the parent
-seeks care automatically if they can afford it, reflecting the near-certain
-decision to act in a crisis.
+If the parent cannot afford care, the waiting outcome is applied directly
+without CPT evaluation.
 
 Counters
 --------
 Three counters are maintained and reset between runs via reset_counters():
 
   decisions_faced   : number of times _parent_makes_decision() was called,
-                      i.e. a parent had a child sick enough to trigger the
-                      decision tree (severity > moderate_severity_threshold).
+                      i.e. a parent stochastically noticed a sick child.
 
   care_sought       : number of times the parent chose to seek care
-                      (both CPT branch and severe auto-seek).
+                      (CPT branch only).
 
   could_not_afford  : number of times the parent wanted to seek care
-                      (severe case) but could not afford it.
+                      but could not afford it (CPT favoured care but
+                      wealth < cost_of_care).
 
 The conditional care rate is: care_sought / decisions_faced.
 """
@@ -81,26 +81,35 @@ class CareSeekingSystem(System):
         return self.care_sought / self.decisions_faced
 
     def update(self, agent_state: AgentState, **kwargs):
-        params = self.config.steering_parameters
         child_severity = agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY]
 
-        sick_children_mask = (
-            (child_severity > params.moderate_severity_threshold)
+        # Only children with non-zero severity are candidates
+        candidate_mask = (
+            (child_severity > 0.0)
             & agent_state.ndata[AgentPropertyKeys.IS_CHILD]
         )
-        if not torch.any(sick_children_mask):
+        if not torch.any(candidate_mask):
             return
 
-        # --- Build household → sick-children index map ---
-        sick_child_indices = sick_children_mask.nonzero(as_tuple=True)[0]
-        child_hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID][sick_child_indices]
+        # Stochastic notice: each candidate child is "noticed" with
+        # probability equal to its severity score
+        candidate_indices = candidate_mask.nonzero(as_tuple=True)[0]
+        severities = child_severity[candidate_indices]
+        noticed_mask = torch.rand(len(candidate_indices), device=agent_state.device) < severities
+        noticed_indices = candidate_indices[noticed_mask]
 
-        hh_to_sick_children: dict[int, list] = {}
+        if len(noticed_indices) == 0:
+            return
+
+        # --- Build household → noticed-children index map ---
+        child_hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID][noticed_indices]
+
+        hh_to_noticed_children: dict[int, list] = {}
         for i, hh_id in enumerate(child_hh_ids):
             key = hh_id.item()
-            hh_to_sick_children.setdefault(key, []).append(sick_child_indices[i])
+            hh_to_noticed_children.setdefault(key, []).append(noticed_indices[i])
 
-        # --- Each parent with a sick child makes a decision ---
+        # --- Each parent with a noticed sick child makes a decision ---
         all_hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
         parent_mask = agent_state.ndata[AgentPropertyKeys.IS_PARENT]
         parent_indices = parent_mask.nonzero(as_tuple=True)[0]
@@ -108,11 +117,11 @@ class CareSeekingSystem(System):
 
         for i, parent_idx in enumerate(parent_indices):
             hh_id = parent_hh_ids[i].item()
-            if hh_id not in hh_to_sick_children:
+            if hh_id not in hh_to_noticed_children:
                 continue
 
-            # Focus on the sickest child in the household
-            children = hh_to_sick_children[hh_id]
+            # Focus on the sickest noticed child in the household
+            children = hh_to_noticed_children[hh_id]
             indices_tensor = torch.tensor(
                 [idx.item() for idx in children],
                 device=agent_state.device,
@@ -121,7 +130,6 @@ class CareSeekingSystem(System):
             severities = child_severity[indices_tensor]
             sickest_child_idx = children[torch.argmax(severities).item()]
 
-            # Increment decisions_faced before calling the decision method
             self.decisions_faced += 1
             self._parent_makes_decision(agent_state, parent_idx, sickest_child_idx)
 
@@ -139,26 +147,17 @@ class CareSeekingSystem(System):
 
         parent_wealth = agent_state.ndata[AgentPropertyKeys.WEALTH][parent_idx].item()
         parent_health = agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx].item()
-        child_severity = agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][child_idx].item()
-
-        # --- Severe cases: automatic decision (no CPT) ---
-        if child_severity >= params.severe_severity_threshold:
-            if parent_wealth >= params.cost_of_care:
-                self.care_sought += 1
-                self._apply_treatment_outcome(agent_state, parent_idx, child_idx)
-            else:
-                self.could_not_afford += 1
-            return
 
         # --- Cannot afford care: forced to wait ---
         if parent_wealth < params.cost_of_care:
+            self.could_not_afford += 1
             self._apply_waiting_outcome(agent_state, parent_idx, child_idx)
             return
 
-        # --- CPT evaluation for moderate cases ---
-        alpha  = agent_state.ndata[AgentPropertyKeys.ALPHA][parent_idx].item()
-        gamma  = agent_state.ndata[AgentPropertyKeys.GAMMA][parent_idx].item()
-        lam    = agent_state.ndata[AgentPropertyKeys.LAMBDA][parent_idx].item()
+        # --- CPT evaluation ---
+        alpha = agent_state.ndata[AgentPropertyKeys.ALPHA][parent_idx].item()
+        gamma = agent_state.ndata[AgentPropertyKeys.GAMMA][parent_idx].item()
+        lam   = agent_state.ndata[AgentPropertyKeys.LAMBDA][parent_idx].item()
 
         ref_u = utility(
             torch.tensor(parent_wealth),
@@ -253,6 +252,7 @@ class CareSeekingSystem(System):
             agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][child_idx] = min(
                 1.0, current_severity + params.untreated_severity_penalty
             )
+
 
 def _cpt_v(delta_u: float, lam: float) -> float:
     """
