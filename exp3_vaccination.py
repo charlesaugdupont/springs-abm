@@ -203,12 +203,7 @@ def plot_results(args):
     eff_labels  = [f"{v:.2f}" for v in vacc_efficacies]
 
     sns.set_theme(style="white", font_scale=1.05)
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-    fig.suptitle(
-        "Experiment 3 — Vaccination Herd Immunity Surface (Rotavirus, u5)\n"
-        "250 days · 4 000 agents · 15 replicates per cell",
-        fontsize=13, y=1.02,
-    )
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5))
 
     def _heatmap(ax, matrix, title, fmt, cmap, vmin=None, vmax=None):
         sns.heatmap(

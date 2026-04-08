@@ -216,51 +216,29 @@ def plot_results(args):
     x = np.array(param_vals)
 
     sns.set_theme(style="whitegrid", font_scale=1.1)
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle("Experiment 2 — Campylobacter Tipping Point\n(under-5 metrics, 250 days, 4 000 agents)", fontsize=14, y=1.02)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5))
 
     colour = "#FF5722"
 
     # --- Panel 1: Peak u5 prevalence ---
-    ax = axes[0, 0]
+    ax = axes[0]
     ax.plot(x, peak_means, marker="o", color=colour, linewidth=2)
     ax.fill_between(x, peak_mins, peak_maxes, alpha=0.2, color=colour)
     ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
     ax.set_title("Peak u5 Prevalence")
-    ax.set_xlabel("human_animal_interaction_rate")
+    ax.set_xlabel("Human-Animal Interaction Rate")
     ax.set_ylabel("Fraction of u5s infectious")
     ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=1))
     ax.legend(fontsize=9)
 
     # --- Panel 2: Cumulative child-days ---
-    ax = axes[0, 1]
+    ax = axes[1]
     ax.plot(x, cum_means, marker="o", color="#9C27B0", linewidth=2)
     ax.fill_between(x, cum_mins, cum_maxes, alpha=0.2, color="#9C27B0")
     ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
     ax.set_title("Cumulative u5 Child-Days of Illness")
-    ax.set_xlabel("human_animal_interaction_rate")
+    ax.set_xlabel("Human-Animal Interaction Rate")
     ax.set_ylabel("Child-days (prevalence × n_u5 × days)")
-    ax.legend(fontsize=9)
-
-    # --- Panel 3: Extinction probability ---
-    ax = axes[1, 0]
-    ax.plot(x, extinction_probs, marker="s", color="#4CAF50", linewidth=2)
-    ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
-    ax.set_title("Epidemic Extinction Probability\n(peak u5 prevalence < 1%)")
-    ax.set_xlabel("human_animal_interaction_rate")
-    ax.set_ylabel("Fraction of replicates")
-    ax.set_ylim(-0.05, 1.05)
-    ax.legend(fontsize=9)
-
-    # --- Panel 4: Zoonotic fraction ---
-    ax = axes[1, 1]
-    ax.plot(x, zoo_means, marker="^", color="#FF9800", linewidth=2)
-    ax.fill_between(x, zoo_mins, zoo_maxes, alpha=0.2, color="#FF9800")
-    ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
-    ax.set_title("Zoonotic Fraction of Campy Infections")
-    ax.set_xlabel("human_animal_interaction_rate")
-    ax.set_ylabel("Fraction of infections (zoonotic route)")
-    ax.set_ylim(-0.05, 1.05)
     ax.legend(fontsize=9)
 
     plt.tight_layout()

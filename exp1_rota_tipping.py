@@ -200,7 +200,6 @@ def plot_results(args):
 
     sns.set_theme(style="whitegrid", font_scale=1.1)
     fig, axes = plt.subplots(1, 2, figsize=(11, 5))
-    fig.suptitle("Experiment 1 — Rotavirus Tipping Point\n(under-5 metrics, 250 days, 4 000 agents)", fontsize=14, y=1.02)
 
     colour = "#2196F3"
 
@@ -210,7 +209,7 @@ def plot_results(args):
     ax.fill_between(x, peak_mins, peak_maxes, alpha=0.2, color=colour)
     ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
     ax.set_title("Peak u5 Prevalence")
-    ax.set_xlabel("infection_prob_mean")
+    ax.set_xlabel("Rotavirus Infection Probability")
     ax.set_ylabel("Fraction of u5s infectious")
     ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=1))
     ax.legend(fontsize=9)
@@ -221,8 +220,8 @@ def plot_results(args):
     ax.fill_between(x, cum_mins, cum_maxes, alpha=0.2, color="#FF5722")
     ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
     ax.set_title("Cumulative u5 Child-Days of Illness")
-    ax.set_xlabel("infection_prob_mean")
-    ax.set_ylabel("Child-days (prevalence × n_u5 × days)")
+    ax.set_xlabel("Rotavirus Infection Probability")
+    ax.set_ylabel("Child-Days")
     ax.legend(fontsize=9)
 
     plt.tight_layout()

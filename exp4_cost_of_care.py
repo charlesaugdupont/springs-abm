@@ -289,12 +289,6 @@ def plot_results(args):
 
     sns.set_theme(style="whitegrid", font_scale=1.05)
     fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    fig.suptitle(
-        "Experiment 4 — Cost-of-Care Sweep\n"
-        "Effect of healthcare access cost on care-seeking behaviour and disease burden\n"
-        f"Baseline cost = {baseline:.3f} · 250 days · 4 000 agents · 15 replicates",
-        fontsize=13, y=1.02,
-    )
 
     for ax, k in zip(axes.flatten(), metrics_keys):
         c = cfg[k]["colour"]
