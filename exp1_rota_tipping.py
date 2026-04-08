@@ -169,38 +169,45 @@ def plot_results(args):
     with open(results_path, "rb") as f:
         data = pickle.load(f)
 
-    aggregated  = data["aggregated"]
-    param_vals  = sorted(aggregated.keys())
-    baseline    = data["baseline"]
+    aggregated = data["aggregated"]
+    param_vals = sorted(aggregated.keys())
+    baseline = data["baseline"]
 
-    peak_means, peak_stds   = [], []
-    cum_means,  cum_stds    = [], []
-    extinction_probs        = []
+    peak_means, peak_mins, peak_maxes = [], [], []
+    cum_means, cum_mins, cum_maxes = [], [], []
+    extinction_probs = []
 
     for v in param_vals:
         reps = aggregated[v]
         peaks = [r["peak_u5_prevalence"] for r in reps]
-        cums  = [r["cumulative_u5_days"]  for r in reps]
-        peak_means.append(np.mean(peaks));  peak_stds.append(np.std(peaks))
-        cum_means.append(np.mean(cums));    cum_stds.append(np.std(cums))
+        cums = [r["cumulative_u5_days"]  for r in reps]
+        peak_means.append(np.mean(peaks))
+        peak_mins.append(np.min(peaks))
+        peak_maxes.append(np.max(peaks))
+        cum_means.append(np.mean(cums))
+        cum_mins.append(np.min(cums))
+        cum_maxes.append(np.max(cums))
         extinction_probs.append(np.mean([p < 0.01 for p in peaks]))   # <1% prevalence = extinction
 
-    peak_means  = np.array(peak_means);  peak_stds  = np.array(peak_stds)
-    cum_means   = np.array(cum_means);   cum_stds   = np.array(cum_stds)
+    peak_means = np.array(peak_means)
+    peak_mins = np.array(peak_mins)
+    peak_maxes = np.array(peak_maxes)
+    cum_means = np.array(cum_means)
+    cum_mins = np.array(cum_mins)
+    cum_maxes = np.array(cum_maxes)
     extinction_probs = np.array(extinction_probs)
     x = np.array(param_vals)
 
     sns.set_theme(style="whitegrid", font_scale=1.1)
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
-    fig.suptitle("Experiment 1 — Rotavirus Tipping Point\n(under-5 metrics, 250 days, 4 000 agents)",
-                 fontsize=14, y=1.02)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5))
+    fig.suptitle("Experiment 1 — Rotavirus Tipping Point\n(under-5 metrics, 250 days, 4 000 agents)", fontsize=14, y=1.02)
 
     colour = "#2196F3"
 
     # --- Panel 1: Peak u5 prevalence ---
     ax = axes[0]
     ax.plot(x, peak_means, marker="o", color=colour, linewidth=2)
-    ax.fill_between(x, peak_means - peak_stds, peak_means + peak_stds, alpha=0.2, color=colour)
+    ax.fill_between(x, peak_mins, peak_maxes, alpha=0.2, color=colour)
     ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
     ax.set_title("Peak u5 Prevalence")
     ax.set_xlabel("infection_prob_mean")
@@ -211,21 +218,11 @@ def plot_results(args):
     # --- Panel 2: Cumulative child-days of illness ---
     ax = axes[1]
     ax.plot(x, cum_means, marker="o", color="#FF5722", linewidth=2)
-    ax.fill_between(x, cum_means - cum_stds, cum_means + cum_stds, alpha=0.2, color="#FF5722")
+    ax.fill_between(x, cum_mins, cum_maxes, alpha=0.2, color="#FF5722")
     ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
     ax.set_title("Cumulative u5 Child-Days of Illness")
     ax.set_xlabel("infection_prob_mean")
     ax.set_ylabel("Child-days (prevalence × n_u5 × days)")
-    ax.legend(fontsize=9)
-
-    # --- Panel 3: Extinction probability ---
-    ax = axes[2]
-    ax.plot(x, extinction_probs, marker="s", color="#4CAF50", linewidth=2)
-    ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
-    ax.set_title("Epidemic Extinction Probability\n(peak u5 prevalence < 1%)")
-    ax.set_xlabel("infection_prob_mean")
-    ax.set_ylabel("Fraction of replicates")
-    ax.set_ylim(-0.05, 1.05)
     ax.legend(fontsize=9)
 
     plt.tight_layout()
@@ -241,12 +238,12 @@ def plot_results(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Experiment 1: Rotavirus Tipping Point")
-    parser.add_argument("-g", "--grid-id",  required=False, help="Grid ID (required unless --plot-only)")
-    parser.add_argument("-r", "--reps",     type=int, default=15)
-    parser.add_argument("-s", "--steps",    type=int, default=250)
-    parser.add_argument("-n", "--agents",   type=int, default=4000)
-    parser.add_argument("-o", "--output",   type=str, default=OUTPUT_DIR)
-    parser.add_argument("--plot-only",      action="store_true", help="Skip simulation, re-plot saved results")
+    parser.add_argument("-g", "--grid-id", required=False, help="Grid ID (required unless --plot-only)")
+    parser.add_argument("-r", "--reps", type=int, default=15)
+    parser.add_argument("-s", "--steps", type=int, default=250)
+    parser.add_argument("-n", "--agents", type=int, default=4000)
+    parser.add_argument("-o", "--output", type=str, default=OUTPUT_DIR)
+    parser.add_argument("--plot-only", action="store_true", help="Skip simulation, re-plot saved results")
     args = parser.parse_args()
 
     if args.plot_only:

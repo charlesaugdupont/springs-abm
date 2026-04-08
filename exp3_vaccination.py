@@ -203,7 +203,7 @@ def plot_results(args):
     eff_labels  = [f"{v:.2f}" for v in vacc_efficacies]
 
     sns.set_theme(style="white", font_scale=1.05)
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
     fig.suptitle(
         "Experiment 3 — Vaccination Herd Immunity Surface (Rotavirus, u5)\n"
         "250 days · 4 000 agents · 15 replicates per cell",
@@ -229,44 +229,14 @@ def plot_results(args):
         ax.set_ylabel("vaccination_rate (per day)", fontsize=10)
         ax.invert_yaxis()
 
-    _heatmap(axes[0], peak_grid,  "Mean Peak u5 Prevalence",          ".3f", "YlOrRd_r", 0, None)
-    _heatmap(axes[1], cum_grid,   "Mean Cumulative u5 Child-Days",     ".0f", "YlOrRd_r", 0, None)
-    _heatmap(axes[2], ext_grid,   "Extinction Probability\n(peak < 1%)", ".2f", "YlGn",   0, 1)
+    _heatmap(axes[0], peak_grid, "Mean Peak u5 Prevalence", ".2f", "Reds", 0, None)
+    _heatmap(axes[1], cum_grid, "Mean Cumulative u5 Child-Days", ".0f", "Reds", 0, None)
 
     plt.tight_layout()
     out_fig = os.path.join(args.output, "exp3_vaccination.png")
     plt.savefig(out_fig, dpi=180, bbox_inches="tight")
     print(f"  Figure saved → {out_fig}")
     plt.show()
-
-    # --- Bonus: 1D slice at highest efficacy ---
-    best_eff_idx = ne - 1
-    best_eff     = vacc_efficacies[best_eff_idx]
-
-    fig2, axes2 = plt.subplots(1, 2, figsize=(12, 4))
-    fig2.suptitle(
-        f"Experiment 3 — 1D slice at vaccine_efficacy = {best_eff:.2f}",
-        fontsize=12,
-    )
-
-    axes2[0].plot(vacc_rates, peak_grid[:, best_eff_idx], marker="o", color="#2196F3", linewidth=2)
-    axes2[0].set_title("Peak u5 Prevalence vs. Vaccination Rate")
-    axes2[0].set_xlabel("vaccination_rate (per day)")
-    axes2[0].set_ylabel("Fraction of u5s infectious")
-    axes2[0].yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=1))
-
-    axes2[1].plot(vacc_rates, ext_grid[:, best_eff_idx], marker="s", color="#4CAF50", linewidth=2)
-    axes2[1].set_title("Extinction Probability vs. Vaccination Rate")
-    axes2[1].set_xlabel("vaccination_rate (per day)")
-    axes2[1].set_ylabel("Fraction of replicates extinct")
-    axes2[1].set_ylim(-0.05, 1.05)
-
-    plt.tight_layout()
-    out_fig2 = os.path.join(args.output, "exp3_vaccination_1d_slice.png")
-    plt.savefig(out_fig2, dpi=180, bbox_inches="tight")
-    print(f"  1D slice figure saved → {out_fig2}")
-    plt.show()
-
 
 # ---------------------------------------------------------------------------
 # CLI

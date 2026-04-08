@@ -182,38 +182,49 @@ def plot_results(args):
     param_vals = sorted(aggregated.keys())
     baseline   = data["baseline"]
 
-    peak_means, peak_stds = [], []
-    cum_means,  cum_stds  = [], []
-    zoo_means,  zoo_stds  = [], []
-    extinction_probs      = []
+    peak_means, peak_mins, peak_maxes = [], [], []
+    cum_means, cum_mins, cum_maxes  = [], [], []
+    zoo_means,  zoo_mins, zoo_maxes = [], [], []
+    extinction_probs = []
 
     for v in param_vals:
         reps  = aggregated[v]
         peaks = [r["peak_u5_prevalence"] for r in reps]
         cums  = [r["cumulative_u5_days"]  for r in reps]
         zoos  = [r["zoonotic_fraction"]   for r in reps]
-        peak_means.append(np.mean(peaks)); peak_stds.append(np.std(peaks))
-        cum_means.append(np.mean(cums));   cum_stds.append(np.std(cums))
-        zoo_means.append(np.mean(zoos));   zoo_stds.append(np.std(zoos))
+        peak_means.append(np.mean(peaks))
+        peak_mins.append(np.min(peaks))
+        peak_maxes.append(np.max(peaks))
+        cum_means.append(np.mean(cums))
+        cum_mins.append(np.min(cums))
+        cum_maxes.append(np.max(cums))
+        zoo_means.append(np.mean(zoos))
+        zoo_mins.append(np.min(zoos))
+        zoo_maxes.append(np.max(zoos))
         extinction_probs.append(np.mean([p < 0.01 for p in peaks]))
 
-    peak_means = np.array(peak_means); peak_stds = np.array(peak_stds)
-    cum_means  = np.array(cum_means);  cum_stds  = np.array(cum_stds)
-    zoo_means  = np.array(zoo_means);  zoo_stds  = np.array(zoo_stds)
+    peak_means = np.array(peak_means)
+    peak_mins = np.array(peak_mins)
+    peak_maxes = np.array(peak_maxes)
+    cum_means = np.array(cum_means)
+    cum_mins = np.array(cum_mins)
+    cum_maxes = np.array(cum_maxes)
+    zoo_means = np.array(zoo_means)
+    zoo_mins = np.array(zoo_mins)
+    zoo_maxes = np.array(zoo_maxes)
     extinction_probs = np.array(extinction_probs)
     x = np.array(param_vals)
 
     sns.set_theme(style="whitegrid", font_scale=1.1)
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle("Experiment 2 — Campylobacter Tipping Point\n(under-5 metrics, 250 days, 4 000 agents)",
-                 fontsize=14, y=1.02)
+    fig.suptitle("Experiment 2 — Campylobacter Tipping Point\n(under-5 metrics, 250 days, 4 000 agents)", fontsize=14, y=1.02)
 
     colour = "#FF5722"
 
     # --- Panel 1: Peak u5 prevalence ---
     ax = axes[0, 0]
     ax.plot(x, peak_means, marker="o", color=colour, linewidth=2)
-    ax.fill_between(x, peak_means - peak_stds, peak_means + peak_stds, alpha=0.2, color=colour)
+    ax.fill_between(x, peak_mins, peak_maxes, alpha=0.2, color=colour)
     ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
     ax.set_title("Peak u5 Prevalence")
     ax.set_xlabel("human_animal_interaction_rate")
@@ -224,7 +235,7 @@ def plot_results(args):
     # --- Panel 2: Cumulative child-days ---
     ax = axes[0, 1]
     ax.plot(x, cum_means, marker="o", color="#9C27B0", linewidth=2)
-    ax.fill_between(x, cum_means - cum_stds, cum_means + cum_stds, alpha=0.2, color="#9C27B0")
+    ax.fill_between(x, cum_mins, cum_maxes, alpha=0.2, color="#9C27B0")
     ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
     ax.set_title("Cumulative u5 Child-Days of Illness")
     ax.set_xlabel("human_animal_interaction_rate")
@@ -244,7 +255,7 @@ def plot_results(args):
     # --- Panel 4: Zoonotic fraction ---
     ax = axes[1, 1]
     ax.plot(x, zoo_means, marker="^", color="#FF9800", linewidth=2)
-    ax.fill_between(x, zoo_means - zoo_stds, zoo_means + zoo_stds, alpha=0.2, color="#FF9800")
+    ax.fill_between(x, zoo_mins, zoo_maxes, alpha=0.2, color="#FF9800")
     ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
     ax.set_title("Zoonotic Fraction of Campy Infections")
     ax.set_xlabel("human_animal_interaction_rate")

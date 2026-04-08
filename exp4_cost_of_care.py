@@ -235,8 +235,8 @@ def plot_results(args):
         "mean_final_health",
     ]
     means = {k: [] for k in metrics_keys}
-    stds  = {k: [] for k in metrics_keys}
-    # Also keep raw replicate values for box plots
+    mins = {k: [] for k in metrics_keys}
+    maxes = {k: [] for k in metrics_keys}
     raw   = {k: [] for k in metrics_keys}
 
     for v in param_vals:
@@ -244,22 +244,24 @@ def plot_results(args):
         for k in metrics_keys:
             vals = [r[k] for r in reps if r is not None]
             means[k].append(np.mean(vals) if vals else np.nan)
-            stds[k].append(np.std(vals)   if vals else np.nan)
+            mins[k].append(np.min(vals) if vals else np.nan)
+            maxes[k].append(np.max(vals) if vals else np.nan)
             raw[k].append(vals)
 
     for k in metrics_keys:
         means[k] = np.array(means[k])
-        stds[k]  = np.array(stds[k])
+        mins[k] = np.array(mins[k])
+        maxes[k] = np.array(maxes[k])
 
     # ---- Titles, colours, formatters -------------------------------------
     cfg = {
         "conditional_care_rate": {
-            "title": "Conditional Care-Seeking Rate\n(care events / decisions faced)",
+            "title": "Care-Seeking Rate",
             "colour": "#2196F3",
             "pct": True,
         },
         "could_not_afford_rate": {
-            "title": "Could-Not-Afford Rate\n(severe cases priced out / decisions faced)",
+            "title": "Could-Not-Afford Rate",
             "colour": "#F44336",
             "pct": True,
         },
@@ -295,16 +297,17 @@ def plot_results(args):
     )
 
     for ax, k in zip(axes.flatten(), metrics_keys):
-        c   = cfg[k]["colour"]
-        m   = means[k]
-        s   = stds[k]
+        c = cfg[k]["colour"]
+        m = means[k]
+        mn = mins[k]
+        mx = maxes[k]
 
         ax.plot(x, m, marker="o", color=c, linewidth=2, zorder=4)
-        ax.fill_between(x, m - s, m + s, alpha=0.2, color=c)
+        ax.fill_between(x, mn, mx, alpha=0.2, color=c)
         ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label=f"Baseline ({baseline})")
 
-        ax.set_title(cfg[k]["title"], fontsize=11)
-        ax.set_xlabel("cost_of_care (fraction of max wealth)", fontsize=9)
+        ax.set_title(cfg[k]["title"], fontsize=12)
+        ax.set_xlabel("Cost of Care", fontsize=12)
         ax.legend(fontsize=8)
 
         if cfg[k]["pct"]:
