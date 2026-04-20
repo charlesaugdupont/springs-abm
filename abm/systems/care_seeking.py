@@ -11,7 +11,7 @@ severity score. If noticed, the parent evaluates two prospects:
   Seek care
     Cost c is paid immediately (certain wealth loss).
     With probability p_success the child recovers faster (illness duration
-    reduced by `duration_reduction_on_success` days), which the parent
+    reduced by duration_reduction_on_success days), which the parent
     values as a future health gain for the child.
     With probability (1 - p_success) the cost is paid but the child's
     illness continues unchanged.
@@ -19,10 +19,12 @@ severity score. If noticed, the parent evaluates two prospects:
   Wait
     No immediate cost.
     With probability p_worsen the child's severity increases by
-    `untreated_severity_penalty` and the parent suffers a stress health
-    hit of `parent_stress_health_impact`.
+    untreated_severity_penalty and the parent suffers a stress health
+    hit of parent_stress_health_impact.
     With probability (1 - p_worsen) nothing changes.
 
+CPT mode (use_cpt=True, default)
+---------------------------------
 Both prospects are evaluated in utility space using a Cobb-Douglas utility
 function U(w, h) = w^alpha * h^(1-alpha), with gains and losses measured
 relative to the parent's current (reference) utility. The CPT value
@@ -30,22 +32,24 @@ function and Prelec probability weighting are applied to each outcome before
 summing to form the prospect value. The parent chooses the prospect with
 the higher CPT value.
 
-If the parent cannot afford care, the waiting outcome is applied directly
-without CPT evaluation.
+EV mode (use_cpt=False)
+-----------------------
+A plain expected-value comparison using the same Cobb-Douglas utility
+function but with objective probabilities (no weighting) and a linear
+value function (no curvature, no loss aversion). This is the "rational
+expected-utility" baseline used in Experiment 5 to isolate the behavioural
+contribution of CPT.
+
+If the parent cannot afford care in either mode, the waiting outcome is
+applied directly without any evaluation.
 
 Counters
 --------
 Three counters are maintained and reset between runs via reset_counters():
 
-  decisions_faced   : number of times _parent_makes_decision() was called,
-                      i.e. a parent stochastically noticed a sick child.
-
-  care_sought       : number of times the parent chose to seek care
-                      (CPT branch only).
-
-  could_not_afford  : number of times the parent wanted to seek care
-                      but could not afford it (CPT favoured care but
-                      wealth < cost_of_care).
+  decisions_faced   : number of times _parent_makes_decision() was called.
+  care_sought       : number of times the parent chose to seek care.
+  could_not_afford  : number of times the parent wanted to seek care but could not afford it.
 
 The conditional care rate is: care_sought / decisions_faced.
 """
@@ -59,10 +63,22 @@ from abm.agent.health_cpt_utils import utility, cpt_value_function, probability_
 
 
 class CareSeekingSystem(System):
-    """Handles parent agent decision-making for sick children."""
+    """Handles parent agent decision-making for sick children.
 
-    def __init__(self, config):
+    Parameters
+    ----------
+    config : SVEIRConfig
+    use_cpt : bool, default True
+        When True (default) the full CPT decision rule is used, including
+        Prelec probability weighting and the asymmetric value function with
+        loss aversion (lambda).  When False a plain expected-utility rule is
+        used instead: objective probabilities, linear value function, and
+        lambda = 1.  This switch is the basis for Experiment 5.
+    """
+
+    def __init__(self, config, use_cpt: bool = True):
         super().__init__(config)
+        self.use_cpt = use_cpt
         self.decisions_faced:   int = 0
         self.care_sought:       int = 0
         self.could_not_afford:  int = 0
@@ -154,7 +170,31 @@ class CareSeekingSystem(System):
             self._apply_waiting_outcome(agent_state, parent_idx, child_idx)
             return
 
-        # --- CPT evaluation ---
+        if self.use_cpt:
+            seek_care = self._evaluate_cpt(agent_state, parent_idx, parent_wealth, parent_health)
+        else:
+            seek_care = self._evaluate_ev(parent_wealth, parent_health,
+                                          agent_state.ndata[AgentPropertyKeys.ALPHA][parent_idx].item())
+
+        if seek_care:
+            self.care_sought += 1
+            self._apply_treatment_outcome(agent_state, parent_idx, child_idx)
+        else:
+            self._apply_waiting_outcome(agent_state, parent_idx, child_idx)
+
+    # ------------------------------------------------------------------
+    # CPT evaluation
+    # ------------------------------------------------------------------
+
+    def _evaluate_cpt(
+        self,
+        agent_state: AgentState,
+        parent_idx: torch.Tensor,
+        parent_wealth: float,
+        parent_health: float,
+    ) -> bool:
+        """Return True if CPT favours seeking care."""
+        params = self.config.steering_parameters
         alpha = agent_state.ndata[AgentPropertyKeys.ALPHA][parent_idx].item()
         gamma = agent_state.ndata[AgentPropertyKeys.GAMMA][parent_idx].item()
         lam   = agent_state.ndata[AgentPropertyKeys.LAMBDA][parent_idx].item()
@@ -199,12 +239,60 @@ class CareSeekingSystem(System):
         v_B1  = _cpt_v(u_B1 - ref_u, lam)
         ev_wait = pi_B1 * v_B1
 
-        # ---- Choose -------------------------------------------------------
-        if ev_seek_care >= ev_wait:
-            self.care_sought += 1
-            self._apply_treatment_outcome(agent_state, parent_idx, child_idx)
-        else:
-            self._apply_waiting_outcome(agent_state, parent_idx, child_idx)
+        return ev_seek_care >= ev_wait
+
+    # ------------------------------------------------------------------
+    # Plain expected-utility evaluation (no CPT)
+    # ------------------------------------------------------------------
+
+    def _evaluate_ev(
+        self,
+        parent_wealth: float,
+        parent_health: float,
+        alpha: float,
+    ) -> bool:
+        """
+        Return True if plain expected utility favours seeking care.
+
+        Uses objective probabilities (no Prelec weighting) and a linear
+        value function (no curvature, lambda = 1).  The same Cobb-Douglas
+        utility function is retained so that the only difference from the
+        CPT path is the *decision rule*, not the preference structure.
+        """
+        params = self.config.steering_parameters
+        w_after = parent_wealth - params.cost_of_care
+
+        alpha_t = torch.tensor(alpha)
+
+        # EV(seek care) = p_success * U(w', h) + (1-p_success) * U(w', h - stress)
+        u_success = utility(
+            torch.tensor(w_after),
+            torch.tensor(parent_health),
+            alpha_t,
+        ).item()
+        u_fail = utility(
+            torch.tensor(w_after),
+            torch.tensor(max(0.0, parent_health - params.parent_stress_health_impact)),
+            alpha_t,
+        ).item()
+        ev_seek = (params.treatment_success_prob * u_success
+                   + (1.0 - params.treatment_success_prob) * u_fail)
+
+        # EV(wait) = p_worsen * U(w, h - stress) + (1-p_worsen) * U(w, h)
+        u_worsen = utility(
+            torch.tensor(parent_wealth),
+            torch.tensor(max(0.0, parent_health - params.parent_stress_health_impact)),
+            alpha_t,
+        ).item()
+        u_ok = utility(
+            torch.tensor(parent_wealth),
+            torch.tensor(parent_health),
+            alpha_t,
+        ).item()
+        ev_wait = (params.natural_worsening_prob * u_worsen
+                   + (1.0 - params.natural_worsening_prob) * u_ok)
+
+        return ev_seek >= ev_wait
 
     # ------------------------------------------------------------------
     # Outcome application
