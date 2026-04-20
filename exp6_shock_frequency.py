@@ -346,7 +346,7 @@ def plot_results(args):
 def main():
     parser = argparse.ArgumentParser(description="Experiment 6: Water-Shock Frequency Sweep")
     parser.add_argument("-g", "--grid-id",  required=False)
-    parser.add_argument("-r", "--reps",     type=int, default=20)
+    parser.add_argument("-r", "--reps",     type=int, default=30)
     parser.add_argument("-s", "--steps",    type=int, default=250)
     parser.add_argument("-n", "--agents",   type=int, default=4000)
     parser.add_argument("-o", "--output",   type=str, default=OUTPUT_DIR)
