@@ -44,7 +44,7 @@ from abm.utils.rng import set_global_seed
 # Experiment parameters
 # ---------------------------------------------------------------------------
 
-PARAM_VALUES = np.linspace(0.0001, 0.05, 15)
+PARAM_VALUES = np.linspace(0.0001, 0.05, 10)
 BASELINE     = 0.02
 OUTPUT_DIR   = os.path.join("outputs", "exp1_rota_tipping")
 N_CORES      = max(1, min(6, cpu_count()))
@@ -207,22 +207,16 @@ def plot_results(args):
     ax = axes[0]
     ax.plot(x, peak_means, marker="o", color=colour, linewidth=2)
     ax.fill_between(x, peak_mins, peak_maxes, alpha=0.2, color=colour)
-    ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
-    ax.set_title("Peak u5 Prevalence")
-    ax.set_xlabel("Rotavirus Infection Probability")
-    ax.set_ylabel("Fraction of u5s infectious")
+    ax.set_xlabel("Rotavirus Infection Probability", fontsize=12)
+    ax.set_ylabel("Peak Under 5 Prevalence", fontsize=12)
     ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=1))
-    ax.legend(fontsize=9)
 
     # --- Panel 2: Cumulative child-days of illness ---
     ax = axes[1]
     ax.plot(x, cum_means, marker="o", color="#FF5722", linewidth=2)
     ax.fill_between(x, cum_mins, cum_maxes, alpha=0.2, color="#FF5722")
-    ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label="Baseline")
-    ax.set_title("Cumulative u5 Child-Days of Illness")
-    ax.set_xlabel("Rotavirus Infection Probability")
-    ax.set_ylabel("Child-Days")
-    ax.legend(fontsize=9)
+    ax.set_ylabel("Cumulative Under 5 Child-Days of Illness", fontsize=12)
+    ax.set_xlabel("Rotavirus Infection Probability", fontsize=12)
 
     plt.tight_layout()
     out_fig = os.path.join(args.output, "exp1_rota_tipping.png")
@@ -238,7 +232,7 @@ def plot_results(args):
 def main():
     parser = argparse.ArgumentParser(description="Experiment 1: Rotavirus Tipping Point")
     parser.add_argument("-g", "--grid-id", required=False, help="Grid ID (required unless --plot-only)")
-    parser.add_argument("-r", "--reps", type=int, default=15)
+    parser.add_argument("-r", "--reps", type=int, default=20)
     parser.add_argument("-s", "--steps", type=int, default=250)
     parser.add_argument("-n", "--agents", type=int, default=4000)
     parser.add_argument("-o", "--output", type=str, default=OUTPUT_DIR)

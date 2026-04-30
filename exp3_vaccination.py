@@ -45,8 +45,8 @@ from abm.utils.rng import set_global_seed
 # Experiment parameters
 # ---------------------------------------------------------------------------
 
-VACC_RATES      = np.linspace(0.0,  0.05, 5)   # daily vaccination probability
-VACC_EFFICACIES = np.linspace(0.2,  0.95, 5)   # vaccine efficacy
+VACC_RATES      = np.linspace(0.0,  0.1, 5)   # daily vaccination probability
+VACC_EFFICACIES = np.linspace(0.01,  0.99, 5)   # vaccine efficacy
 OUTPUT_DIR      = os.path.join("outputs", "exp3_vaccination")
 N_CORES         = max(1, min(6, cpu_count()))
 
@@ -219,13 +219,13 @@ def plot_results(args):
             linewidths=0.5,
             linecolor="white",
         )
-        ax.set_title(title, fontsize=12)
-        ax.set_xlabel("vaccine_efficacy", fontsize=10)
-        ax.set_ylabel("vaccination_rate (per day)", fontsize=10)
+        ax.set_title(title, fontsize=16)
+        ax.set_xlabel("Vaccine Efficacy", fontsize=12)
+        ax.set_ylabel("Vaccinattion Rate (per day)", fontsize=12)
         ax.invert_yaxis()
 
-    _heatmap(axes[0], peak_grid, "Mean Peak u5 Prevalence", ".2f", "Reds", 0, None)
-    _heatmap(axes[1], cum_grid, "Mean Cumulative u5 Child-Days", ".0f", "Reds", 0, None)
+    _heatmap(axes[0], peak_grid, "Mean Peak Under 5 Prevalence", ".2f", "Reds", 0, None)
+    _heatmap(axes[1], cum_grid, "Mean Cumulative Under 5 Child-Days", ".0f", "Reds", 0, None)
 
     plt.tight_layout()
     out_fig = os.path.join(args.output, "exp3_vaccination.png")
@@ -240,7 +240,7 @@ def plot_results(args):
 def main():
     parser = argparse.ArgumentParser(description="Experiment 3: Vaccination Herd Immunity Surface")
     parser.add_argument("-g", "--grid-id",  required=False)
-    parser.add_argument("-r", "--reps",     type=int, default=15)
+    parser.add_argument("-r", "--reps",     type=int, default=20)
     parser.add_argument("-s", "--steps",    type=int, default=250)
     parser.add_argument("-n", "--agents",   type=int, default=4000)
     parser.add_argument("-o", "--output",   type=str, default=OUTPUT_DIR)

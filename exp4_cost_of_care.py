@@ -52,10 +52,13 @@ from abm.utils.rng import set_global_seed
 # Experiment parameters
 # ---------------------------------------------------------------------------
 
-PARAM_VALUES = np.linspace(0.0, 0.05, 10)
+PARAM_VALUES = np.linspace(0.0, 0.03, 10)
 BASELINE     = 0.025
 OUTPUT_DIR   = os.path.join("outputs", "exp4_cost_of_care")
 N_CORES      = max(1, min(6, cpu_count()))
+
+OVERRIDE_COST_OF_LIVING    = 0.015
+OVERRIDE_TREATMENT_SUCCESS = 0.55
 
 # ---------------------------------------------------------------------------
 # Metrics
@@ -133,11 +136,13 @@ def _run_one(args_tuple):
     set_global_seed(seed)
 
     cfg: SVEIRConfig = SVEIRCONFIG.model_copy(deep=True)
-    cfg.step_target   = steps
+    cfg.step_target = steps
     cfg.number_agents = n_agents
-    cfg.seed          = seed
-    cfg.spatial_creation_args.grid_id      = grid_id
-    cfg.steering_parameters.cost_of_care   = float(cost)
+    cfg.seed = seed
+    cfg.spatial_creation_args.grid_id = grid_id
+    cfg.steering_parameters.cost_of_care = float(cost)
+    cfg.steering_parameters.daily_cost_of_living = OVERRIDE_COST_OF_LIVING
+    cfg.steering_parameters.treatment_success_prob = OVERRIDE_TREATMENT_SUCCESS
 
     try:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
@@ -266,12 +271,12 @@ def plot_results(args):
             "pct": True,
         },
         "peak_u5_prevalence": {
-            "title": "Peak u5 Prevalence\n(combined pathogens)",
+            "title": "Peak Under 5 Prevalence\n(combined pathogens)",
             "colour": "#FF5722",
             "pct": True,
         },
         "cumulative_u5_days": {
-            "title": "Cumulative u5 Child-Days of Illness\n(rota + campy)",
+            "title": "Cumulative Under 5 Child-Days of Illness\n(rota + campy)",
             "colour": "#9C27B0",
             "pct": False,
         },
@@ -298,11 +303,9 @@ def plot_results(args):
 
         ax.plot(x, m, marker="o", color=c, linewidth=2, zorder=4)
         ax.fill_between(x, mn, mx, alpha=0.2, color=c)
-        ax.axvline(baseline, color="grey", linestyle="--", linewidth=1.2, label=f"Baseline ({baseline})")
 
-        ax.set_title(cfg[k]["title"], fontsize=12)
-        ax.set_xlabel("Cost of Care", fontsize=12)
-        ax.legend(fontsize=8)
+        ax.set_title(cfg[k]["title"], fontsize=16)
+        ax.set_xlabel("Cost of Care", fontsize=14)
 
         if cfg[k]["pct"]:
             ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=1))
@@ -313,37 +316,37 @@ def plot_results(args):
     print(f"  Figure saved → {out_fig}")
     plt.show()
 
-    # ---- Bonus: care rate vs. child-days scatter -------------------------
-    # Each point is one replicate; colour encodes cost_of_care value
-    fig2, ax2 = plt.subplots(figsize=(9, 6))
-    cmap   = plt.get_cmap("plasma", len(param_vals))
-    sm     = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=x.min(), vmax=x.max()))
-    sm.set_array([])
+    # # ---- Bonus: care rate vs. child-days scatter -------------------------
+    # # Each point is one replicate; colour encodes cost_of_care value
+    # fig2, ax2 = plt.subplots(figsize=(9, 6))
+    # cmap   = plt.get_cmap("plasma", len(param_vals))
+    # sm     = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=x.min(), vmax=x.max()))
+    # sm.set_array([])
 
-    for ci, v in enumerate(param_vals):
-        reps = aggregated[v]
-        cr   = [r["conditional_care_rate"] for r in reps if r is not None]
-        cd   = [r["cumulative_u5_days"]    for r in reps if r is not None]
-        ax2.scatter(cr, cd, color=cmap(ci), alpha=0.65, s=45, zorder=3)
-        # Profile mean as a larger marker
-        ax2.scatter(np.mean(cr), np.mean(cd), color=cmap(ci),
-                    s=160, marker="D", edgecolors="black", linewidths=0.8, zorder=5)
+    # for ci, v in enumerate(param_vals):
+    #     reps = aggregated[v]
+    #     cr   = [r["conditional_care_rate"] for r in reps if r is not None]
+    #     cd   = [r["cumulative_u5_days"]    for r in reps if r is not None]
+    #     ax2.scatter(cr, cd, color=cmap(ci), alpha=0.65, s=45, zorder=3)
+    #     # Profile mean as a larger marker
+    #     ax2.scatter(np.mean(cr), np.mean(cd), color=cmap(ci),
+    #                 s=160, marker="D", edgecolors="black", linewidths=0.8, zorder=5)
 
-    fig2.colorbar(sm, ax=ax2, label="cost_of_care")
-    ax2.set_title(
-        "Conditional Care Rate vs. Cumulative u5 Child-Days\n"
-        "(diamonds = parameter-value means, colour = cost_of_care)",
-        fontsize=12,
-    )
-    ax2.set_xlabel("Conditional Care-Seeking Rate", fontsize=11)
-    ax2.set_ylabel("Cumulative u5 Child-Days of Illness", fontsize=11)
-    ax2.xaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=1))
+    # fig2.colorbar(sm, ax=ax2, label="cost_of_care")
+    # ax2.set_title(
+    #     "Conditional Care Rate vs. Cumulative u5 Child-Days\n"
+    #     "(diamonds = parameter-value means, colour = cost_of_care)",
+    #     fontsize=16,
+    # )
+    # ax2.set_xlabel("Conditional Care-Seeking Rate", fontsize=14)
+    # ax2.set_ylabel("Cumulative Under 5 Child-Days of Illness", fontsize=14)
+    # ax2.xaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=1))
 
-    plt.tight_layout()
-    out_fig2 = os.path.join(args.output, "exp4_care_vs_burden.png")
-    plt.savefig(out_fig2, dpi=180, bbox_inches="tight")
-    print(f"  Scatter figure saved → {out_fig2}")
-    plt.show()
+    # plt.tight_layout()
+    # out_fig2 = os.path.join(args.output, "exp4_care_vs_burden.png")
+    # plt.savefig(out_fig2, dpi=180, bbox_inches="tight")
+    # print(f"  Scatter figure saved → {out_fig2}")
+    # plt.show()
 
 
 # ---------------------------------------------------------------------------

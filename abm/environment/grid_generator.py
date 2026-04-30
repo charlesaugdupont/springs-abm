@@ -19,8 +19,8 @@ AKUSE_BOUNDARY_COORDS = [
     (0.1661, 6.0677),
     (0.1118, 6.0677),
 ]
-GRID_SIZE = 75
-POI_FETCH_RADIUS = 1500
+GRID_SIZE = 100
+POI_FETCH_RADIUS = 2000
 OSM_POI_TAGS = {"amenity": [GridLayer.SCHOOL, GridLayer.WORSHIP]}
 PROCEDURAL_POI_COUNTS = {GridLayer.SCHOOL: 5, GridLayer.WORSHIP: 5, GridLayer.WATER: 0}
 WATER_SAMPLING_CSV = Path("abm/data/water_sampling_points.csv")

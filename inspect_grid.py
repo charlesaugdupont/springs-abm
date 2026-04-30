@@ -34,7 +34,7 @@ def _plot_binary(ax, layer_data, title, fig):
                    origin="lower", interpolation="nearest")
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, ticks=[0.25, 0.75])
     cbar.ax.set_yticklabels(["Absent", "Present"], rotation=90, va="center")
-    ax.set_title(title, pad=10, fontsize=14)
+    ax.set_title(title, pad=10, fontsize=20)
     ax.set_xlabel(r"$x$", fontsize=11)
     ax.set_ylabel(r"$y$", rotation=0, labelpad=15, fontsize=11)
 
@@ -44,7 +44,7 @@ def _plot_continuous(ax, layer_data, title, fig):
     im = ax.imshow(layer_data, cmap="plasma", origin="lower")
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label("Density", fontsize=10)
-    ax.set_title(title, pad=10, fontsize=14)
+    ax.set_title(title, pad=10, fontsize=20)
     ax.set_xlabel(r"$x$", fontsize=11)
     ax.set_ylabel(r"$y$", rotation=0, labelpad=15, fontsize=11)
 
@@ -60,7 +60,7 @@ def _plot_natural_view(ax, bounds, fig):
     minx, miny, maxx, maxy = bounds
     ax.set_xlim(minx, maxx)
     ax.set_ylim(miny, maxy)
-    ax.set_title(TITLES["_natural_view"], pad=10, fontsize=14)
+    ax.set_title(TITLES["_natural_view"], pad=10, fontsize=20)
     ax.set_xlabel("Longitude", fontsize=11)
     ax.set_ylabel("Latitude", fontsize=11)
 
@@ -116,7 +116,7 @@ def inspect_grid(grid_id: str):
         if layer_name not in name_to_idx:
             ax.text(0.5, 0.5, f"Layer '{layer_name}'\nnot found",
                     ha="center", va="center", transform=ax.transAxes)
-            ax.set_title(title, pad=10, fontsize=14)
+            ax.set_title(title, pad=10, fontsize=20)
             ax.set_axis_off()
             continue
 
@@ -137,7 +137,7 @@ def inspect_grid(grid_id: str):
         if layer_name not in name_to_idx:
             ax.text(0.5, 0.5, f"Layer '{layer_name}'\nnot found",
                     ha="center", va="center", transform=ax.transAxes)
-            ax.set_title(title, pad=10, fontsize=14)
+            ax.set_title(title, pad=10, fontsize=20)
             ax.set_axis_off()
             continue
 
