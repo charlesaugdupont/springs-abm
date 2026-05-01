@@ -256,7 +256,7 @@ def plot_results(args):
             "pct":    True,
         },
         "cumulative_u5_days": {
-            "title":  "Cumulative Under-5 Child-Days of Illness\n(rota + campy)",
+            "title":  "Cumulative Under-5 Child-Days of Illness\n(combined pathogens)",
             "colour": "#9C27B0",
             "pct":    False,
         },
@@ -269,14 +269,15 @@ def plot_results(args):
         c = panel_cfg[k]["colour"]
         ax.plot(x, means[k], marker="o", color=c, linewidth=2, zorder=4)
         ax.fill_between(x, mins[k], maxes[k], alpha=0.2, color=c)
-        ax.set_title(panel_cfg[k]["title"], fontsize=16)
-        ax.set_xlabel("Cost of Care", fontsize=14)
+        ax.set_title(panel_cfg[k]["title"], fontsize=20)
+        ax.set_xlabel("Cost of Care", fontsize=18)
+        ax.tick_params(axis="both", labelsize=14)
         if panel_cfg[k]["pct"]:
             ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=1))
 
     plt.tight_layout()
-    out_fig = os.path.join(args.output, "exp4_cost_of_care.png")
-    plt.savefig(out_fig, dpi=180, bbox_inches="tight")
+    out_fig = os.path.join(args.output, "exp4_cost_of_care.jpg")
+    plt.savefig(out_fig, dpi=300, bbox_inches="tight")
     print(f"  Figure saved → {out_fig}")
     plt.show()
 
