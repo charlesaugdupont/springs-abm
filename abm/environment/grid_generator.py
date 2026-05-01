@@ -147,7 +147,7 @@ def _load_akuse_water_cells(boundary_info, valid_cells_mask: np.ndarray) -> np.n
     print(f"  - Placed {len(used_cells)} real Akuse water sources from CSV.")
     return water_layer
 
-def _place_osm_pois(tags, boundary_info):
+def _place_osm_pois(tags, boundary_info, valid_cells_mask):
     """Fetches and places POIs from OpenStreetMap onto grid layers."""
     minx, miny, x_step, y_step = boundary_info
     try:
@@ -164,7 +164,7 @@ def _place_osm_pois(tags, boundary_info):
             geom = poi['geometry'].centroid if isinstance(poi['geometry'], Polygon) else poi['geometry']
             c = int((geom.x - minx) / x_step)
             r = int((geom.y - miny) / y_step)
-            if 0 <= r < GRID_SIZE and 0 <= c < GRID_SIZE:
+            if 0 <= r < GRID_SIZE and 0 <= c < GRID_SIZE and valid_cells_mask[r, c]:
                 osm_layers[amenity_type][r, c] = 1
     all_osm_mask = np.sum(list(osm_layers.values()), axis=0) > 0
     return osm_layers, all_osm_mask
@@ -253,7 +253,7 @@ def create_and_save_realistic_grid():
     set_global_seed(seed_int)
 
     valid_cells, boundary_info = _initialize_grid_and_boundary()
-    osm_layers, osm_occupied = _place_osm_pois(OSM_POI_TAGS, boundary_info)
+    osm_layers, osm_occupied = _place_osm_pois(OSM_POI_TAGS, boundary_info, valid_cells)
     proc_layers = _place_procedural_pois(PROCEDURAL_POI_COUNTS, valid_cells, osm_occupied, boundary_info)
 
     print("2. Combining all layers...")

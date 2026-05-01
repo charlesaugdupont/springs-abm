@@ -222,16 +222,16 @@ def plot_results(args):
     ax = axes[0]
     ax.plot(x, peak_means, marker="o", color="#2196F3", linewidth=2)
     ax.fill_between(x, peak_mins, peak_maxes, alpha=0.2, color="#2196F3")
-    ax.set_ylabel("Peak Under 5 Prevalence", fontsize=12)
-    ax.set_xlabel("Human-Animal Interaction Rate", fontsize=12)
+    ax.set_ylabel("Peak Under 5 Prevalence", fontsize=16)
+    ax.set_xlabel("Human-Animal Interaction Rate", fontsize=16)
     ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=1))
 
     # --- Panel 2: Cumulative child-days ---
     ax = axes[1]
     ax.plot(x, cum_means, marker="o", color="#FF5722", linewidth=2)
     ax.fill_between(x, cum_mins, cum_maxes, alpha=0.2, color="#FF5722")
-    ax.set_ylabel("Cumulative Under 5 Child-Days of Illness", fontsize=12)
-    ax.set_xlabel("Human-Animal Interaction Rate", fontsize=12)
+    ax.set_ylabel("Cumulative Under 5 Child-Days of Illness", fontsize=16)
+    ax.set_xlabel("Human-Animal Interaction Rate", fontsize=16)
 
     plt.tight_layout()
     out_fig = os.path.join(args.output, "exp2_campy_tipping.png")

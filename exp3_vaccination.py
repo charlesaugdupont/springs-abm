@@ -45,8 +45,8 @@ from abm.utils.rng import set_global_seed
 # Experiment parameters
 # ---------------------------------------------------------------------------
 
-VACC_RATES      = np.linspace(0.0,  0.1, 5)   # daily vaccination probability
-VACC_EFFICACIES = np.linspace(0.01,  0.99, 5)   # vaccine efficacy
+VACC_RATES      = np.linspace(0.0, 0.1, 5)   # daily vaccination probability
+VACC_EFFICACIES = np.linspace(0.20, 0.90, 5)   # vaccine efficacy
 OUTPUT_DIR      = os.path.join("outputs", "exp3_vaccination")
 N_CORES         = max(1, min(6, cpu_count()))
 
@@ -219,9 +219,9 @@ def plot_results(args):
             linewidths=0.5,
             linecolor="white",
         )
-        ax.set_title(title, fontsize=16)
-        ax.set_xlabel("Vaccine Efficacy", fontsize=12)
-        ax.set_ylabel("Vaccinattion Rate (per day)", fontsize=12)
+        ax.set_title(title, fontsize=18)
+        ax.set_xlabel("Vaccine Efficacy", fontsize=16)
+        ax.set_ylabel("Vaccinattion Rate (per day)", fontsize=16)
         ax.invert_yaxis()
 
     _heatmap(axes[0], peak_grid, "Mean Peak Under 5 Prevalence", ".2f", "Reds", 0, None)

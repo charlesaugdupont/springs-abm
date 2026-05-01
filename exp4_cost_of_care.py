@@ -12,8 +12,6 @@ Metrics:
                              (fraction of severe cases priced out of care)
   - peak_u5_prevalence     : max fraction of u5s infectious (both pathogens)
   - cumulative_u5_days     : combined child-days of illness (rota + campy)
-  - mean_final_wealth      : mean final wealth across all agents
-  - mean_final_health      : mean final health across all agents
 
 Usage
 -----
@@ -104,24 +102,12 @@ def compute_metrics(model: SVEIRModel, steps: int) -> dict:
         prev = np.array(model.u5_prevalence_history.get(pname, []))
         cum_days += float(prev.sum()) * n_u5
 
-    # --- Final wealth and health ---
-    final_states = model.get_final_agent_states()
-    mean_wealth  = float(np.mean(final_states["wealth"]))
-    mean_health  = float(np.mean(final_states["health"]))
-
-    # --- Parent-specific final wealth ---
-    is_parent    = final_states["is_parent"].astype(bool)
-    mean_parent_wealth = float(np.mean(final_states["wealth"][is_parent])) if is_parent.any() else 0.0
-
     return {
         "conditional_care_rate": conditional_care_rate,
         "could_not_afford_rate": could_not_afford_rate,
         "decisions_faced":       decisions_faced,
         "peak_u5_prevalence":    peak_u5,
         "cumulative_u5_days":    cum_days,
-        "mean_final_wealth":     mean_wealth,
-        "mean_final_health":     mean_health,
-        "mean_parent_wealth":    mean_parent_wealth,
     }
 
 
@@ -227,87 +213,65 @@ def plot_results(args):
 
     aggregated = data["aggregated"]
     param_vals = sorted(aggregated.keys())
-    baseline   = data["baseline"]
     x          = np.array(param_vals)
 
-    # ---- Collect means and stds ------------------------------------------
     metrics_keys = [
         "conditional_care_rate",
         "could_not_afford_rate",
         "peak_u5_prevalence",
         "cumulative_u5_days",
-        "mean_parent_wealth",
-        "mean_final_health",
     ]
+
     means = {k: [] for k in metrics_keys}
-    mins = {k: [] for k in metrics_keys}
+    mins  = {k: [] for k in metrics_keys}
     maxes = {k: [] for k in metrics_keys}
-    raw   = {k: [] for k in metrics_keys}
 
     for v in param_vals:
         reps = aggregated[v]
         for k in metrics_keys:
             vals = [r[k] for r in reps if r is not None]
             means[k].append(np.mean(vals) if vals else np.nan)
-            mins[k].append(np.min(vals) if vals else np.nan)
-            maxes[k].append(np.max(vals) if vals else np.nan)
-            raw[k].append(vals)
+            mins[k].append(np.min(vals)   if vals else np.nan)
+            maxes[k].append(np.max(vals)  if vals else np.nan)
 
     for k in metrics_keys:
         means[k] = np.array(means[k])
-        mins[k] = np.array(mins[k])
+        mins[k]  = np.array(mins[k])
         maxes[k] = np.array(maxes[k])
 
-    # ---- Titles, colours, formatters -------------------------------------
-    cfg = {
+    panel_cfg = {
         "conditional_care_rate": {
-            "title": "Care-Seeking Rate",
+            "title":  "Care-Seeking Rate",
             "colour": "#2196F3",
-            "pct": True,
+            "pct":    True,
         },
         "could_not_afford_rate": {
-            "title": "Could-Not-Afford Rate",
+            "title":  "Could-Not-Afford Rate",
             "colour": "#F44336",
-            "pct": True,
+            "pct":    True,
         },
         "peak_u5_prevalence": {
-            "title": "Peak Under 5 Prevalence\n(combined pathogens)",
+            "title":  "Peak Under-5 Prevalence\n(combined pathogens)",
             "colour": "#FF5722",
-            "pct": True,
+            "pct":    True,
         },
         "cumulative_u5_days": {
-            "title": "Cumulative Under 5 Child-Days of Illness\n(rota + campy)",
+            "title":  "Cumulative Under-5 Child-Days of Illness\n(rota + campy)",
             "colour": "#9C27B0",
-            "pct": False,
-        },
-        "mean_parent_wealth": {
-            "title": "Mean Final Parent Wealth",
-            "colour": "#FF9800",
-            "pct": False,
-        },
-        "mean_final_health": {
-            "title": "Mean Final Health\n(all agents)",
-            "colour": "#4CAF50",
-            "pct": False,
+            "pct":    False,
         },
     }
 
     sns.set_theme(style="whitegrid", font_scale=1.05)
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(13, 9))
 
     for ax, k in zip(axes.flatten(), metrics_keys):
-        c = cfg[k]["colour"]
-        m = means[k]
-        mn = mins[k]
-        mx = maxes[k]
-
-        ax.plot(x, m, marker="o", color=c, linewidth=2, zorder=4)
-        ax.fill_between(x, mn, mx, alpha=0.2, color=c)
-
-        ax.set_title(cfg[k]["title"], fontsize=16)
+        c = panel_cfg[k]["colour"]
+        ax.plot(x, means[k], marker="o", color=c, linewidth=2, zorder=4)
+        ax.fill_between(x, mins[k], maxes[k], alpha=0.2, color=c)
+        ax.set_title(panel_cfg[k]["title"], fontsize=16)
         ax.set_xlabel("Cost of Care", fontsize=14)
-
-        if cfg[k]["pct"]:
+        if panel_cfg[k]["pct"]:
             ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=1))
 
     plt.tight_layout()
@@ -315,38 +279,6 @@ def plot_results(args):
     plt.savefig(out_fig, dpi=180, bbox_inches="tight")
     print(f"  Figure saved → {out_fig}")
     plt.show()
-
-    # # ---- Bonus: care rate vs. child-days scatter -------------------------
-    # # Each point is one replicate; colour encodes cost_of_care value
-    # fig2, ax2 = plt.subplots(figsize=(9, 6))
-    # cmap   = plt.get_cmap("plasma", len(param_vals))
-    # sm     = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=x.min(), vmax=x.max()))
-    # sm.set_array([])
-
-    # for ci, v in enumerate(param_vals):
-    #     reps = aggregated[v]
-    #     cr   = [r["conditional_care_rate"] for r in reps if r is not None]
-    #     cd   = [r["cumulative_u5_days"]    for r in reps if r is not None]
-    #     ax2.scatter(cr, cd, color=cmap(ci), alpha=0.65, s=45, zorder=3)
-    #     # Profile mean as a larger marker
-    #     ax2.scatter(np.mean(cr), np.mean(cd), color=cmap(ci),
-    #                 s=160, marker="D", edgecolors="black", linewidths=0.8, zorder=5)
-
-    # fig2.colorbar(sm, ax=ax2, label="cost_of_care")
-    # ax2.set_title(
-    #     "Conditional Care Rate vs. Cumulative u5 Child-Days\n"
-    #     "(diamonds = parameter-value means, colour = cost_of_care)",
-    #     fontsize=16,
-    # )
-    # ax2.set_xlabel("Conditional Care-Seeking Rate", fontsize=14)
-    # ax2.set_ylabel("Cumulative Under 5 Child-Days of Illness", fontsize=14)
-    # ax2.xaxis.set_major_formatter(mticker.PercentFormatter(xmax=1, decimals=1))
-
-    # plt.tight_layout()
-    # out_fig2 = os.path.join(args.output, "exp4_care_vs_burden.png")
-    # plt.savefig(out_fig2, dpi=180, bbox_inches="tight")
-    # print(f"  Scatter figure saved → {out_fig2}")
-    # plt.show()
 
 
 # ---------------------------------------------------------------------------
