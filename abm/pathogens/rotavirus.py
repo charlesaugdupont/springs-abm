@@ -60,7 +60,7 @@ class Rotavirus(Pathogen):
 
     def _susceptible_to_exposed_h2h(self, agent_state: AgentState, location_ids: torch.Tensor, num_locations: int):
         status_key = AgentPropertyKeys.status(self.name)
-        sus_mask = agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE
+        sus_mask = (agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE | agent_state.ndata[status_key] == Compartment.RECOVERED)
         self._apply_new_infections(
             agent_state, 
             target_nodes_mask=sus_mask, 
@@ -143,7 +143,7 @@ class Rotavirus(Pathogen):
         status_key = AgentPropertyKeys.status(self.name)
         status = agent_state.ndata[status_key]
 
-        # Keep current behavior: recovered agents can be re-infected.
+        # recovered agents can be re-infected.
         susceptible_like = (status == Compartment.SUSCEPTIBLE) | (status == Compartment.RECOVERED)
         susceptible_mask = susceptible_like & at_contaminated_water_mask
         vaccinated_mask = (status == Compartment.VACCINATED) & at_contaminated_water_mask
