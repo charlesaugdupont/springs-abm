@@ -60,7 +60,7 @@ class IllnessMechanicsConfig(BaseModel):
 
     # Immunity reductions applied multiplicatively to base severity
     immunity_factor_vaccine: float = 0.4
-    immunity_factor_per_infection: float = 0.20
+    severity_reduction_per_infection: float = 0.20
 
     # Duration model: duration ~ Normal(mean, std) where mean is linearly
     # scaled by severity. Values are in days.

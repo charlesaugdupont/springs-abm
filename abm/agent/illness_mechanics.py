@@ -42,7 +42,7 @@ def _get_immunity_effect(
             torch.tensor(cfg.immunity_factor_vaccine, dtype=torch.float, device=num_infections.device),
             torch.zeros(1, device=num_infections.device),
         )
-    immunity_reduction += num_infections.float() * cfg.immunity_factor_per_infection
+    immunity_reduction += num_infections.float() * cfg.severity_reduction_per_infection
     return torch.clamp(1.0 - immunity_reduction, min=0.1)
 
 
@@ -104,4 +104,4 @@ def calculate_illness_duration(
     )
     noise = torch.randn_like(mean_duration) * cfg.duration_noise_std
     duration = torch.round(mean_duration + noise).int()
-    return torch.clamp(duration, min=1)
+    return torch.clamp(duration, min=cfg.duration_min_days, max=cfg.duration_max_days)
