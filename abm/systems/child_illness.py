@@ -148,9 +148,7 @@ class ChildIllnessSystem(System):
             is_child       = agent_state.ndata[AgentPropertyKeys.IS_CHILD][mask],
             age            = agent_state.ndata[AgentPropertyKeys.AGE][mask],
             vaccine_status = vaccine_status_tensor,
-            num_infections = agent_state.ndata[
-                AgentPropertyKeys.num_infections(pathogen_name)
-            ][mask],
+            num_infections = agent_state.ndata[AgentPropertyKeys.num_infections(pathogen_name)][mask] - 1, # subtract new infection
             cfg            = illness_cfg,
         )
         new_duration = calculate_illness_duration(new_severity, illness_cfg)
