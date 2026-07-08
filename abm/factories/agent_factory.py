@@ -66,13 +66,15 @@ class AgentFactory:
                      is_parent[adults_in_hh[0]] = True
         agent_properties[AgentPropertyKeys.IS_PARENT] = is_parent
 
-        # --- Disease States (Initialized for all pathogens in config) ---
+        # --- Illness States (tracked per pathogen, so children can be concurrently ill with more than one patehogen) ---
         for pathogen_conf in self.config.pathogens:
             p_name = pathogen_conf.name
             p_prop = pathogen_conf.initial_exposed_proportion
             agent_properties[AgentPropertyKeys.status(p_name)] = self._initialize_compartment(num_agents, p_prop)
             agent_properties[AgentPropertyKeys.exposure_time(p_name)] = torch.zeros(num_agents, dtype=torch.int)
             agent_properties[AgentPropertyKeys.num_infections(p_name)] = torch.zeros(num_agents, dtype=torch.int)
+            agent_properties[AgentPropertyKeys.symptom_severity(p_name)] = torch.zeros(num_agents, dtype=torch.float)
+            agent_properties[AgentPropertyKeys.illness_duration(p_name)] = torch.zeros(num_agents, dtype=torch.int)
 
         # --- Location and Activity ---
         agent_properties[AgentPropertyKeys.TIME_USE] = self._initialize_time_use(num_agents, agent_state.ndata[AgentPropertyKeys.IS_CHILD])
@@ -85,17 +87,20 @@ class AgentFactory:
 
         # --- Health and Wealth ---
         # Sampled independently from truncated normals
-        #
-        # Wealth ~ TruncNormal(mean=0.3, std=0.15, low=0, high=1)
-        #   Most agents start in the lower-middle range with a right tail of
-        #   wealthier households, reflecting Akuse's income distribution.
-        #
-        # Health ~ TruncNormal(mean=0.6, std=0.2, low=0, high=1)
-        #   Agents start moderately healthy on average, with meaningful
-        #   variance to allow health-wealth feedback loops to differentiate
-        #   trajectories from day 1.
-        wealth = _truncated_normal(mean=0.3, std=0.15, low=0.0, high=1.0, size=num_agents)
+        # Health ~ TruncNormal(mean=0.6, std=0.2, low=0, high=1), sampled per agent.
         health = _truncated_normal(mean=0.6, std=0.20, low=0.0, high=1.0, size=num_agents)
+
+        # Wealth ~ TruncNormal(mean=0.3, std=0.15, low=0, high=1), sampled ONCE PER
+        # HOUSEHOLD and shared by all members. Wealth is a pooled household
+        # resource (see EconomicSystem / abm.utils.household), not an independent
+        # per-agent balance — children have no income of their own and in
+        # practice a household draws on shared money.
+        household_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
+        unique_households, household_indices = torch.unique(household_ids, return_inverse=True)
+        household_wealth = _truncated_normal(
+            mean=0.3, std=0.15, low=0.0, high=1.0, size=len(unique_households)
+        )
+        wealth = household_wealth[household_indices]
 
         agent_properties[AgentPropertyKeys.WEALTH] = wealth
         agent_properties[AgentPropertyKeys.HEALTH] = health

@@ -70,8 +70,6 @@ class AgentPropertyKeys:
     WATER_LOCATION = "water_location"
     
     # Illness State
-    SYMPTOM_SEVERITY = "symptom_severity"
-    ILLNESS_DURATION = "illness_duration"
     CARE_SEEKING_COUNT = "care_seeking_count"
 
     # Dynamic keys for pathogens
@@ -86,3 +84,11 @@ class AgentPropertyKeys:
     @staticmethod
     def num_infections(pathogen_name: str) -> str:
         return f"num_infections_{pathogen_name}"
+    
+    @staticmethod
+    def symptom_severity(pathogen_name: str) -> str:
+        return f"symptom_severity_{pathogen_name}"
+    
+    @staticmethod
+    def illness_duration(pathogen_name: str) -> str:
+        return f"illness_duration_{pathogen_name}"
