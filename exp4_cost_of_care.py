@@ -1,7 +1,7 @@
 """
 Experiment 4: Cost-of-Care Sweep
 =================================
-Sweeps cost_of_care across 10 values in [0.0, 0.5] to detect how the
+Sweeps cost_of_care across 10 values in [0.0, 0.03] to detect how the
 financial barrier to healthcare access affects care-seeking behaviour,
 child disease burden, and household wealth.
 
