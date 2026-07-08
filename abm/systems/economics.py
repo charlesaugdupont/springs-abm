@@ -9,7 +9,7 @@ class EconomicSystem(System):
     def update(self, agent_state: AgentState, **kwargs):
         params = self.config.steering_parameters
         
-        # --- 1. Calculate Income (No change here) ---
+        # --- 1. Calculate Income ---
         income = torch.zeros(agent_state.num_nodes(), device=self.device)
         if params.daily_income_rate > 0:
             is_adult = ~agent_state.ndata[AgentPropertyKeys.IS_CHILD]
@@ -20,7 +20,7 @@ class EconomicSystem(System):
                 else:
                     income[is_adult] = params.daily_income_rate
         
-        # --- 2. Calculate Net Wealth Change (MODIFIED LOGIC) ---
+        # --- 2. Calculate Net Wealth Change ---
         current_wealth = agent_state.ndata[AgentPropertyKeys.WEALTH]
         
         # Subtract cost of living for everyone

@@ -45,7 +45,7 @@ class ChildIllnessSystem(System):
 
     def update(self, agent_state: AgentState, **kwargs):
         """
-        Updates illness states. Must be called *after* pathogen progression so
+        Updates illness states. Must be called after pathogen progression so
         that compartment statuses reflect the current day's transitions.
         """
         self._current_timestep = kwargs.get("timestep", self._current_timestep + 1)
@@ -69,7 +69,7 @@ class ChildIllnessSystem(System):
 
         for p_config in self.config.pathogens:
             pathogen_name = p_config.name
-            status_key    = AgentPropertyKeys.status(pathogen_name)
+            status_key = AgentPropertyKeys.status(pathogen_name)
             p_mask = (
                 newly_symptomatic_children
                 & (agent_state.ndata[status_key] == Compartment.INFECTIOUS)

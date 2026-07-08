@@ -59,7 +59,7 @@ def _load_and_aggregate_results(experiment_name: str) -> Dict | None:
 # ---------------------------------------------------------------------------
 
 def plot_epidemic_curves(experiment_name: str):
-    """Plots the average epidemic prevalence curve across all repetitions."""
+    """Plots epidemic prevalence curve for first repeition of given experiment."""
     print(f"Generating epidemic curves for {experiment_name}...")
     aggregated_results = _load_and_aggregate_results(experiment_name)
     if not aggregated_results or not aggregated_results['u5_prevalence']:
