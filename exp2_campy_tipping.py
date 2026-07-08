@@ -1,7 +1,7 @@
 """
 Experiment 2: Campylobacter Tipping Point
 ==========================================
-Sweeps human_animal_interaction_rate across 10 values in [0.05, 0.60]
+Sweeps human_animal_interaction_rate across 10 values in [0.01, 0.50]
 to detect a phase transition driven by the zoonotic transmission route.
 
 Metrics (under-5s only):
@@ -179,12 +179,10 @@ def plot_results(args):
 
     aggregated = data["aggregated"]
     param_vals = sorted(aggregated.keys())
-    baseline   = data["baseline"]
 
     peak_means, peak_mins, peak_maxes = [], [], []
     cum_means, cum_mins, cum_maxes  = [], [], []
     zoo_means,  zoo_mins, zoo_maxes = [], [], []
-    extinction_probs = []
 
     for v in param_vals:
         reps  = aggregated[v]
@@ -200,7 +198,6 @@ def plot_results(args):
         zoo_means.append(np.mean(zoos))
         zoo_mins.append(np.min(zoos))
         zoo_maxes.append(np.max(zoos))
-        extinction_probs.append(np.mean([p < 0.01 for p in peaks]))
 
     peak_means = np.array(peak_means)
     peak_mins = np.array(peak_mins)
@@ -211,7 +208,6 @@ def plot_results(args):
     zoo_means = np.array(zoo_means)
     zoo_mins = np.array(zoo_mins)
     zoo_maxes = np.array(zoo_maxes)
-    extinction_probs = np.array(extinction_probs)
     x = np.array(param_vals)
 
     TICK_SIZE = 14

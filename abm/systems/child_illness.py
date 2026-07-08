@@ -27,17 +27,12 @@ class ChildIllnessSystem(System):
 
     The log is intentionally kept as a plain list of dicts so it is trivially
     serialisable (pickle / JSON) and does not depend on any fixed agent count.
-    Call ``reset_episode_log()`` between runs if you reuse the same instance.
     """
 
     def __init__(self, config):
         super().__init__(config)
         self.episode_log: list[dict] = []
         self._current_timestep: int = 0
-
-    def reset_episode_log(self):
-        """Clears the episode log (call between independent simulation runs)."""
-        self.episode_log = []
 
     # ------------------------------------------------------------------
     # Main update
@@ -85,9 +80,7 @@ class ChildIllnessSystem(System):
 
         if torch.any(is_sick):
             severity = agent_state.ndata[AgentPropertyKeys.SYMPTOM_SEVERITY][is_sick]
-            health_shock = severity * illness_cfg.severity_health_impact_factor \
-                if hasattr(illness_cfg, "severity_health_impact_factor") \
-                else severity * self.config.steering_parameters.severity_health_impact_factor
+            health_shock = severity * self.config.steering_parameters.severity_health_impact_factor
             current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][is_sick]
             agent_state.ndata[AgentPropertyKeys.HEALTH][is_sick] = torch.clamp(
                 current_health - health_shock, min=0.0

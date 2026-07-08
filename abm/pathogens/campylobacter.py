@@ -95,18 +95,6 @@ class Campylobacter(Pathogen):
         if self._is_night_phase(agent_state):
             self._fecal_oral_transmission(agent_state)
 
-    @property
-    def zoonotic_fraction(self) -> float | None:
-        """
-        Fraction of all campylobacter infections attributable to the zoonotic
-        route over the lifetime of the simulation.  Returns None if no
-        infections have occurred yet.
-        """
-        total = self.total_zoonotic + self.total_fecal_oral
-        if total == 0:
-            return None
-        return self.total_zoonotic / total
-
     # ------------------------------------------------------------------
     # Private: zoonotic route
     # ------------------------------------------------------------------

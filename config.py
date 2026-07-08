@@ -74,8 +74,6 @@ class GridCreationParams(BaseModel):
     """Arguments for creating the spatial grid environment."""
     method: str = "realistic_import"
     grid_id: str | None = None
-    x: int | None = 75
-    y: int | None = 75
     properties: dict | None = None
     model_config = ConfigDict(validate_default=True)
 
@@ -101,6 +99,7 @@ class SteeringParamsSVEIR(BaseModel):
     untreated_severity_penalty: float = 0.20
     severity_health_impact_factor: float = 0.05 # Daily health reduction per unit of severity
     daily_health_recovery_rate: float = 0.001 # Base daily recovery when not sick
+    child_health_weight: float = 0.5 # weight placed on child health in the parent's utility function.
 
     # Income and wealth dynamics
     daily_income_rate: float = 0.03

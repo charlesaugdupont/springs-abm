@@ -220,7 +220,7 @@ def plot_results(args):
         )
         ax.set_title(title, fontsize=18)
         ax.set_xlabel("Vaccine Efficacy", fontsize=16)
-        ax.set_ylabel("Vaccinattion Rate (per day)", fontsize=16)
+        ax.set_ylabel("Vaccination Rate (per day)", fontsize=16)
         ax.invert_yaxis()
 
     _heatmap(axes[0], peak_grid, "Mean Peak Under 5 Prevalence", ".2f", "Reds", 0, None)

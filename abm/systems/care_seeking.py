@@ -68,19 +68,14 @@ from abm.state import AgentState
 from abm.constants import AgentPropertyKeys, Compartment
 from abm.agent.health_cpt_utils import cpt_value_function, probability_weighting
 
-# Weight placed on child health in the parent's utility function.
-# 0.5 = equal weight on parent and child health.
-CHILD_HEALTH_WEIGHT: float = 0.5
-
-
 def _utility(w: float, h_eff: float, alpha: float) -> float:
     """Cobb-Douglas utility: w^alpha * h_eff^(1-alpha)."""
     return (w + 1e-9) ** alpha * (h_eff + 1e-9) ** (1.0 - alpha)
 
 
-def _h_eff(h_parent: float, h_child: float) -> float:
+def _h_eff(h_parent: float, h_child: float, child_weight: float) -> float:
     """Effective health combining parent and child health."""
-    return (1.0 - CHILD_HEALTH_WEIGHT) * h_parent + CHILD_HEALTH_WEIGHT * h_child
+    return (1.0 - child_weight) * h_parent + child_weight * h_child
 
 
 class CareSeekingSystem(System):
@@ -101,12 +96,6 @@ class CareSeekingSystem(System):
         self.decisions_faced:  int = 0
         self.care_sought:      int = 0
         self.could_not_afford: int = 0
-
-    def reset_counters(self):
-        """Reset all counters — call between independent simulation runs."""
-        self.decisions_faced  = 0
-        self.care_sought      = 0
-        self.could_not_afford = 0
 
     @property
     def conditional_care_rate(self) -> float:
@@ -224,19 +213,21 @@ class CareSeekingSystem(System):
         """
         w2 = w - params.cost_of_care
 
+        child_health_weight = params.child_health_weight
+
         # Reference: current state
-        ref_u = _utility(w, _h_eff(h_p, h_c), alpha)
+        ref_u = _utility(w, _h_eff(h_p, h_c, child_health_weight), alpha)
 
         # Seek outcomes
         # Success: child recovers to full health (h_c -> 1.0)
-        u_s1 = _utility(w2, _h_eff(h_p, 1.0), alpha)
+        u_s1 = _utility(w2, _h_eff(h_p, 1.0, child_health_weight), alpha)
         # Fail: cost paid, parent stressed, child unchanged
-        u_s2 = _utility(w2, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c), alpha)
+        u_s2 = _utility(w2, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c, child_health_weight), alpha)
 
         # Wait outcomes
         # Worsen: child deteriorates, parent stressed
         h_c_worsened = max(0.0, h_c - params.untreated_severity_penalty)
-        u_w1 = _utility(w, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c_worsened), alpha)
+        u_w1 = _utility(w, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c_worsened, child_health_weight), alpha)
         # Ok: no change → reference point → delta = 0
 
         pi_s1 = probability_weighting(params.treatment_success_prob,       gamma)
@@ -271,12 +262,14 @@ class CareSeekingSystem(System):
         """
         w2 = w - params.cost_of_care
 
-        u_s1 = _utility(w2, _h_eff(h_p, 1.0), alpha)
-        u_s2 = _utility(w2, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c), alpha)
+        child_health_weight = params.child_health_weight
+
+        u_s1 = _utility(w2, _h_eff(h_p, 1.0, child_health_weight), alpha)
+        u_s2 = _utility(w2, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c, child_health_weight), alpha)
 
         h_c_worsened = max(0.0, h_c - params.untreated_severity_penalty)
-        u_w1 = _utility(w, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c_worsened), alpha)
-        u_w2 = _utility(w, _h_eff(h_p, h_c), alpha)
+        u_w1 = _utility(w, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c_worsened, child_health_weight), alpha)
+        u_w2 = _utility(w, _h_eff(h_p, h_c, child_health_weight), alpha)
 
         ev_seek = (params.treatment_success_prob       * u_s1
                    + (1.0 - params.treatment_success_prob) * u_s2)

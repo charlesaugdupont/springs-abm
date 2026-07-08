@@ -10,7 +10,7 @@ import pandas as pd
 import re
 
 from abm.constants import GridLayer
-from abm.utils.rng import set_global_seed, get_np_rng
+from abm.utils.rng import get_np_rng
 
 AKUSE_CENTER_POINT = (6.0993, 0.12821)
 AKUSE_BOUNDARY_COORDS = [
@@ -248,10 +248,6 @@ def create_and_save_realistic_grid():
     grid_id = get_grid_id(AKUSE_BOUNDARY_COORDS, GRID_SIZE, OSM_POI_TAGS, PROCEDURAL_POI_COUNTS)
     print(f"1. Generating grid with ID: {grid_id}")
 
-    # Derive a deterministic seed from the grid_id and set the global RNG
-    seed_int = int(grid_id[:8], 16)
-    set_global_seed(seed_int)
-
     valid_cells, boundary_info = _initialize_grid_and_boundary()
     osm_layers, osm_occupied = _place_osm_pois(OSM_POI_TAGS, boundary_info, valid_cells)
     proc_layers = _place_procedural_pois(PROCEDURAL_POI_COUNTS, valid_cells, osm_occupied, boundary_info)
@@ -291,6 +287,3 @@ def create_and_save_realistic_grid():
     output_path = os.path.join(grid_dir, "grid.npz")
     np.savez_compressed(output_path, grid=final_grid, property_map=property_map, bounds=np.array(boundary_info))
     print(f"\n--- Grid Generation Complete ---\n  Grid ID: {grid_id}\n  Saved to: {output_path}")
-
-if __name__ == '__main__':
-    create_and_save_realistic_grid()

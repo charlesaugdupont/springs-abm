@@ -1,7 +1,7 @@
 """
 Experiment 1: Rotavirus Tipping Point
 ======================================
-Sweeps infection_prob_mean across 10 values in [0.005, 0.06] to detect
+Sweeps infection_prob_mean across 10 values in [0.0001, 0.05] to detect
 a phase transition in epidemic dynamics.
 
 Metrics (under-5s only):
@@ -170,11 +170,9 @@ def plot_results(args):
 
     aggregated = data["aggregated"]
     param_vals = sorted(aggregated.keys())
-    baseline = data["baseline"]
 
     peak_means, peak_mins, peak_maxes = [], [], []
     cum_means, cum_mins, cum_maxes = [], [], []
-    extinction_probs = []
 
     for v in param_vals:
         reps = aggregated[v]
@@ -186,7 +184,6 @@ def plot_results(args):
         cum_means.append(np.mean(cums))
         cum_mins.append(np.min(cums))
         cum_maxes.append(np.max(cums))
-        extinction_probs.append(np.mean([p < 0.01 for p in peaks]))   # <1% prevalence = extinction
 
     peak_means = np.array(peak_means)
     peak_mins = np.array(peak_mins)
@@ -194,7 +191,6 @@ def plot_results(args):
     cum_means = np.array(cum_means)
     cum_mins = np.array(cum_mins)
     cum_maxes = np.array(cum_maxes)
-    extinction_probs = np.array(extinction_probs)
     x = np.array(param_vals)
 
     sns.set_theme(style="whitegrid", font_scale=1.1)

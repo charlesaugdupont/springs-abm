@@ -6,7 +6,7 @@ import numpy as np
 
 from abm.environment.grid_environment import GridEnvironment
 from abm.state import AgentState
-from abm.constants import AgentPropertyKeys
+from abm.constants import AgentPropertyKeys, GridLayer
 from config import GridCreationParams
 
 class EnvironmentFactory:
@@ -54,7 +54,7 @@ class EnvironmentFactory:
         num_households = len(unique_households)
 
         if self.config.method == "realistic_import":
-            residence_idx = self.property_to_index.get('residences')
+            residence_idx = self.property_to_index.get(GridLayer.RESIDENCES)
             if residence_idx is None:
                 raise ValueError("Grid for 'realistic_import' must contain a 'residences' layer.")
 
