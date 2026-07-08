@@ -159,9 +159,7 @@ def _compute_metrics(model: SVEIRModel, steps: int) -> dict:
     sim_years = steps / 365.0
 
     is_child = g.ndata[AgentPropertyKeys.IS_CHILD].cpu().numpy().astype(bool)
-    age      = g.ndata[AgentPropertyKeys.AGE].cpu().numpy()
-    under5   = is_child & (age < 60.0)   # age stored in months
-    n_u5     = under5.sum()
+    n_u5 = is_child.sum()
 
     metrics = {}
 
@@ -169,7 +167,7 @@ def _compute_metrics(model: SVEIRModel, steps: int) -> dict:
         pname     = p.name
         count_key = AgentPropertyKeys.num_infections(pname)
 
-        num_inf_u5 = g.ndata[count_key].cpu().numpy()[under5]
+        num_inf_u5 = g.ndata[count_key].cpu().numpy()[is_child]
 
         # --- Episodes per child-year (under-5 only) ---
         metrics[f"{pname}_episodes_per_child_year"] = (

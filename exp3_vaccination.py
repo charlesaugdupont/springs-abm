@@ -59,8 +59,7 @@ def compute_metrics(model: SVEIRModel, steps: int) -> dict:
     peak    = float(u5_prev.max()) if u5_prev.size > 0 else 0.0
 
     is_child = model.graph.ndata[AgentPropertyKeys.IS_CHILD].cpu().numpy().astype(bool)
-    age      = model.graph.ndata[AgentPropertyKeys.AGE].cpu().numpy()
-    n_u5     = int((is_child & (age < 60.0)).sum())
+    n_u5 = is_child.sum()
     cumulative_days = float(u5_prev.sum()) * n_u5
 
     return {

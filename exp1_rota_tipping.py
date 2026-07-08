@@ -62,8 +62,7 @@ def compute_metrics(model: SVEIRModel, steps: int) -> dict:
 
     # Cumulative child-days: area under prevalence curve × number of u5 agents
     is_child = model.graph.ndata[AgentPropertyKeys.IS_CHILD].cpu().numpy().astype(bool)
-    age      = model.graph.ndata[AgentPropertyKeys.AGE].cpu().numpy()
-    n_u5     = int((is_child & (age < 60.0)).sum())
+    n_u5 = is_child.sum()
     cumulative_days = float(u5_prev.sum()) * n_u5   # prevalence × n_u5 summed over days
 
     return {"peak_u5_prevalence": peak, "cumulative_u5_days": cumulative_days}

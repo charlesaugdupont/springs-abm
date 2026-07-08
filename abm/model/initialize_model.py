@@ -162,17 +162,6 @@ class SVEIRModel(Model):
     # ------------------------------------------------------------------
     # Under-5 prevalence tracking helpers
     # ------------------------------------------------------------------
-
-    def _build_u5_mask(self) -> torch.Tensor:
-        """
-        Boolean mask for agents who are children under 5 years old.
-        Age is stored in months; under-5 means age < 60.
-        Computed once per run and reused across steps.
-        """
-        is_child = self.graph.ndata[AgentPropertyKeys.IS_CHILD]
-        age      = self.graph.ndata[AgentPropertyKeys.AGE]
-        return is_child & (age < 60.0)
-
     def _record_u5_prevalence(self, u5_mask: torch.Tensor):
         """
         Appends the current fraction of under-5s who are infectious for each
@@ -200,12 +189,12 @@ class SVEIRModel(Model):
         # Initialise per-pathogen under-5 prevalence lists
         self.u5_prevalence_history = {p.name: [] for p in self.pathogens}
         # Pre-compute the under-5 mask once — demographics don't change mid-run
-        u5_mask = self._build_u5_mask()
+        child_mask = self.graph.ndata[AgentPropertyKeys.IS_CHILD]
 
         while self.step_count < self.config.step_target:
-            self.step(verbose, u5_mask=u5_mask)
+            self.step(verbose, child_mask=child_mask)
 
-    def step(self, verbose: bool = False, u5_mask: torch.Tensor | None = None):
+    def step(self, verbose: bool = False, child_mask: torch.Tensor | None = None):
         """Executes one full timestep of the simulation."""
         if verbose:
             print(f'Performing step {self.step_count} of {self.config.step_target}')
@@ -219,8 +208,8 @@ class SVEIRModel(Model):
             self.infection_incidence.append(total_new_cases)
 
             # Record under-5 prevalence if a mask was supplied (i.e. called from run())
-            if u5_mask is not None:
-                self._record_u5_prevalence(u5_mask)
+            if child_mask is not None:
+                self._record_u5_prevalence(child_mask)
 
         except Exception as e:
             raise RuntimeError(f'Execution of step {self.step_count} failed.') from e

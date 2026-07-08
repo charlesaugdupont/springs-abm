@@ -131,8 +131,7 @@ def compute_metrics(model: SVEIRModel, counter: dict, steps: int) -> dict:
 
     metrics = {}
     is_child = model.graph.ndata[AgentPropertyKeys.IS_CHILD].cpu().numpy().astype(bool)
-    age      = model.graph.ndata[AgentPropertyKeys.AGE].cpu().numpy()
-    n_u5     = int((is_child & (age < 60.0)).sum())
+    n_u5 = is_child.sum()
 
     for pname in ("rota", "campy"):
         prev = np.array(model.u5_prevalence_history.get(pname, []))

@@ -51,7 +51,7 @@ class ChildIllnessSystem(System):
         self._current_timestep = kwargs.get("timestep", self._current_timestep + 1)
 
         illness_cfg = self.config.illness_mechanics
-        is_child    = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
+        is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
 
         # ------------------------------------------------------------------
         # 1. Initialise illness for children who just became infectious
@@ -145,11 +145,11 @@ class ChildIllnessSystem(System):
 
         new_severity = calculate_illness_severity(
             pathogen_name  = pathogen_name,
-            is_child       = agent_state.ndata[AgentPropertyKeys.IS_CHILD][mask],
-            age            = agent_state.ndata[AgentPropertyKeys.AGE][mask],
+            is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD][mask],
+            age = agent_state.ndata[AgentPropertyKeys.AGE][mask],
             vaccine_status = vaccine_status_tensor,
             num_infections = agent_state.ndata[AgentPropertyKeys.num_infections(pathogen_name)][mask] - 1, # subtract new infection
-            cfg            = illness_cfg,
+            cfg = illness_cfg,
         )
         new_duration = calculate_illness_duration(new_severity, illness_cfg)
 
