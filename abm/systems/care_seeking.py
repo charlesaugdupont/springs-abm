@@ -86,7 +86,7 @@ from .system import System
 from abm.state import AgentState
 from abm.constants import AgentPropertyKeys, Compartment
 from abm.agent.health_cpt_utils import cpt_value_function, probability_weighting
-from abm.utils.household import apply_household_wealth_delta
+from abm.systems.household import HouseholdSystem
 
 # Weight placed on child health in the parent's utility function.
 # 0.5 = equal weight on parent and child health.
@@ -351,7 +351,7 @@ class CareSeekingSystem(System):
         """
         params = self.config.steering_parameters
 
-        apply_household_wealth_delta(agent_state, parent_idx, -params.cost_of_care)
+        HouseholdSystem.apply_household_wealth_delta(agent_state, parent_idx, -params.cost_of_care)
         agent_state.ndata[AgentPropertyKeys.CARE_SEEKING_COUNT][parent_idx] += 1
 
         if torch.rand(1).item() < params.treatment_success_prob:
