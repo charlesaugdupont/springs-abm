@@ -403,7 +403,6 @@ class CareSeekingSystem(System):
                     1.0, current_severity + params.untreated_severity_penalty
                 )
 
-
 def _cpt_v(delta_u: float, lam: float) -> float:
     """
     CPT value function applied to a utility change delta_u.
