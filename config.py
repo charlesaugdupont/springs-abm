@@ -96,7 +96,6 @@ class SteeringParamsSVEIR(BaseModel):
     # --- Care-Seeking Parameters ---
     cost_of_care: float = 0.025 # Cost as a proportion of max wealth
     treatment_success_prob: float = 0.80
-    duration_reduction_on_success: int = 5 # Days illness is shortened on successful treatment
     natural_worsening_prob: float = 0.35 # Prob illness worsens if untreated
     parent_stress_health_impact: float = 0.30
     untreated_severity_penalty: float = 0.20
