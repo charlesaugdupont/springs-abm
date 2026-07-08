@@ -234,7 +234,7 @@ def run_sweep(args):
     results_flat = []
 
     with Pool(processes=N_CORES) as pool:
-        for i, result in enumerate(pool.imap_unordered(_run_one, tasks), 1):
+        for i, result in enumerate(pool.imap(_run_one, tasks), 1):
             t = tasks[i - 1]
             results_flat.append((t[0], t[1], result))   # (cost, label, metrics)
             elapsed = time.time() - t0
