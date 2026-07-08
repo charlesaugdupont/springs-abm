@@ -80,7 +80,7 @@ class GridCreationParams(BaseModel):
 class SteeringParamsSVEIR(BaseModel):
     """Steering parameters used within each step of the SVEIR model."""
     # Shared / Global Parameters
-    prior_infection_immunity_factor: float = 0.5
+    prior_infection_immunity_factor: float = 0.15
 
     # Water Parameters (Shared Reservoir)
     human_to_water_infection_prob: float = 0.0001
