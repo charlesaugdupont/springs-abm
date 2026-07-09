@@ -64,7 +64,7 @@ class EnvironmentFactory:
                 raise ValueError("No valid residence cells found in the grid.")
 
             # Assign each household to a random valid residence cell
-            assigned_cell_indices = np.random.choice(len(valid_cells), num_households)
+            assigned_cell_indices = np.random.choice(len(valid_cells), num_households, replace=False)
             household_coords = valid_cells[assigned_cell_indices] # Shape: (num_households, 2) [r, c]
 
             # Assign the cell coordinates to all agents based on their household
