@@ -107,10 +107,6 @@ class AgentFactory:
         agent_properties[AgentPropertyKeys.INITIAL_WEALTH] = wealth.clone()
         agent_properties[AgentPropertyKeys.INITIAL_HEALTH] = health.clone()
 
-        # --- Illness State ---
-        agent_properties[AgentPropertyKeys.SYMPTOM_SEVERITY] = torch.zeros(num_agents, dtype=torch.float)
-        agent_properties[AgentPropertyKeys.ILLNESS_DURATION] = torch.zeros(num_agents, dtype=torch.int)
-
         # --- Care Seeking ---
         agent_properties[AgentPropertyKeys.CARE_SEEKING_COUNT] = torch.zeros(num_agents, dtype=torch.int)
 
