@@ -103,7 +103,7 @@ class Campylobacter(Pathogen):
         """
         Beta-Poisson dose-response infection from the animal density layer.
 
-        P(inf | dose) = 1 − 1F1(alpha, alpha + beta, −dose)
+        P(inf | dose) = 1 - 1F1(alpha, alpha + beta, -dose)
         """
         if grid is None or self._newly_exposed_this_day is None:
             return
@@ -123,7 +123,7 @@ class Campylobacter(Pathogen):
         count_key = AgentPropertyKeys.num_infections(self.name)
 
         susceptible_mask = (
-            (agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE)
+            ((agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE) | (agent_state.ndata[status_key] == Compartment.RECOVERED))
             & ~self._newly_exposed_this_day
         )
         if not torch.any(susceptible_mask):
@@ -185,7 +185,7 @@ class Campylobacter(Pathogen):
         infectious_hh = torch.unique(hh_ids[is_infectious])
 
         is_susceptible = (
-            (agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE)
+            ((agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE) | (agent_state.ndata[status_key] == Compartment.RECOVERED))
             & ~self._newly_exposed_this_day
         )
         in_infectious_hh = torch.isin(hh_ids, infectious_hh)
