@@ -1,5 +1,7 @@
 # abm/systems/movement.py
 import torch
+from scipy.spatial import cKDTree
+import numpy as np
 
 from .system import System
 from abm.state import AgentState
@@ -50,51 +52,36 @@ class MovementSystem(System):
         agent_state.ndata[AgentPropertyKeys.X] = home_locations[:, 1]
 
     def _move_social_agents_spatial(self, agent_state: AgentState, social_mask: torch.Tensor):
-        """
-        Optimized: Moves agents to a random neighbor using Rejection Sampling.
-        Memory Complexity: O(N) instead of O(N^2).
-        """
         params = self.config.steering_parameters
         visiting_indices = social_mask.nonzero(as_tuple=True)[0]
-        num_visitors = len(visiting_indices)
-
-        if num_visitors == 0: 
+        if len(visiting_indices) == 0:
             return
 
-        # 1. Identify all potential hosts (People currently at home)
         is_at_home = agent_state.ndata[AgentPropertyKeys.ACTIVITY_CHOICE] == Activity.HOME
         host_indices = is_at_home.nonzero(as_tuple=True)[0]
-        
         if len(host_indices) == 0:
-            return 
-
-        # 2. Randomly assign 1 candidate host to every visitor
-        # We select indices from the host_indices array
-        random_selections = torch.randint(0, len(host_indices), (num_visitors,), device=self.device)
-        candidate_hosts = host_indices[random_selections]
-
-        # 3. Check Distances (Vectorized, but only 1-to-1 comparison, not N-to-N)
-        visitor_y = agent_state.ndata[AgentPropertyKeys.Y][visiting_indices]
-        visitor_x = agent_state.ndata[AgentPropertyKeys.X][visiting_indices]
-        
-        host_y = agent_state.ndata[AgentPropertyKeys.Y][candidate_hosts]
-        host_x = agent_state.ndata[AgentPropertyKeys.X][candidate_hosts]
-
-        # Euclidean distance squared is faster (avoid sqrt)
-        dist_sq = (visitor_y - host_y)**2 + (visitor_x - host_x)**2
-        radius_sq = params.social_interaction_radius**2
-
-        # 4. Filter: Who is actually within range?
-        success_mask = dist_sq <= radius_sq
-        
-        if not torch.any(success_mask):
             return
 
-        # 5. Move the successful visitors
-        successful_visitors = visiting_indices[success_mask]
-        accepted_hosts = candidate_hosts[success_mask]
-        
-        target_locs = agent_state.ndata[AgentPropertyKeys.HOME_LOCATION][accepted_hosts]
-        
-        agent_state.ndata[AgentPropertyKeys.Y][successful_visitors] = target_locs[:, 0]
-        agent_state.ndata[AgentPropertyKeys.X][successful_visitors] = target_locs[:, 1]
+        host_coords = torch.stack([
+            agent_state.ndata[AgentPropertyKeys.Y][host_indices],
+            agent_state.ndata[AgentPropertyKeys.X][host_indices],
+        ], dim=1).cpu().numpy()
+
+        visitor_coords = torch.stack([
+            agent_state.ndata[AgentPropertyKeys.Y][visiting_indices],
+            agent_state.ndata[AgentPropertyKeys.X][visiting_indices],
+        ], dim=1).cpu().numpy()
+
+        tree = cKDTree(host_coords)
+        radius = params.social_interaction_radius
+        neighbor_lists = tree.query_ball_point(visitor_coords, r=radius)
+
+        for local_i, neighbors in enumerate(neighbor_lists):
+            if not neighbors:
+                continue  # no one home within radius -> agent stays home
+            chosen = neighbors[np.random.randint(len(neighbors))]
+            host_idx = host_indices[chosen]
+            target_loc = agent_state.ndata[AgentPropertyKeys.HOME_LOCATION][host_idx]
+            v = visiting_indices[local_i]
+            agent_state.ndata[AgentPropertyKeys.Y][v] = target_loc[0]
+            agent_state.ndata[AgentPropertyKeys.X][v] = target_loc[1]
