@@ -20,9 +20,9 @@ AKUSE_BOUNDARY_COORDS = [
     (0.1118, 6.0677),
 ]
 GRID_SIZE = 100
-POI_FETCH_RADIUS = 2000
+POI_FETCH_RADIUS = 15000
 OSM_POI_TAGS = {"amenity": [GridLayer.SCHOOL, GridLayer.WORSHIP]}
-PROCEDURAL_POI_COUNTS = {GridLayer.SCHOOL: 5, GridLayer.WORSHIP: 5, GridLayer.WATER: 0}
+PROCEDURAL_POI_COUNTS = {GridLayer.SCHOOL: 0, GridLayer.WORSHIP: 0, GridLayer.WATER: 0}
 WATER_SAMPLING_CSV = Path("abm/data/water_sampling_points.csv")
 
 def get_grid_id(boundary_coords, grid_size, osm_tags, procedural_counts) -> str:
