@@ -671,8 +671,8 @@ table.ref td.num{color:var(--ink-soft);}
 
     <!-- ============ 07 CAMPYLOBACTER ============ -->
     <section class="section" id="campy">
-      <div class="sec-head"><span class="sec-no">07</span><h2 class="sec-title">Campylobacter <span class="pill pill-campy">bacterial · zoonotic + fecal‑oral</span></h2></div>
-      <p class="sec-dek">Campylobacter spreads through <b>two mechanistically distinct routes</b> that operate independently each day: an environmental, animal‑exposure route, and a within‑household fecal‑oral route. There is no vaccination track for this pathogen.</p>
+      <div class="sec-head"><span class="sec-no">07</span><h2 class="sec-title">Campylobacter <span class="pill pill-campy">bacterial · zoonotic + fecal‑oral + food‑borne</span></h2></div>
+      <p class="sec-dek">Campylobacter spreads through <b>three mechanistically distinct routes</b> that operate independently each day: an environmental, animal‑exposure route, a within‑household fecal‑oral route, and a flat background food‑borne risk representing contaminated food eaten at home. There is no vaccination track for this pathogen.</p>
 
       <h4 class="sub3">① Zoonotic route — exposure to a dose‑response model</h4>
       <p style="font-size:13.6px">Every agent is exposed each day to a "dose" derived from the animal density at their <i>current</i> location — meaning this route can fire wherever an agent happens to be, at home or away, both day and night:</p>
@@ -710,7 +710,15 @@ table.ref td.num{color:var(--ink-soft);}
         <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">Applied once per day to every other member of an affected household, independent of exactly how many infectious members that household has.</p>
       </div>
 
-      <p style="font-size:13.6px">Because these two routes are tracked separately, the model can report what share of all Campylobacter infections trace back to environmental (zoonotic) exposure versus household (fecal‑oral) spread — a useful lens for comparing WASH‑type interventions (which mainly affect the household route) against animal‑management interventions (which affect the zoonotic route). Recovered individuals remain eligible for reinfection through either route, at reduced risk, following the same immunity decay used throughout the model.</p>
+      <h4 class="sub3">③ Food‑borne background route <span class="lede">— once per day, location‑independent</span></h4>
+      <p style="font-size:13.6px">Campylobacter is also commonly picked up through contaminated food rather than direct animal contact. To capture this, every agent faces a small, flat daily infection chance that does <i>not</i> depend on where the agent is, the local animal‑density layer, or the disease status of anyone else — it fires once per day for every agent, alongside disease progression, rather than during the twice‑daily movement‑linked transmission phases used by the other two routes.</p>
+      <div class="eqbox">
+        <div class="eq-label">flat daily background probability</div>
+        \[ P_{\text{infect}} = P_{food}\times\exp(-\kappa\, N_{inf,i}), \qquad P_{food}=0.01 \]
+        <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">Applied once per day to every susceptible‑like agent (S or R), representing exposure via contaminated food consumed at home. The only individual factor that modulates it is the agent's own acquired immunity from prior infections — the same \(\exp(-\kappa N_{inf,i})\) decay term used throughout the model — so, unlike the zoonotic and fecal‑oral routes, it carries no spatial or social signal at all.</p>
+      </div>
+
+      <p style="font-size:13.6px">Because all three routes are tracked separately, the model can report what share of all Campylobacter infections trace back to environmental (zoonotic) exposure, household (fecal‑oral) spread, or the background food‑borne route — a useful lens for comparing WASH‑type interventions (which mainly affect the household route) against animal‑management interventions (which affect the zoonotic route) and food‑safety interventions (which affect the food‑borne route). Recovered individuals remain eligible for reinfection through any of the three routes, at reduced risk, following the same immunity decay used throughout the model.</p>
     </section>
 
     <!-- ============ 08 ILLNESS ============ -->
@@ -891,6 +899,7 @@ table.ref td.num{color:var(--ink-soft);}
           <ul class="steplist">
             <li>For <b>both pathogens</b>: incubation clocks tick forward for exposed agents; those who have finished incubating become infectious; infectious agents face a stochastic daily chance of recovering.</li>
             <li>For <b>Rotavirus only</b>: susceptible agents are offered vaccination at the daily vaccination rate, and that day's human‑to‑human infection probability is freshly redrawn.</li>
+            <li>For <b>Campylobacter only</b>: every susceptible agent faces the flat, location‑independent food‑borne background infection risk (§07) — applied once here rather than during the day/night transmission phases, since it has no spatial dependence.</li>
           </ul>
         </div>
       </div>
@@ -1001,6 +1010,7 @@ table.ref td.num{color:var(--ink-soft);}
         <div class="pcard"><span class="pname">Interaction rate <span class="psym">\(\rho_{campy}\)</span></span><span class="pdefault" style="color:var(--campy)">0.25</span><div class="pdesc">Scales local animal density into an exposure dose.</div></div>
         <div class="pcard"><span class="pname">Dose‑response shape <span class="psym">\(\alpha,\beta\)</span></span><span class="pdefault" style="color:var(--campy)">0.038, 0.022</span><div class="pdesc">Beta‑Poisson curve parameters.</div></div>
         <div class="pcard"><span class="pname">Fecal‑oral probability <span class="psym">\(P_{fecal\rightarrow oral}\)</span></span><span class="pdefault" style="color:var(--campy)">0.03</span><div class="pdesc">Per‑member household infection chance, per day.</div></div>
+        <div class="pcard"><span class="pname">Food‑borne background prob. <span class="psym">\(P_{food}\)</span></span><span class="pdefault" style="color:var(--campy)">0.01</span><div class="pdesc">Flat daily infection probability from contaminated food, independent of location, animal density, or other agents.</div></div>
         <div class="pcard"><span class="pname">Incubation period</span><span class="pdefault" style="color:var(--campy)">3 days</span><div class="pdesc">Time in the Exposed state before becoming infectious.</div></div>
         <div class="pcard"><span class="pname">Recovery rate <span class="psym">\(\gamma_{campy}\)</span></span><span class="pdefault" style="color:var(--campy)">0.15</span><div class="pdesc">Daily chance of recovering — ≈1‑week illness.</div></div>
       </div>

@@ -2,7 +2,7 @@
 """
 Campylobacter transmission model.
 
-Two independent routes operate each day:
+Three independent routes operate each day:
 
 1. Zoonotic (environmental) route
    Agents are exposed to a dose derived from the local animal-density layer.
@@ -15,14 +15,24 @@ Two independent routes operate each day:
    household members are exposed with a fixed per-contact probability
    `fecal_oral_prob`.  This route runs once per day during the Night Phase.
 
+3. Food-borne (background) route
+    Represents exposure via contaminated food consumed at home. Every agent
+    faces a fixed daily probability `food_borne_prob` of infection, entirely
+    independent of location, animal density, and the disease status of any
+    other agent. Only the agent's own prior-infection immunity modulates it.
+    Because it has no spatial dependence, it is applied once per day during
+    disease progression rather than during the (twice-daily) transmission
+    phases.
+
 Route tracking
 --------------
 Each new infection is attributed to exactly one route.  The counters
-``cases_zoonotic`` and ``cases_fecal_oral`` are incremented accordingly and
-are reset at the start of each day alongside ``new_cases_this_step``.
-Over the full simulation, ``total_zoonotic`` and ``total_fecal_oral``
-accumulate the lifetime totals, which are used to compute the zoonotic
-fraction at the end of a run.
+``cases_zoonotic``, ``cases_fecal_oral``, and ``cases_food_borne`` are
+incremented accordingly and are reset at the start of each day alongside
+``new_cases_this_step``.  Over the full simulation, ``total_zoonotic``,
+``total_fecal_oral``, and ``total_food_borne`` accumulate the lifetime
+totals, which are used to compute route-attribution fractions at the end
+of a run.
 """
 
 from typing import Any
@@ -50,10 +60,12 @@ class Campylobacter(Pathogen):
         # Per-step route counters (reset each day)
         self.cases_zoonotic: int = 0
         self.cases_fecal_oral: int = 0
+        self.cases_food_borne: int = 0
 
         # Lifetime route totals (accumulate across all steps)
         self.total_zoonotic: int = 0
         self.total_fecal_oral: int = 0
+        self.total_food_borne: int = 0
 
         # Tracks agents newly exposed within the current day to prevent
         # double-counting across the two transmission phases.
@@ -68,6 +80,7 @@ class Campylobacter(Pathogen):
         super().reset_incidence()
         self.cases_zoonotic = 0
         self.cases_fecal_oral = 0
+        self.cases_food_borne = 0
 
     def step_progression(self, agent_state: AgentState):
         """Disease-state progression — called once per day."""
@@ -77,6 +90,7 @@ class Campylobacter(Pathogen):
         self._increment_exposure_time(agent_state)
         self._exposed_to_infectious(agent_state)
         self._infectious_to_recovered(agent_state)
+        self._food_borne_transmission(agent_state)
 
     def step_transmission(
         self,
@@ -94,6 +108,58 @@ class Campylobacter(Pathogen):
         self._zoonotic_transmission(agent_state, grid)
         if self._is_night_phase(agent_state):
             self._fecal_oral_transmission(agent_state)
+
+    # ------------------------------------------------------------------
+    # Private: food-borne background route
+    # ------------------------------------------------------------------
+
+    def _food_borne_transmission(self, agent_state: AgentState):
+        """
+        Background food-borne infection route.
+
+        Every susceptible-like agent (S or R) faces the same flat daily
+        probability `food_borne_prob`, representing exposure through
+        contaminated food consumed at home. This is deliberately
+        independent of the agent's location, the animal-density layer, and
+        the disease status of any other agent - the only individual factor
+        that matters is the agent's own acquired immunity from prior
+        infections, applied for consistency with the other two routes.
+        """
+        if self._newly_exposed_this_day is None:
+            return
+
+        status_key = AgentPropertyKeys.status(self.name)
+        count_key = AgentPropertyKeys.num_infections(self.name)
+
+        susceptible_mask = (
+            ((agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE)
+             | (agent_state.ndata[status_key] == Compartment.RECOVERED))
+            & ~self._newly_exposed_this_day
+        )
+        if not torch.any(susceptible_mask):
+            return
+
+        target_indices = susceptible_mask.nonzero(as_tuple=True)[0]
+
+        num_prior = agent_state.ndata[count_key][target_indices].float()
+        immunity_factor = torch.exp(
+            -self.global_params.prior_infection_immunity_factor * num_prior
+        )
+        effective_prob = self.config.food_borne_prob * immunity_factor
+
+        rand_vals = torch.rand(len(target_indices), device=self.device)
+        newly_infected = rand_vals < effective_prob
+
+        infected_indices = target_indices[newly_infected]
+        num_new = len(infected_indices)
+        if num_new > 0:
+            agent_state.ndata[status_key][infected_indices] = Compartment.EXPOSED
+            agent_state.ndata[AgentPropertyKeys.exposure_time(self.name)][infected_indices] = 0
+            agent_state.ndata[count_key][infected_indices] += 1
+            self.new_cases_this_step += num_new
+            self.cases_food_borne += num_new
+            self.total_food_borne += num_new
+            self._newly_exposed_this_day[infected_indices] = True
 
     # ------------------------------------------------------------------
     # Private: zoonotic route

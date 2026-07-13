@@ -44,6 +44,8 @@ class CampylobacterConfig(PathogenConfig):
     human_animal_interaction_rate: float = 0.25
     # Fecal-oral (household) route
     fecal_oral_prob: float = 0.03 # per-contact probability within household
+    # Background risk due to food consumption
+    food_borne_prob = 0.01
 
 # --- Illness Mechanics Constants ---
 

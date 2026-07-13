@@ -93,21 +93,25 @@ SWEEP_PARAMS = {
     "pathogens[campy].fecal_oral_prob": [
         0.01, 0.02, 0.03, 0.04, 0.05, 0.06
     ],
+    "pathogens[campy].food_borne_prob": [
+        0.0, 0.005, 0.01, 0.02, 0.03
+    ],
 }
 
 PARAM_LABELS = {
-    "pathogens[rota].infection_prob_mean":                  "Rota H2H infection prob",
-    "steering_parameters.water_to_human_infection_prob":    "Water → human infection prob",
-    "pathogens[campy].human_animal_interaction_rate":       "Campy animal interaction rate",
-    "pathogens[campy].fecal_oral_prob":                     "Campy fecal-oral prob",
+    "pathogens[rota].infection_prob_mean": "Rota H2H infection prob",
+    "steering_parameters.water_to_human_infection_prob": "Water → human infection prob",
+    "pathogens[campy].human_animal_interaction_rate": "Campy animal interaction rate",
+    "pathogens[campy].fecal_oral_prob": "Campy fecal-oral prob",
+    "pathogens[campy].food_borne_prob": "Campy food-borne background prob",
 }
 
 METRIC_LABELS = {
-    "rota_episodes_per_child_year":  "Rota episodes / child-year (u5)",
+    "rota_episodes_per_child_year": "Rota episodes / child-year (u5)",
     "campy_episodes_per_child_year": "Campy episodes / child-year (u5)",
-    "rota_peak_prevalence":          "Rota peak prevalence (u5 fraction)",
-    "campy_peak_prevalence":         "Campy peak prevalence (u5 fraction)",
-    "campy_zoonotic_fraction":       "Campy zoonotic fraction",
+    "rota_peak_prevalence": "Rota peak prevalence (u5 fraction)",
+    "campy_peak_prevalence": "Campy peak prevalence (u5 fraction)",
+    "campy_zoonotic_fraction": "Campy zoonotic fraction",
     "rota_peak_day": "Rota peak day",
     "campy_peak_day": "Campy peak day"
 }
@@ -205,7 +209,7 @@ def _campy_zoonotic_fraction(model: SVEIRModel) -> float:
     campy = next((p for p in model.pathogens if isinstance(p, Campylobacter)), None)
     if campy is None:
         return 0.0
-    total = campy.total_zoonotic + campy.total_fecal_oral
+    total = campy.total_zoonotic + campy.total_fecal_oral + campy.total_food_borne
     return campy.total_zoonotic / total if total > 0 else 0.0
 
 # ---------------------------------------------------------------------------

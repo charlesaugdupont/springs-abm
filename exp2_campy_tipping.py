@@ -69,7 +69,7 @@ def compute_metrics(model: SVEIRModel, steps: int) -> dict:
     zoonotic_frac = 0.0
     for p in model.pathogens:
         if isinstance(p, Campylobacter):
-            total = p.total_zoonotic + p.total_fecal_oral
+            total = p.total_zoonotic + p.total_fecal_oral + p.total_food_borne
             zoonotic_frac = p.total_zoonotic / total if total > 0 else 0.0
             break
 
