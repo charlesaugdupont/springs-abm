@@ -210,8 +210,11 @@ __marimo__/
 cache/
 grids/
 outputs/
+data/
 
 .DS_Store
 *.pdf
 *.png
 streamlit_outputs/
+
+
