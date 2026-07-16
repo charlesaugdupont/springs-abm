@@ -60,6 +60,57 @@ class SVEIRModel(Model):
         scaled_samples = qmc.scale(samples, [r[0] for r in ranges], [r[1] for r in ranges])
         self.agent_personas = torch.from_numpy(scaled_samples).float()
 
+    def _build_animal_density_layers(self):
+        """
+        Builds and attaches the household-ownership-derived poultry/ruminant
+        density layers used by Campylobacter's zoonotic route.
+
+        Unlike the water/school/worship layers, these are NOT part of the
+        static grid.npz file: they depend on this run's random household
+        placement and ownership draw, so they're (cheaply) recomputed once
+        per initialize_model() call rather than cached per grid_id.
+        """
+        if self.grid_environment is None:
+            return
+
+        campy_cfg = next((p for p in self.config.pathogens if p.name == "campy"), None)
+        if campy_cfg is None:
+            return
+
+        from abm.environment.animal_density import build_animal_density_layers
+
+        household_ids = self.graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
+        unique_households, inverse = torch.unique(household_ids, return_inverse=True)
+        counts = torch.zeros(len(unique_households), device=household_ids.device)
+        counts.index_add_(0, inverse, torch.ones_like(household_ids, dtype=torch.float))
+
+        def household_mean(agent_values: torch.Tensor) -> torch.Tensor:
+            # All members of a household share identical Y/X/ownership values,
+            # so a group mean is just a cheap, fully-vectorised way to grab
+            # "one row per household" without a loop.
+            summed = torch.zeros(len(unique_households), device=agent_values.device, dtype=torch.float)
+            summed.index_add_(0, inverse, agent_values.float())
+            return summed / counts
+
+        hh_y = household_mean(self.graph.ndata[AgentPropertyKeys.Y])
+        hh_x = household_mean(self.graph.ndata[AgentPropertyKeys.X])
+        hh_owns_poultry = household_mean(self.graph.ndata[AgentPropertyKeys.OWNS_POULTRY])
+        hh_owns_ruminant = household_mean(self.graph.ndata[AgentPropertyKeys.OWNS_RUMINANT])
+
+        grid_shape = self.grid_environment.grid_shape[:2]
+        poultry_density, ruminant_density = build_animal_density_layers(
+            household_y=hh_y,
+            household_x=hh_x,
+            household_owns_poultry=hh_owns_poultry,
+            household_owns_ruminant=hh_owns_ruminant,
+            grid_shape=grid_shape,
+            poultry_sigma=campy_cfg.poultry_roam_sigma,
+            ruminant_sigma=campy_cfg.ruminant_roam_sigma,
+            device=self.config.device,
+        )
+        self.grid_environment.set_dynamic_layer("poultry_density", poultry_density)
+        self.grid_environment.set_dynamic_layer("ruminant_density", ruminant_density)
+
     def initialize_model(self, verbose: bool = False):
         """Initializes the entire model state, including agents and environment."""
         if self.config is None:
@@ -96,8 +147,13 @@ class SVEIRModel(Model):
         agent_factory = AgentFactory(self.config, self.agent_personas)
         agent_factory.initialize_agent_properties(self.graph, self.grid_environment)
 
-        # 4. Finalize Graph and Initialize Systems
+        # 4. Finalize Graph (move to compute device)
         self.graph.to(self.config.device)
+
+        # 5. Build household-ownership-derived animal density layers.
+        self._build_animal_density_layers()
+
+        # 6. Initialize pathogen and system objects
         self._initialize_pathogens_and_systems()
 
         if verbose:

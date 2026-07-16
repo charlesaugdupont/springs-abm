@@ -72,6 +72,10 @@ class AgentPropertyKeys:
     # Illness State
     CARE_SEEKING_COUNT = "care_seeking_count"
 
+    # Household Animal Ownership (Campylobacter zoonotic route)
+    OWNS_POULTRY = "owns_poultry"
+    OWNS_RUMINANT = "owns_ruminant"
+
     # Dynamic keys for pathogens
     @staticmethod
     def status(pathogen_name: str) -> str:

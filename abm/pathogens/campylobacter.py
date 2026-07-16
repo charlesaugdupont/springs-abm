@@ -41,7 +41,7 @@ from scipy.special import hyp1f1
 
 from .pathogen import Pathogen
 from abm.state import AgentState
-from abm.constants import Compartment, AgentPropertyKeys, GridLayer
+from abm.constants import Compartment, AgentPropertyKeys
 from config import CampylobacterConfig, SteeringParamsSVEIR
 
 
@@ -167,22 +167,38 @@ class Campylobacter(Pathogen):
 
     def _zoonotic_transmission(self, agent_state: AgentState, grid: Any):
         """
-        Beta-Poisson dose-response infection from the animal density layer.
+        Beta-Poisson dose-response infection from household-ownership-derived
+        animal density (see abm/environment/animal_density.py).
+
+        Dose combines two species-specific density layers, each read at the
+        agent's current cell, weighted by that species' relative contribution
+        to zoonotic risk, then scaled by the overall human-animal interaction
+        rate:
+
+            dose = (poultry_density * w_poultry + ruminant_density * w_ruminant)
+                   * human_animal_interaction_rate
 
         P(inf | dose) = 1 - 1F1(alpha, alpha + beta, -dose)
         """
         if grid is None or self._newly_exposed_this_day is None:
             return
 
-        animal_idx = grid.property_to_index.get(GridLayer.ANIMAL_DENSITY)
-        if animal_idx is None:
+        poultry_density = grid.get_dynamic_layer("poultry_density")
+        ruminant_density = grid.get_dynamic_layer("ruminant_density")
+        if poultry_density is None and ruminant_density is None:
             return
 
         grid_shape = grid.grid_shape
         x = agent_state.ndata[AgentPropertyKeys.X].long().clamp(0, grid_shape[1] - 1)
         y = agent_state.ndata[AgentPropertyKeys.Y].long().clamp(0, grid_shape[0] - 1)
 
-        local_density = grid.grid_tensor[y, x, animal_idx]
+        combined_density = torch.zeros(grid_shape[:2], device=self.device)
+        if poultry_density is not None:
+            combined_density = combined_density + poultry_density * self.config.poultry_weight
+        if ruminant_density is not None:
+            combined_density = combined_density + ruminant_density * self.config.ruminant_weight
+
+        local_density = combined_density[y, x]
         dose = local_density * self.config.human_animal_interaction_rate
 
         status_key = AgentPropertyKeys.status(self.name)

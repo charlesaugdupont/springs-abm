@@ -217,32 +217,6 @@ def _place_procedural_pois(counts, valid_cells_mask, occupied_mask, boundary_inf
 
     return procedural_layers
 
-def _place_animal_density(valid_cells):
-    """Generates a spatial layer representing poultry/livestock density."""
-    rng = get_np_rng()
-
-    density = np.zeros((GRID_SIZE, GRID_SIZE), dtype=np.float32)
-
-    # Background noise
-    noise = rng.uniform(0.0, 0.1, size=(GRID_SIZE, GRID_SIZE))
-    density += noise
-
-    # Clusters
-    num_clusters = 15
-    for _ in range(num_clusters):
-        cx, cy = rng.integers(0, GRID_SIZE, size=2)
-        y, x = np.ogrid[-cx:GRID_SIZE-cx, -cy:GRID_SIZE-cy]
-        dist_sq = x**2 + y**2
-        radius = 8
-        mask = dist_sq <= radius**2
-        if not np.any(mask):
-            continue
-        cluster_vals = np.exp(-0.5 * dist_sq[mask] / (radius / 2) ** 2)
-        scale = rng.uniform(0.4, 0.9)
-        density[mask] += cluster_vals * scale
-
-    return np.clip(density * valid_cells, 0.0, 1.0)
-
 def create_and_save_realistic_grid():
     """Generates and saves a realistic base grid for the model."""
     grid_id = get_grid_id(AKUSE_BOUNDARY_COORDS, GRID_SIZE, OSM_POI_TAGS, PROCEDURAL_POI_COUNTS)
@@ -268,11 +242,6 @@ def create_and_save_realistic_grid():
         final_layers.append(combined)
         property_map[layer_index] = amenity
         poi_layers_stack.append(combined)
-
-    # Animal density
-    animal_density = _place_animal_density(valid_cells)
-    final_layers.append(animal_density)
-    property_map[len(final_layers) - 1] = GridLayer.ANIMAL_DENSITY
 
     final_grid = np.stack(final_layers, axis=-1)
 

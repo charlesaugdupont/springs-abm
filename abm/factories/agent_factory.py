@@ -107,6 +107,27 @@ class AgentFactory:
         agent_properties[AgentPropertyKeys.INITIAL_WEALTH] = wealth.clone()
         agent_properties[AgentPropertyKeys.INITIAL_HEALTH] = health.clone()
 
+        # --- Household Animal Ownership (Campylobacter zoonotic route) ---
+        # Drawn once per household (not per agent) and shared by all members,
+        # mirroring the household-wealth pattern above. Only drawn if
+        # Campylobacter is among the configured pathogens.
+        campy_cfg = next((p for p in self.config.pathogens if p.name == "campy"), None)
+        if campy_cfg is not None:
+            household_owns_poultry = (
+                torch.rand(len(unique_households)) < campy_cfg.poultry_ownership_prob
+            ).float()
+            household_owns_ruminant = (
+                torch.rand(len(unique_households)) < campy_cfg.ruminant_ownership_prob
+            ).float()
+            owns_poultry = household_owns_poultry[household_indices]
+            owns_ruminant = household_owns_ruminant[household_indices]
+        else:
+            owns_poultry = torch.zeros(num_agents)
+            owns_ruminant = torch.zeros(num_agents)
+
+        agent_properties[AgentPropertyKeys.OWNS_POULTRY] = owns_poultry
+        agent_properties[AgentPropertyKeys.OWNS_RUMINANT] = owns_ruminant
+
         # --- Care Seeking ---
         agent_properties[AgentPropertyKeys.CARE_SEEKING_COUNT] = torch.zeros(num_agents, dtype=torch.int)
 

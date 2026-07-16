@@ -80,22 +80,14 @@ TARGETS = {
 # ---------------------------------------------------------------------------
 SWEEP_PARAMS = {
     # --- Rotavirus ---
-    "pathogens[rota].infection_prob_mean": [
-        0.005, 0.01, 0.015, 0.02, 0.025
-    ],
-    "steering_parameters.water_to_human_infection_prob": [
-        0.001, 0.005, 0.01, 0.02, 0.03
-    ],
+    "pathogens[rota].infection_prob_mean": [0.005, 0.01, 0.015, 0.02, 0.025],
+    "steering_parameters.water_to_human_infection_prob": [0.001, 0.005, 0.01, 0.02, 0.03],
     # --- Campylobacter ---
-    "pathogens[campy].human_animal_interaction_rate": [
-        0.15, 0.2, 0.25, 0.3, 0.35
-    ],
-    "pathogens[campy].fecal_oral_prob": [
-        0.01, 0.02, 0.03, 0.04, 0.05, 0.06
-    ],
-    "pathogens[campy].food_borne_prob": [
-        0.0, 0.005, 0.01, 0.02, 0.03
-    ],
+    "pathogens[campy].human_animal_interaction_rate": [0.15, 0.2, 0.25, 0.3, 0.35],
+    "pathogens[campy].fecal_oral_prob": [0.01, 0.02, 0.03, 0.04, 0.05, 0.06],
+    "pathogens[campy].food_borne_prob": [0.0, 0.005, 0.01, 0.02, 0.03],
+    "pathogens[campy].poultry_weight": [0.25, 0.5, 0.75, 1.0, 1.5],
+    "pathogens[campy].ruminant_weight": [0.0, 0.2, 0.45, 0.7, 1.0],
 }
 
 PARAM_LABELS = {
@@ -104,6 +96,8 @@ PARAM_LABELS = {
     "pathogens[campy].human_animal_interaction_rate": "Campy animal interaction rate",
     "pathogens[campy].fecal_oral_prob": "Campy fecal-oral prob",
     "pathogens[campy].food_borne_prob": "Campy food-borne background prob",
+    "pathogens[campy].poultry_weight": "Campy poultry species weight",
+    "pathogens[campy].ruminant_weight": "Campy ruminant species weight",
 }
 
 METRIC_LABELS = {

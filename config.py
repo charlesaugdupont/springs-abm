@@ -45,7 +45,30 @@ class CampylobacterConfig(PathogenConfig):
     # Fecal-oral (household) route
     fecal_oral_prob: float = 0.03 # per-contact probability within household
     # Background risk due to food consumption
-    food_borne_prob = 0.01
+    food_borne_prob: float = 0.01
+
+    # Household animal ownership (zoonotic route)
+    # Ownership probabilities calibrated from a compiled Ghana DHS/MICS-style
+    # survey (notebooks/ghana_data.ipynb): inverse-distance-weighted estimate
+    # over rural clusters nationwide, since no survey cluster falls inside
+    # Akuse itself - effectively a rural-southern-Ghana average. Pig
+    # ownership (~1%, within noise of the estimation method) was dropped.
+    poultry_ownership_prob: float = 0.536
+    ruminant_ownership_prob: float = 0.330
+
+    # Relative contribution of each species to zoonotic risk. Poultry
+    # dominates C. jejuni source-attribution studies and the household-
+    # exposure literature; ruminants contribute meaningfully but less so via
+    # this backyard-proximity pathway. Deliberately uncertain - sweep via
+    # experiments rather than treat this as fixed.
+    poultry_weight: float = 1.0
+    ruminant_weight: float = 0.45
+
+    # Gaussian roam radius (in grid cells) used to diffuse each owning
+    # household's animals into the surrounding area - backyard poultry stay
+    # close to the yard; grazing/tethered ruminants plausibly range further.
+    poultry_roam_sigma: float = 1.0
+    ruminant_roam_sigma: float = 2.0
 
 # --- Illness Mechanics Constants ---
 
