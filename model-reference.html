@@ -263,7 +263,6 @@ table.ref td.num{color:var(--ink-soft);}
   <!-- ============ SIDEBAR NAV ============ -->
   <nav class="sidebar">
     <div class="sb-brand">SPRINGS&#8209;ABM</div>
-    <div class="sb-sub">A spatial agent‑based model of diarrheal disease in Akuse, Ghana</div>
     <ul class="sb-nav">
       <li><a href="#overview"><span class="n">01</span> Model at a glance</a></li>
       <li><a href="#environment"><span class="n">02</span> Spatial environment</a></li>
@@ -273,7 +272,7 @@ table.ref td.num{color:var(--ink-soft);}
       <li><a href="#rota"><span class="n">06</span> Rotavirus</a></li>
       <li><a href="#campy"><span class="n">07</span> Campylobacter</a></li>
       <li><a href="#illness"><span class="n">08</span> Illness &amp; health</a></li>
-      <li><a href="#careseeking"><span class="n">09</span> Care‑seeking (CPT)</a></li>
+      <li><a href="#careseeking"><span class="n">09</span> Care-seeking (CPT)</a></li>
       <li><a href="#economics"><span class="n">10</span> Household economics</a></li>
       <li><a href="#cycle"><span class="n">11</span> One simulated day</a></li>
       <li><a href="#experiments"><span class="n">12</span> Experiments &amp; calibration</a></li>
@@ -294,13 +293,12 @@ table.ref td.num{color:var(--ink-soft);}
 
     <!-- ============ HERO ============ -->
     <header class="hero">
-      <div class="hero-eyebrow">Model reference<span class="rule"></span>diarrheal disease · WASH · behavioral economics</div>
-      <h1 class="hero-title">A spatially‑explicit agent‑based model of <em>diarrheal disease</em> in Akuse, Ghana</h1>
-      <p class="hero-desc">SPRINGS‑ABM simulates the spread of <b>Rotavirus</b> and <b>Campylobacter</b> through a synthetic population placed on a realistic map of Akuse, Ghana. Every simulated day, agents travel between home, school, worship, water, and social locations; the two pathogens spread through person‑to‑person contact, contaminated water, and zoonotic exposure to free‑range animals; sick children accumulate illness; and parents decide whether to pay for medical care using a <b>Cumulative Prospect Theory</b> model of loss‑averse, probability‑distorting decision‑making. Care‑seeking, in turn, feeds back into household wealth, child health, and the epidemic itself. The model was built to explore how water infrastructure, vaccination, and the cost of healthcare shape the burden of childhood diarrheal disease.</p>
+      <h1 class="hero-title">A spatially-explicit agent-based model of <em>diarrheal disease</em> in Akuse, Ghana</h1>
+      <p class="hero-desc">SPRINGS-ABM simulates the spread of <b>Rotavirus</b> and <b>Campylobacter</b> through a synthetic population placed on a realistic map of Akuse, Ghana. Every simulated day, agents travel between home, school, worship, water, and social locations; the two pathogens spread through person-to-person contact, contaminated water, and zoonotic exposure to free-range animals; sick children accumulate illness; and parents decide whether to pay for medical care using a <b>Cumulative Prospect Theory</b> model of loss-averse, probability-distorting decision-making. Care-seeking, in turn, feeds back into household wealth, child health, and the epidemic itself. The model was built to explore how water infrastructure, vaccination, and the cost of healthcare shape the burden of childhood diarrheal disease.</p>
 
       <div class="stat-row">
         <div class="stat"><div class="stat-num">5,000</div><div class="stat-label">agents (default)</div></div>
-        <div class="stat"><div class="stat-num">2</div><div class="stat-label">co‑circulating pathogens</div></div>
+        <div class="stat"><div class="stat-num">2</div><div class="stat-label">co-circulating pathogens</div></div>
         <div class="stat"><div class="stat-num">150</div><div class="stat-label">simulated days (default)</div></div>
         <div class="stat"><div class="stat-num">100×100</div><div class="stat-label">grid cells, ≈30 km²</div></div>
         <div class="stat"><div class="stat-num">32</div><div class="stat-label">behavioral archetypes</div></div>
@@ -311,8 +309,8 @@ table.ref td.num{color:var(--ink-soft);}
         <div class="ribbon">
           <div class="ribbon-stage rs-1"><div class="rs-k">1 · Morning</div><div class="rs-t">Disease progresses</div><div class="rs-d">Incubation clocks tick, recoveries resolve, vaccination is offered</div></div>
           <div class="ribbon-stage rs-2"><div class="rs-k">2 · Day</div><div class="rs-t">Activity &amp; exposure</div><div class="rs-d">Agents travel to school, worship, water, or social visits — both pathogens can spread</div></div>
-          <div class="ribbon-stage rs-3"><div class="rs-k">3 · Night</div><div class="rs-t">Home &amp; household spread</div><div class="rs-d">Everyone returns home; household contact and the fecal‑oral route become active</div></div>
-          <div class="ribbon-stage rs-4"><div class="rs-k">4 · Daily systems</div><div class="rs-t">Illness, care &amp; economy</div><div class="rs-d">Symptoms update, parents weigh care‑seeking, water sources shift state, incomes settle</div></div>
+          <div class="ribbon-stage rs-3"><div class="rs-k">3 · Night</div><div class="rs-t">Home &amp; household spread</div><div class="rs-d">Everyone returns home; household contact and the fecal-oral route become active</div></div>
+          <div class="ribbon-stage rs-4"><div class="rs-k">4 · Daily systems</div><div class="rs-t">Illness, care &amp; economy</div><div class="rs-d">Symptoms update, parents weigh care-seeking, water sources shift state, incomes settle</div></div>
           <div class="ribbon-stage rs-5"><div class="rs-k">5 · Bookkeeping</div><div class="rs-t">Record &amp; advance</div><div class="rs-d">Today's infection counts and child illness levels are logged before the next day begins</div></div>
         </div>
       </div>
@@ -321,7 +319,7 @@ table.ref td.num{color:var(--ink-soft);}
     <!-- ============ 01 OVERVIEW ============ -->
     <section class="section" id="overview">
       <div class="sec-head"><span class="sec-no">01</span><h2 class="sec-title">Model at a glance</h2></div>
-      <p class="sec-dek">SPRINGS‑ABM was developed as part of the SPRINGS project to evaluate the health and economic impact of water, sanitation and hygiene (WASH) interventions, vaccination, and healthcare access in Akuse, Ghana. It combines four ingredients that are usually studied separately: a <b>realistic spatial environment</b>, a <b>heterogeneous household population</b>, <b>dual‑pathogen epidemiological dynamics</b>, and a <b>behavioral‑economic model of care‑seeking</b> — all updated together, once per simulated day, so that feedback loops between illness, behavior, and household finances emerge naturally rather than being assumed.</p>
+      <p class="sec-dek">SPRINGS-ABM was developed as part of the SPRINGS project to evaluate the health and economic impact of water, sanitation and hygiene (WASH) interventions, vaccination, and healthcare access in Akuse, Ghana. It combines four ingredients that are usually studied separately: a <b>realistic spatial environment</b>, a <b>heterogeneous household population</b>, <b>dual-pathogen epidemiological dynamics</b>, and a <b>behavioral-economic model of care-seeking</b> — all updated together, once per simulated day, so that feedback loops between illness, behavior, and household finances emerge naturally rather than being assumed.</p>
 
       <div class="diagram-frame">
         <svg viewBox="0 0 1080 460" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
@@ -350,7 +348,7 @@ table.ref td.num{color:var(--ink-soft);}
           <rect x="330" y="150" width="230" height="86" rx="8" fill="#E9F5EE" stroke="#BCDECB"/>
           <text x="445" y="176" text-anchor="middle" font-weight="700" font-size="13.5">Population setup</text>
           <text x="445" y="194" text-anchor="middle" font-size="10.5" fill="#5B5F55">demographics, behavioral personas,</text>
-          <text x="445" y="209" text-anchor="middle" font-size="10.5" fill="#5B5F55">daily‑activity habits, initial</text>
+          <text x="445" y="209" text-anchor="middle" font-size="10.5" fill="#5B5F55">daily-activity habits, initial</text>
           <text x="445" y="223" text-anchor="middle" font-size="10.5" fill="#5B5F55">health, wealth &amp; disease seeding</text>
 
           <path d="M550,90 V120 H175 V150" stroke="#5B5F55" fill="none" marker-end="url(#a1)"/>
@@ -378,7 +376,7 @@ table.ref td.num{color:var(--ink-soft);}
           <rect x="870" y="150" width="190" height="190" rx="8" fill="#F1EBFB" stroke="#D8C4EE"/>
           <text x="965" y="174" text-anchor="middle" font-weight="700" font-size="13.5">Daily processes</text>
           <text x="965" y="194" text-anchor="middle" font-size="10.5">Movement · Illness</text>
-          <text x="965" y="209" text-anchor="middle" font-size="10.5">Care‑seeking · Household</text>
+          <text x="965" y="209" text-anchor="middle" font-size="10.5">Care-seeking · Household</text>
           <text x="965" y="224" text-anchor="middle" font-size="10.5">Environment · Economy</text>
           <text x="965" y="245" text-anchor="middle" font-size="10" fill="#5B5F55">fixed daily order</text>
           <text x="965" y="258" text-anchor="middle" font-size="10" fill="#5B5F55">see §11</text>
@@ -400,20 +398,20 @@ table.ref td.num{color:var(--ink-soft);}
       </div>
 
       <h3 class="sub-title">Why two pathogens, and why together?</h3>
-      <p>Rotavirus and Campylobacter are both leading causes of childhood diarrheal illness, but they spread through different ecological pathways: Rotavirus is viral and travels mainly through direct contact and contaminated drinking water, while Campylobacter is bacterial and enters largely through contact with free‑range poultry and livestock, alongside a household fecal‑oral route. Modeling them side‑by‑side, with independent but co‑occurring infection tracks, lets the model separate <i>water‑infrastructure‑sensitive</i> disease burden from <i>animal‑exposure‑sensitive</i> burden, and ask how interventions such as improved water access or rotavirus vaccination shift the balance between them. A child can be infected with both pathogens at once — their illnesses are tracked independently, and their combined severity determines how a parent responds.</p>
+      <p>Rotavirus and Campylobacter are both leading causes of childhood diarrheal illness, but they spread through different ecological pathways: Rotavirus is viral and travels mainly through direct contact and contaminated drinking water, while Campylobacter is bacterial and enters largely through contact with free-range poultry and livestock, alongside a household fecal-oral route. Modeling them side-by-side, with independent but co-occurring infection tracks, lets the model separate <i>water-infrastructure-sensitive</i> disease burden from <i>animal-exposure-sensitive</i> burden, and ask how interventions such as improved water access or rotavirus vaccination shift the balance between them. A child can be infected with both pathogens at once — their illnesses are tracked independently, and their combined severity determines how a parent responds.</p>
     </section>
 
     <!-- ============ 02 SPATIAL ENVIRONMENT ============ -->
     <section class="section" id="environment">
       <div class="sec-head"><span class="sec-no">02</span><h2 class="sec-title">Spatial environment</h2></div>
-      <p class="sec-dek">The simulation takes place on a discretized <b>100 × 100 grid</b> covering roughly <b>30 km²</b> around Akuse, Ghana, so that each cell represents an area of about 60 × 51 meters. The environment blends real‑world geography with procedural generation, giving the model a spatial structure that is grounded in the actual study site rather than an abstract lattice.</p>
+      <p class="sec-dek">The simulation takes place on a discretized <b>100 × 100 grid</b> covering roughly <b>30 km²</b> around Akuse, Ghana, so that each cell represents an area of about 60 × 51 meters. The environment blends real-world geography with procedural generation, giving the model a spatial structure that is grounded in the actual study site rather than an abstract lattice.</p>
 
       <div class="flow">
         <div class="flow-node"><div class="fn-t">Boundary &amp; residences</div><div class="fn-d">A fixed geographic boundary around Akuse is rasterized into the 100×100 grid. Every unoccupied, valid cell inside the boundary is a potential household location; no more than one household may occupy a single cell.</div></div>
         <div class="flow-arrow">→</div>
-        <div class="flow-node"><div class="fn-t">Points of interest</div><div class="fn-d">Schools and places of worship are placed using real OpenStreetMap locations near Akuse. Water collection points use real coordinates from a field water‑sampling survey, each mapped to its closest matching grid cell.</div></div>
+        <div class="flow-node"><div class="fn-t">Points of interest</div><div class="fn-d">Schools and places of worship are placed using real OpenStreetMap locations near Akuse. Water collection points use real coordinates from a field water-sampling survey, each mapped to its closest matching grid cell.</div></div>
         <div class="flow-arrow">→</div>
-        <div class="flow-node"><div class="fn-t">Animal density</div><div class="fn-d">A continuous layer represents free‑range poultry and livestock density — the environmental reservoir that drives zoonotic Campylobacter exposure.</div></div>
+        <div class="flow-node"><div class="fn-t">Animal density</div><div class="fn-d">A continuous layer represents free-range poultry and livestock density — the environmental reservoir that drives zoonotic Campylobacter exposure.</div></div>
       </div>
 
       <div class="diagram-frame">
@@ -438,7 +436,7 @@ table.ref td.num{color:var(--ink-soft);}
             <circle cx="170" cy="150" r="5"/><circle cx="120" cy="190" r="5"/><circle cx="240" cy="180" r="5"/>
             <circle cx="45" cy="200" r="5"/>
           </g>
-          <text x="145" y="248" text-anchor="middle" font-size="10.5" fill="#5B5F55">real, field‑surveyed sampling sites</text>
+          <text x="145" y="248" text-anchor="middle" font-size="10.5" fill="#5B5F55">real, field-surveyed sampling sites</text>
 
           <!-- panel 2: schools / worship -->
           <text x="450" y="20" text-anchor="middle" font-weight="700" font-size="13.5">Schools &amp; places of worship</text>
@@ -465,21 +463,25 @@ table.ref td.num{color:var(--ink-soft);}
           <circle cx="660" cy="200" r="20" fill="url(#blob1)"/>
           <text x="755" y="248" text-anchor="middle" font-size="10.5" fill="#5B5F55">procedurally generated, 15 overlapping clusters</text>
         </svg>
-        <div class="diagram-cap">Fig 2.1 — The four environmental layers, shown schematically. Water, school, and worship locations are placed from real data; animal density is procedurally generated to represent likely poultry/livestock hotspots.</div>
+          <div class="diagram-cap">Fig 2.1 — The environmental layers, shown schematically. Water, school, and worship locations are placed from real data at grid-creation time. Animal density is derived at runtime from each run's household ownership draw.</div>
       </div>
 
       <h4 class="sub3">Animal density layer</h4>
-      <p>Because poultry and livestock are a major zoonotic reservoir for Campylobacter, the model needs a spatial proxy for where animals are concentrated. This continuous‑valued layer is built by layering 15 randomly located two‑dimensional Gaussian "hotspots" over a low background of uniform noise:</p>
+      <p>Because poultry and livestock are a major zoonotic reservoir for Campylobacter, the model needs a spatial proxy for where animals are concentrated. Unlike the water, school, and worship layers — which are baked into the grid file at creation time — the animal density layers are <b>derived at runtime</b> from each simulation run's household ownership draw. Two species-specific layers are built: one for <b>poultry</b> and one for <b>ruminants</b>.</p>
+      <p>Each household that owns animals of a given species "stamps" an unnormalised 2D Gaussian bump (peak = 1.0 at its own home cell) onto an otherwise-empty raster. Bumps from all owning households are summed and clipped to [0, 1]:</p>
       <div class="eqbox">
-        <div class="eq-label">animal density surface</div>
-        \[ f(x,y) = A \cdot \exp\!\left(-\frac{1}{2}\cdot\frac{(x-c_x)^2+(y-c_y)^2}{\sigma^2}\right) \]
-        <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">where \((c_x,c_y)\) is a randomly chosen cluster center, the amplitude \(A\) is drawn from \([0.4,\,0.9]\) per cluster, and \(\sigma=4\) grid cells. The 15 clusters are superimposed on background noise drawn from \([0,\,0.1]\), then clipped to \([0,1]\) and restricted to valid land cells. Higher values mean denser free‑range poultry/livestock presence, and translate directly into Campylobacter exposure dose — see §07.</p>
+        <div class="eq-label">per-species density surface</div>
+        \[ f_s(x,y) = \text{clip}\!\left(\sum_{h \in \text{owners}_s} \exp\!\left(-\frac{(x-x_h)^2+(y-y_h)^2}{2\sigma_s^2}\right),\ 0,\ 1\right) \]
+        <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">where \((x_h, y_h)\) is household \(h\)'s home cell, \(\sigma_s\) is the species-specific roam radius in grid cells (\(\sigma_{poultry}=1.0\), \(\sigma_{ruminant}=2.0\)), and the sum runs over all households that own animals of species \(s\). Because the kernel is unnormalised (peak = 1, not sum = 1), a household's own-cell density is not diluted by the blur — it remains at 1.0 regardless of how many nearby non-owning cells exist. Overlapping bumps from multiple nearby owning households accumulate additively up to the [0, 1] cap, so areas with several owning households nearby reach higher densities than isolated owners.</p>
       </div>
+      <p>Household ownership is drawn once per run: each household independently becomes a poultry owner with probability 0.536 and a ruminant owner with probability 0.330, calibrated from a compiled Ghana DHS/MICS-style survey (IDW-interpolated over rural clusters nationwide since no survey cluster falls inside Akuse: effectively a rural-southern-Ghana average). Because ownership and home location both vary with the random seed, the animal density layers differ across runs even when the underlying grid is the same.</p>
+
+      <div class="note assump">Ownership probabilities are calibrated from national rural-survey data rather than Akuse-specific measurements. Species weights and roam sigmas are literature-informed starting points, not fitted values — treat them as sensitivity-analysis parameters and recalibrate <code>human_animal_interaction_rate</code> alongside them.</div>
 
       <h4 class="sub3">Water sources: a dynamic layer</h4>
-      <p>Unlike the other layers, water sources change state over the course of the simulation — each one is either <b>clean</b> or <b>contaminated</b>. Two independent mechanisms can contaminate a source: infectious people shedding pathogen while visiting it, and sudden environmental shocks (e.g. heavy‑rain runoff) that can contaminate every clean source in the grid at once. Contaminated sources also recover naturally over time. The full water dynamics — and how they connect to Rotavirus transmission — are described in §06.</p>
+      <p>Unlike the other layers, water sources change state over the course of the simulation — each one is either <b>clean</b> or <b>contaminated</b>. Two independent mechanisms can contaminate a source: infectious people shedding pathogen while visiting it, and sudden environmental shocks (e.g. heavy-rain runoff) that can contaminate every clean source in the grid at once. Contaminated sources also recover naturally over time. The full water dynamics — and how they connect to Rotavirus transmission — are described in §06.</p>
 
-      <div class="note assump">Water sources are currently treated uniformly (piped supply and open surface water behave identically), and the contamination‑shock and recovery probabilities are working assumptions rather than calibrated values. Planned refinements include source‑type‑specific rates and seasonal forcing (rainy vs. dry season), calibrated against empirical water‑quality and infrastructure data from the study region.</div>
+      <div class="note assump">Water sources are currently treated uniformly (piped supply and open surface water behave identically), and the contamination-shock and recovery probabilities are working assumptions rather than calibrated values. Planned refinements include source-type-specific rates and seasonal forcing (rainy vs. dry season), calibrated against empirical water-quality and infrastructure data from the study region.</div>
     </section>
 
     <!-- ============ 03 POPULATION ============ -->
@@ -494,7 +496,7 @@ table.ref td.num{color:var(--ink-soft);}
         </div>
         <div>
           <h4 class="sub3">Age &amp; the "parent" role</h4>
-          <p class="lede" style="font-size:13.4px">Children are given a continuous age drawn uniformly between 0 and 60 months; adults are fixed at 30 years. The <b>first adult</b> found in any household that contains at least one child is designated the household's <b>parent</b> — the one agent responsible for that household's care‑seeking decisions (§09). The population is closed: there are no births or deaths over the course of a run.</p>
+          <p class="lede" style="font-size:13.4px">Children are given a continuous age drawn uniformly between 0 and 60 months; adults are fixed at 30 years. The <b>first adult</b> found in any household that contains at least one child is designated the household's <b>parent</b> — the one agent responsible for that household's care-seeking decisions (§09). The population is closed: there are no births or deaths over the course of a run.</p>
         </div>
       </div>
 
@@ -505,12 +507,12 @@ table.ref td.num{color:var(--ink-soft);}
         </div>
         <div>
           <h4 class="sub3">Behavioral personas</h4>
-          <p class="lede" style="font-size:13.4px">Every agent is assigned one of <b>32 distinct behavioral archetypes</b>, generated in advance using Latin Hypercube sampling across three dimensions: how much weight a person places on wealth versus health, how they distort risk probabilities, and how loss‑averse they are. These parameters become consequential specifically for parents, who use them when weighing whether to pay for a sick child's care (§09).</p>
+          <p class="lede" style="font-size:13.4px">Every agent is assigned one of <b>32 distinct behavioral archetypes</b>, generated in advance using Latin Hypercube sampling across three dimensions: how much weight a person places on wealth versus health, how they distort risk probabilities, and how loss-averse they are. These parameters become consequential specifically for parents, who use them when weighing whether to pay for a sick child's care (§09).</p>
         </div>
       </div>
 
       <h4 class="sub3">Placement on the map</h4>
-      <p>Each household — not each individual — is assigned one random, unoccupied residential cell; every member of that household shares its coordinates as their home location. From that home, the nearest school, place of worship, and water source are pre‑computed once and held fixed for the rest of the run, giving every household a consistent, geographically sensible set of destinations.</p>
+      <p>Each household — not each individual — is assigned one random, unoccupied residential cell; every member of that household shares its coordinates as their home location. From that home, the nearest school, place of worship, and water source are pre-computed once and held fixed for the rest of the run, giving every household a consistent, geographically sensible set of destinations.</p>
 
       <div class="note assump">Household size, child probability, and the health/wealth distributions are grounded in regional census figures and treated as reasonable working assumptions; the authors note that these should ultimately be aligned with empirical health and wealth proxies specific to the study population.</div>
     </section>
@@ -518,9 +520,9 @@ table.ref td.num{color:var(--ink-soft);}
     <!-- ============ 04 MOBILITY ============ -->
     <section class="section" id="mobility">
       <div class="sec-head"><span class="sec-no">04</span><h2 class="sec-title">Daily mobility &amp; activity</h2></div>
-      <p class="sec-dek">The simulation runs on a <b>dual‑phase daily cycle</b>: during the <b>day phase</b>, agents travel to an activity location; during the <b>night phase</b>, everyone returns home. Because both pathogens spread through co‑located contact, where people spend their day is what ultimately drives transmission.</p>
+      <p class="sec-dek">The simulation runs on a <b>dual-phase daily cycle</b>: during the <b>day phase</b>, agents travel to an activity location; during the <b>night phase</b>, everyone returns home. Because both pathogens spread through co-located contact, where people spend their day is what ultimately drives transmission.</p>
 
-      <h4 class="sub3">Time‑use profiles</h4>
+      <h4 class="sub3">Time-use profiles</h4>
       <p style="font-size:13.6px">At the start of each day, every agent draws one activity from their own personal probability distribution over five options: staying home, going to school, attending worship, collecting water, or a social visit. Children and adults follow structurally different baseline profiles, each with 0–10% random noise added before the probabilities are renormalized to 100%:</p>
 
       <div class="tu-row">
@@ -546,19 +548,19 @@ table.ref td.num{color:var(--ink-soft);}
         <span><i style="background:#2B6CB0"></i>Water collection</span>
         <span><i style="background:#B7541F"></i>Social visit</span>
       </div>
-      <p style="font-size:12.8px; color:var(--ink-soft); margin-top:12px">Children never collect water, attend worship, or make social visits in this model; adults never attend school. These baseline weights are working assumptions meant to approximate local time‑use patterns and are assumed constant — they do not vary by weekday or season.</p>
+      <p style="font-size:12.8px; color:var(--ink-soft); margin-top:12px">Children never collect water, attend worship, or make social visits in this model; adults never attend school. These baseline weights are working assumptions meant to approximate local time-use patterns and are assumed constant — they do not vary by weekday or season.</p>
 
       <h4 class="sub3">Social visits are spatial, not networked</h4>
-      <p style="font-size:13.6px">Adults assigned to a social visit look for a nearby host: they randomly select someone currently at home within a <b>5‑grid‑cell radius</b> and travel to that person's residence for the day, simulating localized neighborhood mixing. If nobody eligible is within range, the agent simply stays home. There is no persistent social network or age‑based mixing preference — every social visit is a fresh, spatially‑local draw.</p>
+      <p style="font-size:13.6px">Adults assigned to a social visit look for a nearby host: they randomly select someone currently at home within a <b>5-grid-cell radius</b> and travel to that person's residence for the day, simulating localized neighborhood mixing. If nobody eligible is within range, the agent simply stays home. There is no persistent social network or age-based mixing preference — every social visit is a fresh, spatially-local draw.</p>
 
       <h4 class="sub3">Why no explicit workplaces?</h4>
-      <p style="font-size:13.6px">Adults do not travel to a modeled "work" location. Instead, income is treated as an intrinsic daily gain (§10) — a simplification that reflects how informal, agricultural, and home‑based much of the local economy is, rather than attempting to model specific workplaces and commutes.</p>
+      <p style="font-size:13.6px">Adults do not travel to a modeled "work" location. Instead, income is treated as an intrinsic daily gain (§10) — a simplification that reflects how informal, agricultural, and home-based much of the local economy is, rather than attempting to model specific workplaces and commutes.</p>
     </section>
 
     <!-- ============ 05 DISEASE FRAMEWORK ============ -->
     <section class="section" id="framework">
       <div class="sec-head"><span class="sec-no">05</span><h2 class="sec-title">Disease transmission framework</h2></div>
-      <p class="sec-dek">Both pathogens are modeled using a shared compartmental structure — a modified <b>SVEIR</b> framework (Susceptible → Vaccinated → Exposed → Infectious → Recovered) — but each pathogen follows its own rules for how agents move between compartments. The two disease tracks run independently and simultaneously, so <b>co‑infection is possible</b>: a child can be actively ill with both Rotavirus and Campylobacter at the same time. Both pathogens seed 1% of the population into the Exposed state at the very start of the simulation.</p>
+      <p class="sec-dek">Both pathogens are modeled using a shared compartmental structure — a modified <b>SVEIR</b> framework (Susceptible → Vaccinated → Exposed → Infectious → Recovered) — but each pathogen follows its own rules for how agents move between compartments. The two disease tracks run independently and simultaneously, so <b>co-infection is possible</b>: a child can be actively ill with both Rotavirus and Campylobacter at the same time. Both pathogens seed 1% of the population into the Exposed state at the very start of the simulation.</p>
 
       <div class="diagram-frame">
         <svg viewBox="0 0 920 300" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
@@ -599,25 +601,25 @@ table.ref td.num{color:var(--ink-soft);}
           <text x="690" y="172" font-size="10.5">recovery — stochastic daily chance</text>
 
           <path d="M610,218 Q 730,270 850,218" stroke="#6B46C1" fill="none" marker-end="url(#a4)" stroke-dasharray="5,3"/>
-          <text x="730" y="286" text-anchor="middle" font-size="10.5" fill="#6B46C1">successful care‑seeking → immediate recovery (both pathogens) — §09</text>
+          <text x="730" y="286" text-anchor="middle" font-size="10.5" fill="#6B46C1">successful care-seeking → immediate recovery (both pathogens) — §09</text>
 
           <path d="M850,142 Q 610,20 398,150" stroke="#2B6CB0" fill="none" marker-end="url(#a3)" stroke-dasharray="5,3"/>
           <text x="620" y="30" text-anchor="middle" font-size="10.5" fill="#2B6CB0">reinfection — susceptibility reduced by acquired immunity (both pathogens)</text>
 
         </svg>
-        <div class="diagram-cap">Fig 5.1 — Compartment transitions shared by both pathogens. Solid black = universal; blue = rotavirus‑specific vaccination track; dashed purple = the care‑seeking short‑circuit available to either pathogen (§09).</div>
+        <div class="diagram-cap">Fig 5.1 — Compartment transitions shared by both pathogens. Solid black = universal; blue = rotavirus-specific vaccination track; dashed purple = the care-seeking short-circuit available to either pathogen (§09).</div>
       </div>
 
       <h4 class="sub3">Two kinds of immunity, kept separate</h4>
       <p>The model distinguishes two mechanistically different forms of acquired immunity, and it's worth keeping them apart:</p>
       <div class="two-col">
         <div class="flow-node" style="border-color:var(--rota-line)">
-          <div class="fn-t" style="color:var(--rota)">Infection‑risk immunity</div>
+          <div class="fn-t" style="color:var(--rota)">Infection-risk immunity</div>
           <div class="fn-d">A single global factor (\(\kappa=0.15\)) that reduces the <i>probability</i> of getting reinfected as an agent accumulates prior infections, decaying exponentially: \(\exp(-\kappa\cdot n_{\text{prior}})\). Shared by both pathogens; recovered individuals remain eligible for reinfection, just at reduced risk.</div>
         </div>
         <div class="flow-node" style="border-color:var(--behavior-line)">
-          <div class="fn-t" style="color:var(--behavior)">Symptom‑severity immunity</div>
-          <div class="fn-d">A separate mechanism (§08) that reduces how <i>sick</i> a newly‑infectious child becomes, based on vaccination and prior infection count — but only if the child gets infected in the first place. This is what makes repeat infections progressively milder even though they remain possible.</div>
+          <div class="fn-t" style="color:var(--behavior)">Symptom-severity immunity</div>
+          <div class="fn-d">A separate mechanism (§08) that reduces how <i>sick</i> a newly-infectious child becomes, based on vaccination and prior infection count — but only if the child gets infected in the first place. This is what makes repeat infections progressively milder even though they remain possible.</div>
         </div>
       </div>
     </section>
@@ -625,24 +627,24 @@ table.ref td.num{color:var(--ink-soft);}
     <!-- ============ 06 ROTAVIRUS ============ -->
     <section class="section" id="rota">
       <div class="sec-head"><span class="sec-no">06</span><h2 class="sec-title">Rotavirus <span class="pill pill-rota">viral · contact + waterborne</span></h2></div>
-      <p class="sec-dek">Rotavirus spreads through <b>three distinct opportunities for exposure</b> each day, reflecting its dual nature as both a directly‑transmitted and a water‑transmitted pathogen. A vaccination track further modulates who is susceptible in the first place.</p>
+      <p class="sec-dek">Rotavirus spreads through <b>three distinct opportunities for exposure</b> each day, reflecting its dual nature as both a directly-transmitted and a water-transmitted pathogen. A vaccination track further modulates who is susceptible in the first place.</p>
 
       <div class="flow">
-        <div class="flow-node" style="border-color:var(--rota-line)"><div class="fn-t" style="color:var(--rota)">① Person‑to‑person</div><div class="fn-d">Direct transmission wherever susceptible and infectious agents are co‑located — fires during both the day and night phases.</div></div>
+        <div class="flow-node" style="border-color:var(--rota-line)"><div class="fn-t" style="color:var(--rota)">① Person-to-person</div><div class="fn-d">Direct transmission wherever susceptible and infectious agents are co-located — fires during both the day and night phases.</div></div>
         <div class="flow-arrow">+</div>
         <div class="flow-node" style="border-color:var(--rota-line)"><div class="fn-t" style="color:var(--rota)">② At the water source</div><div class="fn-d">Infectious visitors can contaminate a water source; anyone drawing water from a contaminated source risks infection on the spot.</div></div>
         <div class="flow-arrow">+</div>
         <div class="flow-node" style="border-color:var(--rota-line)"><div class="fn-t" style="color:var(--rota)">③ Brought home</div><div class="fn-d">A household member who fetched contaminated water can expose the rest of the household back home, even if they never left.</div></div>
       </div>
 
-      <h4 class="sub3">① Person‑to‑person transmission</h4>
+      <h4 class="sub3">① Person-to-person transmission</h4>
       <div class="eqbox">
-        <div class="eq-label">infection probability given co‑located contacts</div>
+        <div class="eq-label">infection probability given co-located contacts</div>
         \[ P_{\text{infect},i} = 1-(1-\pi_i)^{k} \]
-        <p style="font-size:12.4px; color:var(--ink-soft); margin:6px 0 10px">where \(k\) is the number of currently infectious agents sharing agent \(i\)'s location — each is treated as an independent transmission opportunity — and \(\pi_i\) is agent \(i\)'s effective per‑contact probability.</p>
-        <div class="eq-label">effective per‑contact probability</div>
+        <p style="font-size:12.4px; color:var(--ink-soft); margin:6px 0 10px">where \(k\) is the number of currently infectious agents sharing agent \(i\)'s location — each is treated as an independent transmission opportunity — and \(\pi_i\) is agent \(i\)'s effective per-contact probability.</p>
+        <div class="eq-label">effective per-contact probability</div>
         \[ \pi_i = \beta_{rota}\times\exp(-\kappa\cdot N_{inf,i}) \]
-        <p style="font-size:12.4px; color:var(--ink-soft); margin-top:8px">The base rate is re‑drawn stochastically every day, \(\beta_{rota}\sim\max\big(0.001,\ \mathcal{N}(0.0005,\,0.0002)\big)\), representing day‑to‑day variability in contact intensity. Vaccinated agents face a further breakthrough reduction of \((1-V_{eff})\); \(N_{inf,i}\) is the agent's lifetime infection count.</p>
+        <p style="font-size:12.4px; color:var(--ink-soft); margin-top:8px">The base rate is re-drawn stochastically every day, \(\beta_{rota}\sim\max\big(0.001,\ \mathcal{N}(0.0005,\,0.0002)\big)\), representing day-to-day variability in contact intensity. Vaccinated agents face a further breakthrough reduction of \((1-V_{eff})\); \(N_{inf,i}\) is the agent's lifetime infection count.</p>
       </div>
 
       <h4 class="sub3">② Waterborne transmission — human ⇄ water ⇄ human</h4>
@@ -659,11 +661,11 @@ table.ref td.num{color:var(--ink-soft);}
         </div>
       </div>
 
-      <h4 class="sub3">③ Household‑carried contamination <span class="lede">— night phase only</span></h4>
-      <p class="lede" style="font-size:13.3px">If the household's water‑collector visited a contaminated source that day, every other household member is exposed once they're all back home — using the exact same infection probability as route ② above. This is how one family member's errand can put the whole household at risk without anyone else ever leaving the house.</p>
+      <h4 class="sub3">③ Household-carried contamination <span class="lede">— night phase only</span></h4>
+      <p class="lede" style="font-size:13.3px">If the household's water-collector visited a contaminated source that day, every other household member is exposed once they're all back home — using the exact same infection probability as route ② above. This is how one family member's errand can put the whole household at risk without anyone else ever leaving the house.</p>
 
       <h4 class="sub3">Water source dynamics</h4>
-      <p class="lede" style="font-size:13.3px">Independently of human activity, each contaminated source recovers to clean with daily probability \(P_{recovery}=0.2\) (a mean recovery time of about five days). Separately, the whole grid faces a daily chance \(P_{shock}=1/30\) of a sudden, simultaneous contamination event across <i>every currently clean source</i> — representing acute events like heavy‑rain runoff. Shocks are Rotavirus‑relevant only, since Campylobacter's environmental route runs through animal density, not water.</p>
+      <p class="lede" style="font-size:13.3px">Independently of human activity, each contaminated source recovers to clean with daily probability \(P_{recovery}=0.2\) (a mean recovery time of about five days). Separately, the whole grid faces a daily chance \(P_{shock}=1/30\) of a sudden, simultaneous contamination event across <i>every currently clean source</i> — representing acute events like heavy-rain runoff. Shocks are Rotavirus-relevant only, since Campylobacter's environmental route runs through animal density, not water.</p>
 
       <h4 class="sub3">Vaccination</h4>
       <p class="lede" style="font-size:13.3px">Each day, every susceptible agent has a small chance (\(P_{vacc}=0.001\)) of becoming vaccinated. Vaccination does not grant full protection — it reduces the probability of infection across all three routes by a factor of \((1-V_{eff})\), with \(V_{eff}=0.55\), so breakthrough infections remain possible but less likely.</p>
@@ -671,18 +673,21 @@ table.ref td.num{color:var(--ink-soft);}
 
     <!-- ============ 07 CAMPYLOBACTER ============ -->
     <section class="section" id="campy">
-      <div class="sec-head"><span class="sec-no">07</span><h2 class="sec-title">Campylobacter <span class="pill pill-campy">bacterial · zoonotic + fecal‑oral + food‑borne</span></h2></div>
-      <p class="sec-dek">Campylobacter spreads through <b>three mechanistically distinct routes</b> that operate independently each day: an environmental, animal‑exposure route, a within‑household fecal‑oral route, and a flat background food‑borne risk representing contaminated food eaten at home. There is no vaccination track for this pathogen.</p>
+      <div class="sec-head"><span class="sec-no">07</span><h2 class="sec-title">Campylobacter <span class="pill pill-campy">bacterial · zoonotic + fecal-oral + food-borne</span></h2></div>
+      <p class="sec-dek">Campylobacter spreads through <b>three mechanistically distinct routes</b> that operate independently each day: an environmental, animal-exposure route, a within-household fecal-oral route, and a flat background food-borne risk representing contaminated food eaten at home. There is no vaccination track for this pathogen.</p>
 
-      <h4 class="sub3">① Zoonotic route — exposure to a dose‑response model</h4>
-      <p style="font-size:13.6px">Every agent is exposed each day to a "dose" derived from the animal density at their <i>current</i> location — meaning this route can fire wherever an agent happens to be, at home or away, both day and night:</p>
+      <h4 class="sub3">1. Zoonotic route — household ownership → dose → Beta-Poisson infection</h4>
+      <p style="font-size:13.6px">Every agent is exposed each day to a "dose" derived from the combined animal density at their <i>current</i> location — meaning this route fires wherever an agent happens to be, at home or away, both day and night. The density combines two species-specific layers (§02), each weighted by that species' relative contribution to zoonotic risk:</p>
       <div class="eqbox">
+        <div class="eq-label">combined local density</div>
+        \[ f_{combined}(x_i, y_i) = f_{poultry}(x_i, y_i)\times w_{poultry} + f_{ruminant}(x_i, y_i)\times w_{ruminant} \]
+        <p style="font-size:12.3px; color:var(--ink-soft); margin:6px 0 12px">where \(w_{poultry}=1.0\) and \(w_{ruminant}=0.45\) reflect poultry's dominant role in C. jejuni source-attribution studies. Both density layers are built from household ownership draws at runtime (§02).</p>
         <div class="eq-label">exposure dose</div>
-        \[ D_i = f(x_i,y_i)\times \rho_{campy} \]
-        <p style="font-size:12.3px; color:var(--ink-soft); margin:6px 0 12px">where \(f(x,y)\) is the animal density at the agent's grid cell (§02) and \(\rho_{campy}=0.25\) is the human–animal interaction rate.</p>
-        <div class="eq-label">Beta‑Poisson dose‑response infection probability</div>
+        \[ D_i = f_{combined}(x_i,y_i)\times \rho_{campy} \]
+        <p style="font-size:12.3px; color:var(--ink-soft); margin:6px 0 12px">where \(\rho_{campy}=0.25\) is the human–animal interaction rate.</p>
+        <div class="eq-label">Beta-Poisson dose-response infection probability</div>
         \[ P(\text{infect}\mid D) = \Big[1-{}_1F_1(\alpha,\ \alpha+\beta,\ -D)\Big]\times\exp(-\kappa\, N_{inf,i}) \]
-        <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">\({}_1F_1\) is Kummer's confluent hypergeometric function; \(\alpha=0.038\), \(\beta=0.022\) are shape parameters describing how infectious dose translates into risk. The dose itself is treated as an abstract, normalized exposure index rather than a literal organism count.</p>
+        <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">\({}_1F_1\) is Kummer's confluent hypergeometric function; \(\alpha=0.038\), \(\beta=0.022\) are shape parameters. The dose is treated as a normalised exposure index rather than a literal organism count.</p>
       </div>
 
       <div class="diagram-frame">
@@ -694,43 +699,42 @@ table.ref td.num{color:var(--ink-soft);}
           <path d="M60,178 C 140,177 190,165 230,120 C 260,85 300,55 360,42 C 430,28 500,24 560,22"
                 fill="none" stroke="#B7541F" stroke-width="2.6"/>
           <line x1="60" y1="30" x2="560" y2="30" stroke="#EBC9A9" stroke-dasharray="4,4"/>
-          <text x="565" y="26" font-size="10.5" fill="#B7541F">≈ plateau</text>
           <text x="60" y="196" font-size="10.5" fill="#5B5F55">low dose</text>
           <text x="530" y="196" font-size="10.5" fill="#5B5F55" text-anchor="end">high dose</text>
         </svg>
         <div class="diagram-cap">Fig 7.1 — Shape of the Beta‑Poisson dose‑response curve (schematic): risk rises steeply over a middle range of exposure and then saturates, so additional animal density beyond a point adds comparatively little marginal risk.</div>
       </div>
 
-      <h4 class="sub3">② Fecal‑oral household route <span class="lede">— night phase only</span></h4>
+      <h4 class="sub3">2. Fecal-oral household route <span class="lede">— night phase only</span></h4>
       <div class="eqbox">
         <div class="eq-label">trigger condition</div>
         <p style="font-size:13px; margin:2px 0 10px">Any household currently home for the night that contains at least one infectious member.</p>
-        <div class="eq-label">per‑member infection probability</div>
+        <div class="eq-label">per-member infection probability</div>
         \[ P_{\text{infect}} = P_{fecal\rightarrow oral}\times\exp(-\kappa\, N_{inf,i}), \qquad P_{fecal\rightarrow oral}=0.03 \]
         <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">Applied once per day to every other member of an affected household, independent of exactly how many infectious members that household has.</p>
       </div>
 
-      <h4 class="sub3">③ Food‑borne background route <span class="lede">— once per day, location‑independent</span></h4>
-      <p style="font-size:13.6px">Campylobacter is also commonly picked up through contaminated food rather than direct animal contact. To capture this, every agent faces a small, flat daily infection chance that does <i>not</i> depend on where the agent is, the local animal‑density layer, or the disease status of anyone else — it fires once per day for every agent, alongside disease progression, rather than during the twice‑daily movement‑linked transmission phases used by the other two routes.</p>
+      <h4 class="sub3">3. Food-borne background route <span class="lede">— once per day, location-independent</span></h4>
+      <p style="font-size:13.6px">Campylobacter is also commonly picked up through contaminated food rather than direct animal contact. To capture this, every agent faces a small, flat daily infection chance that does <i>not</i> depend on where the agent is, the local animal-density layer, or the disease status of anyone else — it fires once per day for every agent, alongside disease progression, rather than during the twice-daily movement-linked transmission phases used by the other two routes.</p>
       <div class="eqbox">
         <div class="eq-label">flat daily background probability</div>
         \[ P_{\text{infect}} = P_{food}\times\exp(-\kappa\, N_{inf,i}), \qquad P_{food}=0.01 \]
-        <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">Applied once per day to every susceptible‑like agent (S or R), representing exposure via contaminated food consumed at home. The only individual factor that modulates it is the agent's own acquired immunity from prior infections — the same \(\exp(-\kappa N_{inf,i})\) decay term used throughout the model — so, unlike the zoonotic and fecal‑oral routes, it carries no spatial or social signal at all.</p>
+        <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">Applied once per day to every susceptible-like agent (S or R), representing exposure via contaminated food consumed at home. The only individual factor that modulates it is the agent's own acquired immunity from prior infections — the same \(\exp(-\kappa N_{inf,i})\) decay term used throughout the model — so, unlike the zoonotic and fecal-oral routes, it carries no spatial or social signal at all.</p>
       </div>
 
-      <p style="font-size:13.6px">Because all three routes are tracked separately, the model can report what share of all Campylobacter infections trace back to environmental (zoonotic) exposure, household (fecal‑oral) spread, or the background food‑borne route — a useful lens for comparing WASH‑type interventions (which mainly affect the household route) against animal‑management interventions (which affect the zoonotic route) and food‑safety interventions (which affect the food‑borne route). Recovered individuals remain eligible for reinfection through any of the three routes, at reduced risk, following the same immunity decay used throughout the model.</p>
+      <p style="font-size:13.6px">Because all three routes are tracked separately, the model can report what share of all Campylobacter infections trace back to environmental (zoonotic) exposure, household (fecal-oral) spread, or the background food-borne route — a useful lens for comparing WASH-type interventions (which mainly affect the household route) against animal-management interventions (which affect the zoonotic route) and food-safety interventions (which affect the food-borne route). Recovered individuals remain eligible for reinfection through any of the three routes, at reduced risk, following the same immunity decay used throughout the model.</p>
     </section>
 
     <!-- ============ 08 ILLNESS ============ -->
     <section class="section" id="illness">
       <div class="sec-head"><span class="sec-no">08</span><h2 class="sec-title">Illness severity, duration &amp; health</h2></div>
-      <p class="sec-dek">Infection and clinical illness are treated as two different things. Only <b>children under 5</b> are modeled as developing symptoms; adults are asymptomatic carriers — they can still be infected, still transmit, and still contaminate water, but they never accumulate a severity score or lose health from disease directly. Every child's illness is tracked <b>independently per pathogen</b>, so a co‑infected child has two separate, concurrently‑running episodes, each with its own severity and countdown.</p>
+      <p class="sec-dek">Infection and clinical illness are treated as two different things. Only <b>children under 5</b> are modeled as developing symptoms; adults are asymptomatic carriers — they can still be infected, still transmit, and still contaminate water, but they never accumulate a severity score or lose health from disease directly. Every child's illness is tracked <b>independently per pathogen</b>, so a co-infected child has two separate, concurrently-running episodes, each with its own severity and countdown.</p>
 
       <h4 class="sub3">Severity at onset</h4>
       <div class="eqbox">
         <div class="eq-label">severity score, clamped to [0, 1]</div>
         \[ S_i = \text{clamp}\big(S_{base}\times M_{age}\times M_{immunity},\ 0,\ 1\big) \]
-        <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">\(S_{base}\) is pathogen‑specific: \(0.4\) for Rotavirus, \(0.3\) for Campylobacter, reflecting each pathogen's typical virulence.</p>
+        <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">\(S_{base}\) is pathogen-specific: \(0.4\) for Rotavirus, \(0.3\) for Campylobacter, reflecting each pathogen's typical virulence.</p>
       </div>
       <div class="two-col">
         <div class="eqbox">
@@ -761,18 +765,18 @@ table.ref td.num{color:var(--ink-soft);}
         <div class="eqbox">
           <div class="eq-label">passive recovery (no active illness)</div>
           \[ h \leftarrow \min\big(1,\ h + R_{health}\times(1+w)\big), \qquad R_{health}=0.001 \]
-          <p style="font-size:12.2px; color:var(--ink-soft); margin-top:6px">Recovery is faster for wealthier households — reflecting better nutrition, rest, and living conditions — one of the model's clearest health↔wealth feedback channels alongside care‑seeking.</p>
+          <p style="font-size:12.2px; color:var(--ink-soft); margin-top:6px">Recovery is faster for wealthier households — reflecting better nutrition, rest, and living conditions — one of the model's clearest health↔wealth feedback channels alongside care-seeking.</p>
         </div>
       </div>
-      <p style="font-size:13.4px">An episode ends — severity and remaining duration both drop to zero — either when the countdown naturally reaches zero, or immediately, for both concurrent episodes at once, if the parent successfully seeks care (§09). This second pathway is what links the behavioral‑economic layer directly back into epidemic dynamics: a successful clinic visit doesn't just make a child feel better, it also converts that child from Infectious to Recovered.</p>
+      <p style="font-size:13.4px">An episode ends — severity and remaining duration both drop to zero — either when the countdown naturally reaches zero, or immediately, for both concurrent episodes at once, if the parent successfully seeks care (§09). This second pathway is what links the behavioral-economic layer directly back into epidemic dynamics: a successful clinic visit doesn't just make a child feel better, it also converts that child from Infectious to Recovered.</p>
 
       <div class="note assump">Passive recovery applies to any agent not currently experiencing an active illness episode — in practice this means it operates continuously for adults (who never develop clinical episodes) and for children in between bouts of sickness.</div>
     </section>
 
     <!-- ============ 09 CARE-SEEKING ============ -->
     <section class="section" id="careseeking">
-      <div class="sec-head"><span class="sec-no">09</span><h2 class="sec-title">Care‑seeking decisions <span class="pill pill-behavior">Cumulative Prospect Theory</span></h2></div>
-      <p class="sec-dek">This is the model's central behavioral layer. Rather than assuming parents are perfectly rational cost‑benefit calculators, SPRINGS‑ABM gives every parent a <b>Cumulative Prospect Theory</b> (CPT) decision rule — capturing two well‑documented cognitive biases: people weight losses more heavily than equivalent gains (<i>loss aversion</i>), and they distort probabilities, overweighting unlikely events and underweighting likely ones (<i>probability weighting</i>).</p>
+      <div class="sec-head"><span class="sec-no">09</span><h2 class="sec-title">Care-seeking decisions <span class="pill pill-behavior">Cumulative Prospect Theory</span></h2></div>
+      <p class="sec-dek">This is the model's central behavioral layer. Rather than assuming parents are perfectly rational cost-benefit calculators, SPRINGS-ABM gives every parent a <b>Cumulative Prospect Theory</b> (CPT) decision rule — capturing two well-documented cognitive biases: people weight losses more heavily than equivalent gains (<i>loss aversion</i>), and they distort probabilities, overweighting unlikely events and underweighting likely ones (<i>probability weighting</i>).</p>
 
       <h4 class="sub3">Noticing a sick child</h4>
       <p style="font-size:13.6px">Each day, for every child with a nonzero severity score, the parent "notices" the illness with a probability equal to that child's <b>current worst severity across both pathogens</b> — sicker children are more likely to be noticed. If more than one child in a household is sick, the parent focuses on whichever one appears sickest. If the household's wealth is below the cost of care, the parent is priced out and simply has to wait, regardless of what they would otherwise choose.</p>
@@ -826,14 +830,14 @@ table.ref td.num{color:var(--ink-soft);}
           <text x="850" y="278" text-anchor="middle" font-size="10.3">parent stress · 65% no change</text>
 
         </svg>
-        <div class="diagram-cap">Fig 9.1 — The daily care‑seeking decision funnel. The behavioral evaluation decides <i>whether</i> to seek care; a separate, objective chance draw then decides the outcome.</div>
+        <div class="diagram-cap">Fig 9.1 — The daily care-seeking decision funnel. The behavioral evaluation decides <i>whether</i> to seek care; a separate, objective chance draw then decides the outcome.</div>
       </div>
 
       <h4 class="sub3">Utility &amp; the reference point</h4>
       <div class="eqbox">
-        <div class="eq-label">extended Cobb‑Douglas utility</div>
+        <div class="eq-label">extended Cobb-Douglas utility</div>
         \[ U(W,h_{\text{eff}}) = W^{\alpha}\,h_{\text{eff}}^{\,1-\alpha}, \qquad h_{\text{eff}} = (1-\omega)\,h_{\text{parent}} + \omega\,h_{\text{child}} \]
-        <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">\(\alpha\) is the parent's personal wealth‑versus‑health weight (from their persona); \(\omega=0.5\) blends parent and child health equally. Crucially, the <b>reference point</b> for every comparison is <i>today's actual state</i> — the child currently sick — so a successful cure counts as a <i>gain</i> relative to right now, and this is exactly what makes loss aversion meaningful: parents feel the potential failure‑loss more sharply than the recovery‑gain.</p>
+        <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">\(\alpha\) is the parent's personal wealth-versus-health weight (from their persona); \(\omega=0.5\) blends parent and child health equally. Crucially, the <b>reference point</b> for every comparison is <i>today's actual state</i> — the child currently sick — so a successful cure counts as a <i>gain</i> relative to right now, and this is exactly what makes loss aversion meaningful: parents feel the potential failure-loss more sharply than the recovery-gain.</p>
       </div>
 
       <h4 class="sub3">The four possible outcomes</h4>
@@ -850,12 +854,12 @@ table.ref td.num{color:var(--ink-soft);}
         <div class="eqbox">
           <div class="eq-label">value function (asymmetric)</div>
           \[ v(\Delta) = \begin{cases} \Delta^{\theta} & \Delta \ge 0 \\ -\lambda\,(-\Delta)^{\eta} & \Delta < 0 \end{cases} \]
-          <p style="font-size:12.2px; color:var(--ink-soft); margin-top:8px">\(\theta=\eta=0.88\) (fixed, following Tversky &amp; Kahneman); \(\lambda\in[1,3]\) is drawn per‑agent — losses are felt \(\lambda\) times more strongly than an equally‑sized gain.</p>
+          <p style="font-size:12.2px; color:var(--ink-soft); margin-top:8px">\(\theta=\eta=0.88\) (fixed, following Tversky &amp; Kahneman); \(\lambda\in[1,3]\) is drawn per-agent — losses are felt \(\lambda\) times more strongly than an equally-sized gain.</p>
         </div>
         <div class="eqbox">
           <div class="eq-label">Prelec probability weighting</div>
           \[ \pi(p) = \dfrac{p^{\gamma}}{\big(p^{\gamma}+(1-p)^{\gamma}\big)^{1/\gamma}} \]
-          <p style="font-size:12.2px; color:var(--ink-soft); margin-top:8px">\(\gamma\in[0.4,0.9]\), drawn per‑agent; when \(\gamma<1\), small probabilities are overweighted and large ones underweighted (an inverse‑S curve). This distortion only affects the parent's <i>subjective evaluation</i> — the world always resolves outcomes at the true, objective probability.</p>
+          <p style="font-size:12.2px; color:var(--ink-soft); margin-top:8px">\(\gamma\in[0.4,0.9]\), drawn per-agent; when \(\gamma<1\), small probabilities are overweighted and large ones underweighted (an inverse-S curve). This distortion only affects the parent's <i>subjective evaluation</i> — the world always resolves outcomes at the true, objective probability.</p>
         </div>
       </div>
       <div class="eqbox">
@@ -866,10 +870,10 @@ table.ref td.num{color:var(--ink-soft);}
 
       <h4 class="sub3">Two simplified baselines, used to decompose the effect of CPT</h4>
       <div class="two-col">
-        <div class="flow-node"><div class="fn-t">Rational baseline (EV)</div><div class="fn-d">Same utility function and reference point, but <i>objective</i> probabilities and a <i>linear</i> value function — no probability distortion, no loss aversion. This is the textbook expected‑value decision‑maker.</div></div>
-        <div class="flow-node"><div class="fn-t">Loss‑aversion‑only</div><div class="fn-d">Objective probabilities (no Prelec distortion), but the real, asymmetric, per‑agent value function still applies — isolating the effect of loss aversion on its own, separate from probability weighting.</div></div>
+        <div class="flow-node"><div class="fn-t">Rational baseline (EV)</div><div class="fn-d">Same utility function and reference point, but <i>objective</i> probabilities and a <i>linear</i> value function — no probability distortion, no loss aversion. This is the textbook expected-value decision-maker.</div></div>
+        <div class="flow-node"><div class="fn-t">Loss-aversion-only</div><div class="fn-d">Objective probabilities (no Prelec distortion), but the real, asymmetric, per-agent value function still applies — isolating the effect of loss aversion on its own, separate from probability weighting.</div></div>
       </div>
-      <p style="font-size:13px; color:var(--ink-soft)">Comparing these three variants against each other (used in the calibration experiments, §12) shows how much of any deviation from "rational" care‑seeking is driven by loss aversion versus by probability distortion.</p>
+      <p style="font-size:13px; color:var(--ink-soft)">Comparing these three variants against each other (used in the calibration experiments, §12) shows how much of any deviation from "rational" care-seeking is driven by loss aversion versus by probability distortion.</p>
     </section>
 
     <!-- ============ 10 ECONOMICS ============ -->
@@ -879,7 +883,7 @@ table.ref td.num{color:var(--ink-soft);}
 
       <div class="eqbox">
         <div class="eq-label">daily income, per adult</div>
-        \[ \text{income}_i = I_{base}\times h_i \quad\text{(health‑scaled, by default)} \]
+        \[ \text{income}_i = I_{base}\times h_i \quad\text{(health-scaled, by default)} \]
         <div class="eq-label" style="margin-top:12px">household wealth update</div>
         \[ W_{t+1} = \text{clamp}\Big(W_t + \sum_{\text{adults}} \text{income}_i \ -\ N_{members}\times C_{living},\ \ 0,\ 1\Big) \]
         <p style="font-size:12.3px; color:var(--ink-soft); margin-top:8px">\(I_{base}=0.03\), \(C_{living}=0.025\) per household member per day. Only adults earn income; a cost of living is charged for <i>every</i> member, adult or child. The net change is applied to the household's single pooled wealth value, which is then shared back out equally to every member.</p>
@@ -891,15 +895,15 @@ table.ref td.num{color:var(--ink-soft);}
     <!-- ============ 11 ONE SIMULATED DAY ============ -->
     <section class="section" id="cycle">
       <div class="sec-head"><span class="sec-no">11</span><h2 class="sec-title">One simulated day, start to finish</h2></div>
-      <p class="sec-dek">Every mechanism described above is woven together once per simulated day, in a fixed sequence. The order matters: for instance, illness must be updated before care‑seeking can act on today's severities, and transmission is evaluated <b>twice</b> — once wherever people are during the day, and once at home overnight — because each route depends on where agents physically are.</p>
+      <p class="sec-dek">Every mechanism described above is woven together once per simulated day, in a fixed sequence. The order matters: for instance, illness must be updated before care-seeking can act on today's severities, and transmission is evaluated <b>twice</b> — once wherever people are during the day, and once at home overnight — because each route depends on where agents physically are.</p>
 
       <div class="stage-block stage-morning">
         <div class="stage-head"><span>1 · Morning — disease progresses</span><span class="pill" style="background:rgba(255,255,255,.18); color:#fff; border:none">once, before movement</span></div>
         <div class="stage-body">
           <ul class="steplist">
             <li>For <b>both pathogens</b>: incubation clocks tick forward for exposed agents; those who have finished incubating become infectious; infectious agents face a stochastic daily chance of recovering.</li>
-            <li>For <b>Rotavirus only</b>: susceptible agents are offered vaccination at the daily vaccination rate, and that day's human‑to‑human infection probability is freshly redrawn.</li>
-            <li>For <b>Campylobacter only</b>: every susceptible agent faces the flat, location‑independent food‑borne background infection risk (§07) — applied once here rather than during the day/night transmission phases, since it has no spatial dependence.</li>
+            <li>For <b>Rotavirus only</b>: susceptible agents are offered vaccination at the daily vaccination rate, and that day's human-to-human infection probability is freshly redrawn.</li>
+            <li>For <b>Campylobacter only</b>: every susceptible agent faces the flat, location-independent food-borne background infection risk (§07) — applied once here rather than during the day/night transmission phases, since it has no spatial dependence.</li>
           </ul>
         </div>
       </div>
@@ -908,9 +912,9 @@ table.ref td.num{color:var(--ink-soft);}
         <div class="stage-head"><span>2 · Day phase — activity &amp; exposure</span><span class="pill" style="background:rgba(255,255,255,.18); color:#fff; border:none">agents at their chosen locations</span></div>
         <div class="stage-body">
           <ul class="steplist">
-            <li>Every agent samples one activity for the day from their personal time‑use profile and travels to the corresponding location (or attempts a social visit) — §04.</li>
+            <li>Every agent samples one activity for the day from their personal time-use profile and travels to the corresponding location (or attempts a social visit) — §04.</li>
             <li>Agents sharing a location are grouped together for the purposes of transmission.</li>
-            <li><b>Rotavirus</b>: person‑to‑person transmission fires within each location group; anyone at a water source can contaminate it or become infected from it.</li>
+            <li><b>Rotavirus</b>: person-to-person transmission fires within each location group; anyone at a water source can contaminate it or become infected from it.</li>
             <li><b>Campylobacter</b>: the zoonotic route fires, driven by animal density at each agent's current cell.</li>
           </ul>
         </div>
@@ -921,8 +925,8 @@ table.ref td.num{color:var(--ink-soft);}
         <div class="stage-body">
           <ul class="steplist">
             <li>All agents return to their home location; location groups are recomputed — now equivalent to households.</li>
-            <li><b>Rotavirus</b>: person‑to‑person transmission fires again, now at the household level.</li>
-            <li><b>Campylobacter</b>: the zoonotic route fires again (evaluated at the home cell), and the <b>fecal‑oral household route</b> becomes active for the first and only time each day.</li>
+            <li><b>Rotavirus</b>: person-to-person transmission fires again, now at the household level.</li>
+            <li><b>Campylobacter</b>: the zoonotic route fires again (evaluated at the home cell), and the <b>fecal-oral household route</b> becomes active for the first and only time each day.</li>
           </ul>
         </div>
       </div>
@@ -931,9 +935,9 @@ table.ref td.num{color:var(--ink-soft);}
         <div class="stage-head"><span>4 · Daily systems — illness, behavior &amp; economy</span><span class="pill" style="background:rgba(255,255,255,.18); color:#fff; border:none">fixed order, once per day</span></div>
         <div class="stage-body">
           <ul class="steplist">
-            <li><span class="pill pill-behavior">Illness update</span> — new episodes begin for newly‑infectious children, today's severity‑driven health toll is applied, remaining duration counts down, and agents with no active illness recover passively.</li>
-            <li><span class="pill pill-behavior">Care‑seeking</span> — parents of noticed sick children weigh seeking care against waiting, using CPT (§09).</li>
-            <li><span class="pill pill-rota">Household water carry‑over</span> — households whose water‑collector visited a contaminated source today are exposed at home.</li>
+            <li><span class="pill pill-behavior">Illness update</span> — new episodes begin for newly-infectious children, today's severity-driven health toll is applied, remaining duration counts down, and agents with no active illness recover passively.</li>
+            <li><span class="pill pill-behavior">Care-seeking</span> — parents of noticed sick children weigh seeking care against waiting, using CPT (§09).</li>
+            <li><span class="pill pill-rota">Household water carry-over</span> — households whose water-collector visited a contaminated source today are exposed at home.</li>
             <li><span class="pill pill-systems">Environmental dynamics</span> — contaminated water sources may recover; with a small daily chance, every clean source is contaminated at once (a shock event).</li>
             <li><span class="pill pill-systems">Household economics</span> — daily income and cost of living settle into the household's pooled wealth (§10).</li>
           </ul>
@@ -955,18 +959,18 @@ table.ref td.num{color:var(--ink-soft);}
 
       <table class="ref">
         <tr><th>Sweep</th><th>What is varied</th><th>What is measured</th><th>Question it answers</th></tr>
-        <tr><td><b>Rotavirus tipping point</b></td><td>human‑to‑human infection probability, across a wide range</td><td>peak &amp; cumulative under‑5 illness</td><td>Is there a sharp epidemic phase transition for Rotavirus?</td></tr>
-        <tr><td><b>Campylobacter tipping point</b></td><td>human–animal interaction rate</td><td>peak &amp; cumulative illness, plus the zoonotic‑route share</td><td>Same question for the zoonotic route.</td></tr>
-        <tr><td><b>Vaccination herd‑immunity surface</b></td><td>vaccination rate × vaccine efficacy, jointly (a 5×5 grid)</td><td>chance the epidemic is pushed toward local extinction</td><td>Where does the herd‑immunity threshold lie?</td></tr>
-        <tr><td><b>Cost‑of‑care sweep</b></td><td>the price of a clinic visit</td><td>care‑seeking rate, share priced out, resulting illness burden</td><td>How does a financial barrier reshape access to care and downstream burden?</td></tr>
-        <tr><td><b>CPT decomposition</b></td><td>cost of care, crossed with three decision rules (rational / loss‑aversion‑only / full CPT)</td><td>care rate, household wealth, health, prevalence</td><td>How much of any behavioral deviation traces to loss aversion vs. probability distortion? (§09)</td></tr>
-        <tr><td><b>Water‑shock frequency</b></td><td>how often the whole grid's water supply is shocked, from never to roughly every 3 days</td><td>Rotavirus burden (expected to respond strongly); Campylobacter burden (an internal negative control, expected to stay flat)</td><td>How much Rotavirus burden is driven by acute contamination events, specifically?</td></tr>
+        <tr><td><b>Rotavirus tipping point</b></td><td>human-to-human infection probability, across a wide range</td><td>peak &amp; cumulative under-5 illness</td><td>Is there a sharp epidemic phase transition for Rotavirus?</td></tr>
+        <tr><td><b>Campylobacter tipping point</b></td><td>human–animal interaction rate</td><td>peak &amp; cumulative illness, plus the zoonotic-route share</td><td>Same question for the zoonotic route.</td></tr>
+        <tr><td><b>Vaccination herd-immunity surface</b></td><td>vaccination rate × vaccine efficacy, jointly (a 5×5 grid)</td><td>chance the epidemic is pushed toward local extinction</td><td>Where does the herd-immunity threshold lie?</td></tr>
+        <tr><td><b>Cost-of-care sweep</b></td><td>the price of a clinic visit</td><td>care-seeking rate, share priced out, resulting illness burden</td><td>How does a financial barrier reshape access to care and downstream burden?</td></tr>
+        <tr><td><b>CPT decomposition</b></td><td>cost of care, crossed with three decision rules (rational / loss-aversion-only / full CPT)</td><td>care rate, household wealth, health, prevalence</td><td>How much of any behavioral deviation traces to loss aversion vs. probability distortion? (§09)</td></tr>
+        <tr><td><b>Water-shock frequency</b></td><td>how often the whole grid's water supply is shocked, from never to roughly every 3 days</td><td>Rotavirus burden (expected to respond strongly); Campylobacter burden (an internal negative control, expected to stay flat)</td><td>How much Rotavirus burden is driven by acute contamination events, specifically?</td></tr>
       </table>
 
-      <h4 class="sub3">One‑at‑a‑time sensitivity analysis &amp; calibration</h4>
-      <p style="font-size:13.6px">A complementary sensitivity sweep perturbs four key transmission parameters one at a time around their baseline values — the Rotavirus contact rate, the water‑to‑human infection probability, the Campylobacter animal‑interaction rate, and the Campylobacter fecal‑oral probability — and compares the resulting episodes‑per‑child‑year, peak prevalence, and zoonotic‑route share against <b>empirical target ranges</b> drawn from sub‑Saharan African and Ghanaian epidemiological literature. This provides a transparent way to check whether a given parameter setting produces plausible, literature‑consistent disease burden before it is used for policy‑relevant experiments.</p>
+      <h4 class="sub3">One-at-a-time sensitivity analysis &amp; calibration</h4>
+      <p style="font-size:13.6px">A complementary sensitivity sweep perturbs four key transmission parameters one at a time around their baseline values — the Rotavirus contact rate, the water-to-human infection probability, the Campylobacter animal-interaction rate, and the Campylobacter fecal-oral probability — and compares the resulting episodes-per-child-year, peak prevalence, and zoonotic-route share against <b>empirical target ranges</b> drawn from sub-Saharan African and Ghanaian epidemiological literature. This provides a transparent way to check whether a given parameter setting produces plausible, literature-consistent disease burden before it is used for policy-relevant experiments.</p>
 
-      <div class="note assump">Several parameters throughout the model — including the water contamination‑shock and recovery rates, and the Beta‑Poisson dose‑response shape parameters — are currently informed assumptions rather than parameters calibrated directly against local data. The sensitivity analysis is an explicit first step toward that calibration, and the authors note plans to refine these against empirical water‑quality testing, infrastructure‑failure records, and regional time‑use surveys.</div>
+      <div class="note assump">Several parameters throughout the model — including the water contamination-shock and recovery rates, and the Beta-Poisson dose-response shape parameters — are currently informed assumptions rather than parameters calibrated directly against local data. The sensitivity analysis is an explicit first step toward that calibration, and the authors note plans to refine these against empirical water-quality testing, infrastructure-failure records, and regional time-use surveys.</div>
     </section>
 
     <!-- ============ 13 GLOSSARY ============ -->
@@ -979,25 +983,25 @@ table.ref td.num{color:var(--ink-soft);}
         <div class="pcard"><span class="pname">Population size</span><span class="pdefault">5,000</span><div class="pdesc">Total number of agents in the simulation.</div></div>
         <div class="pcard"><span class="pname">Simulation length</span><span class="pdefault">150</span><div class="pdesc">Number of simulated days.</div></div>
         <div class="pcard"><span class="pname">Grid size</span><span class="pdefault">100 × 100</span><div class="pdesc">Cells covering ≈30 km² around Akuse, Ghana.</div></div>
-        <div class="pcard"><span class="pname">Mean household size <span class="psym">\(\lambda_{hh}+1\)</span></span><span class="pdefault">3.2</span><div class="pdesc">Shifted‑Poisson household size distribution.</div></div>
-        <div class="pcard"><span class="pname">Child probability <span class="psym">\(P_{child}\)</span></span><span class="pdefault">0.145</span><div class="pdesc">Chance a non‑first household member is a child under 5.</div></div>
+        <div class="pcard"><span class="pname">Mean household size <span class="psym">\(\lambda_{hh}+1\)</span></span><span class="pdefault">3.2</span><div class="pdesc">Shifted-Poisson household size distribution.</div></div>
+        <div class="pcard"><span class="pname">Child probability <span class="psym">\(P_{child}\)</span></span><span class="pdefault">0.145</span><div class="pdesc">Chance a non-first household member is a child under 5.</div></div>
       </div>
 
       <h4 class="sub3">Behavioral personas</h4>
       <div class="pgrid">
-        <div class="pcard c-behavior"><span class="pname">Archetypes</span><span class="pdefault">32</span><div class="pdesc">Latin‑Hypercube‑sampled behavioral profiles.</div></div>
-        <div class="pcard c-behavior"><span class="pname">Wealth‑health weight <span class="psym">\(\alpha_{cpt}\)</span></span><span class="pdefault">[0.10, 0.90]</span><div class="pdesc">How much a parent weighs wealth vs. health in their utility.</div></div>
+        <div class="pcard c-behavior"><span class="pname">Archetypes</span><span class="pdefault">32</span><div class="pdesc">Latin-Hypercube-sampled behavioral profiles.</div></div>
+        <div class="pcard c-behavior"><span class="pname">Wealth-health weight <span class="psym">\(\alpha_{cpt}\)</span></span><span class="pdefault">[0.10, 0.90]</span><div class="pdesc">How much a parent weighs wealth vs. health in their utility.</div></div>
         <div class="pcard c-behavior"><span class="pname">Probability distortion <span class="psym">\(\gamma_{cpt}\)</span></span><span class="pdefault">[0.40, 0.90]</span><div class="pdesc">Curvature of the Prelec weighting function.</div></div>
         <div class="pcard c-behavior"><span class="pname">Loss aversion <span class="psym">\(\lambda\)</span></span><span class="pdefault">[1.0, 3.0]</span><div class="pdesc">How much more losses sting than equal gains.</div></div>
-        <div class="pcard c-const"><span class="pname">Value‑function curvature <span class="psym">\(\theta,\eta\)</span></span><span class="pdefault">0.88</span><div class="pdesc">Fixed, not agent‑specific (Tversky &amp; Kahneman 1992).</div></div>
+        <div class="pcard c-const"><span class="pname">Value-function curvature <span class="psym">\(\theta,\eta\)</span></span><span class="pdefault">0.88</span><div class="pdesc">Fixed, not agent-specific (Tversky &amp; Kahneman 1992).</div></div>
       </div>
 
       <h4 class="sub3">Rotavirus <span class="pill pill-rota">pathogen</span></h4>
       <div class="pgrid">
         <div class="pcard"><span class="pname">Initial exposed share</span><span class="pdefault" style="color:var(--rota)">1%</span><div class="pdesc">Fraction seeded into the Exposed state at day 0.</div></div>
-        <div class="pcard"><span class="pname">Contact infection prob. <span class="psym">\(\beta_{rota}\)</span></span><span class="pdefault" style="color:var(--rota)">0.0005</span><div class="pdesc">Mean daily human‑to‑human probability (σ = 0.0002).</div></div>
+        <div class="pcard"><span class="pname">Contact infection prob. <span class="psym">\(\beta_{rota}\)</span></span><span class="pdefault" style="color:var(--rota)">0.0005</span><div class="pdesc">Mean daily human-to-human probability (σ = 0.0002).</div></div>
         <div class="pcard"><span class="pname">Incubation period</span><span class="pdefault" style="color:var(--rota)">2 days</span><div class="pdesc">Time in the Exposed state before becoming infectious.</div></div>
-        <div class="pcard"><span class="pname">Recovery rate <span class="psym">\(\gamma_{rota}\)</span></span><span class="pdefault" style="color:var(--rota)">0.20</span><div class="pdesc">Daily chance of recovering — ≈5‑day illness.</div></div>
+        <div class="pcard"><span class="pname">Recovery rate <span class="psym">\(\gamma_{rota}\)</span></span><span class="pdefault" style="color:var(--rota)">0.20</span><div class="pdesc">Daily chance of recovering — ≈5-day illness.</div></div>
         <div class="pcard"><span class="pname">Vaccination rate <span class="psym">\(P_{vacc}\)</span></span><span class="pdefault" style="color:var(--rota)">0.001</span><div class="pdesc">Daily chance a susceptible agent is vaccinated.</div></div>
         <div class="pcard"><span class="pname">Vaccine efficacy <span class="psym">\(V_{eff}\)</span></span><span class="pdefault" style="color:var(--rota)">0.55</span><div class="pdesc">Multiplicative reduction in breakthrough risk.</div></div>
         <div class="pcard"><span class="pname">Shedding probability <span class="psym">\(P_{shed}\)</span></span><span class="pdefault" style="color:var(--rota)">0.0001</span><div class="pdesc">Chance an infectious visitor contaminates a source.</div></div>
@@ -1007,8 +1011,14 @@ table.ref td.num{color:var(--ink-soft);}
       <h4 class="sub3">Campylobacter <span class="pill pill-campy">pathogen</span></h4>
       <div class="pgrid">
         <div class="pcard"><span class="pname">Initial exposed share</span><span class="pdefault" style="color:var(--campy)">1%</span><div class="pdesc">Fraction seeded into the Exposed state at day 0.</div></div>
-        <div class="pcard"><span class="pname">Interaction rate <span class="psym">\(\rho_{campy}\)</span></span><span class="pdefault" style="color:var(--campy)">0.25</span><div class="pdesc">Scales local animal density into an exposure dose.</div></div>
+        <div class="pcard"><span class="pname">Interaction rate <span class="psym">\(\rho_{campy}\)</span></span><span class="pdefault" style="color:var(--campy)">0.25</span><div class="pdesc">Scales combined local animal density into an exposure dose.</div></div>
         <div class="pcard"><span class="pname">Dose‑response shape <span class="psym">\(\alpha,\beta\)</span></span><span class="pdefault" style="color:var(--campy)">0.038, 0.022</span><div class="pdesc">Beta‑Poisson curve parameters.</div></div>
+        <div class="pcard"><span class="pname">Poultry ownership prob.</span><span class="pdefault" style="color:var(--campy)">0.536</span><div class="pdesc">Per-household probability of owning free-range poultry. Calibrated from a Ghana DHS/MICS-style rural survey (IDW over national rural clusters).</div></div>
+        <div class="pcard"><span class="pname">Ruminant ownership prob.</span><span class="pdefault" style="color:var(--campy)">0.330</span><div class="pdesc">Per-household probability of owning ruminants (cattle, goats, sheep). Same calibration source as poultry.</div></div>
+        <div class="pcard"><span class="pname">Poultry zoonotic weight <span class="psym">\(w_{poultry}\)</span></span><span class="pdefault" style="color:var(--campy)">1.0</span><div class="pdesc">Relative contribution of poultry density to the combined exposure dose. Poultry dominates C. jejuni source-attribution studies.</div></div>
+        <div class="pcard"><span class="pname">Ruminant zoonotic weight <span class="psym">\(w_{ruminant}\)</span></span><span class="pdefault" style="color:var(--campy)">0.45</span><div class="pdesc">Relative contribution of ruminant density to the combined exposure dose.</div></div>
+        <div class="pcard"><span class="pname">Poultry roam radius <span class="psym">\(\sigma_{poultry}\)</span></span><span class="pdefault" style="color:var(--campy)">1.0 cells</span><div class="pdesc">Gaussian roam radius for the poultry density layer. Backyard poultry stay close to the yard.</div></div>
+        <div class="pcard"><span class="pname">Ruminant roam radius <span class="psym">\(\sigma_{ruminant}\)</span></span><span class="pdefault" style="color:var(--campy)">2.0 cells</span><div class="pdesc">Gaussian roam radius for the ruminant density layer. Grazing/tethered ruminants plausibly range further.</div></div>
         <div class="pcard"><span class="pname">Fecal‑oral probability <span class="psym">\(P_{fecal\rightarrow oral}\)</span></span><span class="pdefault" style="color:var(--campy)">0.03</span><div class="pdesc">Per‑member household infection chance, per day.</div></div>
         <div class="pcard"><span class="pname">Food‑borne background prob. <span class="psym">\(P_{food}\)</span></span><span class="pdefault" style="color:var(--campy)">0.01</span><div class="pdesc">Flat daily infection probability from contaminated food, independent of location, animal density, or other agents.</div></div>
         <div class="pcard"><span class="pname">Incubation period</span><span class="pdefault" style="color:var(--campy)">3 days</span><div class="pdesc">Time in the Exposed state before becoming infectious.</div></div>
@@ -1021,7 +1031,7 @@ table.ref td.num{color:var(--ink-soft);}
         <div class="pcard"><span class="pname">Base severity — Rotavirus</span><span class="pdefault" style="color:var(--rota)">0.4</span><div class="pdesc">Baseline severity before age/immunity adjustment.</div></div>
         <div class="pcard"><span class="pname">Base severity — Campylobacter</span><span class="pdefault" style="color:var(--campy)">0.3</span><div class="pdesc">Baseline severity before age/immunity adjustment.</div></div>
         <div class="pcard"><span class="pname">Vaccine severity reduction <span class="psym">\(I_{vaccine}\)</span></span><span class="pdefault">0.4</span><div class="pdesc">Applies only to vaccinated Rotavirus cases.</div></div>
-        <div class="pcard"><span class="pname">Per‑infection severity reduction <span class="psym">\(I_{prior}\)</span></span><span class="pdefault">0.20</span><div class="pdesc">Milder symptoms with each repeat infection.</div></div>
+        <div class="pcard"><span class="pname">Per-infection severity reduction <span class="psym">\(I_{prior}\)</span></span><span class="pdefault">0.20</span><div class="pdesc">Milder symptoms with each repeat infection.</div></div>
         <div class="pcard"><span class="pname">Illness duration range <span class="psym">\(D_{min},D_{max}\)</span></span><span class="pdefault">2–12 days</span><div class="pdesc">Linear in severity, plus noise (σ = 1.5).</div></div>
         <div class="pcard"><span class="pname">Health toll per severity <span class="psym">\(H_{-}\)</span></span><span class="pdefault">0.05</span><div class="pdesc">Daily health lost per unit of active severity.</div></div>
         <div class="pcard"><span class="pname">Passive recovery rate <span class="psym">\(R_{health}\)</span></span><span class="pdefault">0.001</span><div class="pdesc">Base daily health gain when not sick.</div></div>
@@ -1029,27 +1039,27 @@ table.ref td.num{color:var(--ink-soft);}
 
       <h4 class="sub3">Environment</h4>
       <div class="pgrid">
-        <div class="pcard c-systems"><span class="pname">Water recovery <span class="psym">\(P_{recovery}\)</span></span><span class="pdefault">0.20</span><div class="pdesc">Daily chance a contaminated source self‑cleans (≈5‑day mean).</div></div>
-        <div class="pcard c-systems"><span class="pname">Contamination shock <span class="psym">\(P_{shock}\)</span></span><span class="pdefault">1/30</span><div class="pdesc">Daily chance of a full‑grid contamination event.</div></div>
-        <div class="pcard c-systems"><span class="pname">Animal‑density clusters</span><span class="pdefault">15</span><div class="pdesc">Gaussian hotspots, amplitude 0.4–0.9, σ = 4 cells.</div></div>
+        <div class="pcard c-systems"><span class="pname">Water recovery <span class="psym">\(P_{recovery}\)</span></span><span class="pdefault">0.20</span><div class="pdesc">Daily chance a contaminated source self-cleans (≈5-day mean).</div></div>
+        <div class="pcard c-systems"><span class="pname">Contamination shock <span class="psym">\(P_{shock}\)</span></span><span class="pdefault">1/30</span><div class="pdesc">Daily chance of a full-grid contamination event.</div></div>
+        <div class="pcard c-systems"><span class="pname">Animal-density clusters</span><span class="pdefault">15</span><div class="pdesc">Gaussian hotspots, amplitude 0.4–0.9, σ = 4 cells.</div></div>
         <div class="pcard c-systems"><span class="pname">Social interaction radius</span><span class="pdefault">5 cells</span><div class="pdesc">Maximum distance for an accepted social visit.</div></div>
       </div>
 
-      <h4 class="sub3">Care‑seeking &amp; economics</h4>
+      <h4 class="sub3">Care-seeking &amp; economics</h4>
       <div class="pgrid">
         <div class="pcard c-behavior"><span class="pname">Cost of care <span class="psym">\(C_{care}\)</span></span><span class="pdefault">0.025</span><div class="pdesc">Fraction of maximum household wealth per visit.</div></div>
         <div class="pcard c-behavior"><span class="pname">Treatment success <span class="psym">\(P_{success}\)</span></span><span class="pdefault">0.80</span><div class="pdesc">Chance a sought treatment fully cures the child.</div></div>
         <div class="pcard c-behavior"><span class="pname">Natural worsening <span class="psym">\(P_{worsen}\)</span></span><span class="pdefault">0.35</span><div class="pdesc">Chance an untreated illness worsens.</div></div>
         <div class="pcard c-behavior"><span class="pname">Parent stress penalty <span class="psym">\(H_{stress}\)</span></span><span class="pdefault">0.30</span><div class="pdesc">Parent health cost on any adverse outcome.</div></div>
         <div class="pcard c-behavior"><span class="pname">Worsening penalty <span class="psym">\(S_{penalty}\)</span></span><span class="pdefault">0.20</span><div class="pdesc">Severity increase if a parent waits and it worsens.</div></div>
-        <div class="pcard c-behavior"><span class="pname">Child‑health weight <span class="psym">\(\omega\)</span></span><span class="pdefault">0.5</span><div class="pdesc">Weight on child (vs. parent) health in parental utility.</div></div>
+        <div class="pcard c-behavior"><span class="pname">Child-health weight <span class="psym">\(\omega\)</span></span><span class="pdefault">0.5</span><div class="pdesc">Weight on child (vs. parent) health in parental utility.</div></div>
         <div class="pcard c-systems"><span class="pname">Base daily income <span class="psym">\(I_{base}\)</span></span><span class="pdefault">0.03</span><div class="pdesc">Maximum daily income for a perfectly healthy adult.</div></div>
         <div class="pcard c-systems"><span class="pname">Cost of living <span class="psym">\(C_{living}\)</span></span><span class="pdefault">0.025</span><div class="pdesc">Daily wealth deduction, charged per household member.</div></div>
       </div>
     </section>
 
     <div class="footer">
-      SPRINGS‑ABM was developed as part of the SPRINGS project (Horizon Europe grant agreements 101057764 and 101137255) by the Computational Science Lab and the Amsterdam Institute for Global Health and Development, University of Amsterdam, to evaluate the health and economic impact of water, sanitation and hygiene, vaccination, and healthcare‑access interventions on diarrheal disease in Akuse, Ghana.
+      SPRINGS-ABM was developed as part of the SPRINGS project (Horizon Europe grant agreements 101057764 and 101137255) by the Computational Science Lab and the Amsterdam Institute for Global Health and Development, University of Amsterdam, to evaluate the health and economic impact of water, sanitation and hygiene, vaccination, and healthcare-access interventions on diarrheal disease in Akuse, Ghana.
     </div>
 
   </div>
