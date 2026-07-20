@@ -37,7 +37,7 @@ class GridLayer:
     SCHOOL = "school"
     WORSHIP = "place_of_worship"
     WATER = "water"
-    ANIMAL_DENSITY = "animal_density"
+    NATURAL_WATER = "natural_water"
 
 class AgentPropertyKeys:
     """Centralized string keys for agent properties in AgentState.ndata."""

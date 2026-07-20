@@ -3,6 +3,8 @@ import os
 import numpy as np
 import osmnx as ox
 from shapely.geometry import Polygon, box
+from shapely.ops import unary_union
+from shapely.prepared import prep
 import json
 import hashlib
 from pathlib import Path
@@ -24,6 +26,20 @@ POI_FETCH_RADIUS = 15000
 OSM_POI_TAGS = {"amenity": [GridLayer.SCHOOL, GridLayer.WORSHIP]}
 PROCEDURAL_POI_COUNTS = {GridLayer.SCHOOL: 0, GridLayer.WORSHIP: 0, GridLayer.WATER: 0}
 WATER_SAMPLING_CSV = Path("abm/data/water_sampling_points.csv")
+
+# --- Natural water body exclusion (rivers, lakes) ---
+# Cells overlapping these features are excluded from RESIDENCE placement
+# (and therefore from agent / household-driven animal-density placement),
+# since real households and free-ranging animals cannot occupy open water.
+# This is independent of GridLayer.WATER, which represents discrete water
+# *sampling points* and is allowed to sit at/near these same features.
+NATURAL_WATER_TAGS = {"natural": "water", "waterway": ["river", "canal", "stream"]}
+# waterway=* features (river/canal/stream) are typically recorded by OSM as
+# LineString centerlines, not polygons. Buffer them so they occupy realistic
+# cell-width area on a grid where each cell is ~60m x 51m; ~0.0005 deg is
+# roughly 50-55m at this latitude.
+RIVER_LINE_BUFFER_DEG = 0.0005
+
 
 def get_grid_id(boundary_coords, grid_size, osm_tags, procedural_counts) -> str:
     """Creates a unique, deterministic hash from all grid generation parameters."""
@@ -50,6 +66,62 @@ def _initialize_grid_and_boundary():
             if cell.intersects(boundary):
                 valid_cells_mask[r, c] = True
     return valid_cells_mask, (minx, miny, x_step, y_step)
+
+
+def _fetch_natural_water_geometry(boundary_polygon: Polygon):
+    """
+    Fetches real-world natural water body geometry (rivers, lakes, etc.)
+    intersecting the boundary from OpenStreetMap, so it can be excluded from
+    residence-eligible cells. Returns a single unified shapely geometry, or
+    None if nothing was found or the query failed.
+    """
+    try:
+        water_gdf = ox.features_from_polygon(boundary_polygon, NATURAL_WATER_TAGS)
+    except ox._errors.InsufficientResponseError:
+        print("  - Warning: OSM returned no natural water features. "
+              "Residence exclusion for water bodies will be skipped.")
+        return None
+
+    if water_gdf.empty:
+        return None
+
+    geoms = []
+    for geom in water_gdf.geometry:
+        if geom is None or geom.is_empty:
+            continue
+        if geom.geom_type in ("LineString", "MultiLineString"):
+            geom = geom.buffer(RIVER_LINE_BUFFER_DEG)
+        geoms.append(geom)
+
+    if not geoms:
+        return None
+
+    return unary_union(geoms)
+
+
+def _rasterize_excluded_mask(valid_cells_mask: np.ndarray, boundary_info, water_geom) -> np.ndarray:
+    """
+    Returns a boolean (rows, cols) mask marking cells (among those already
+    inside the boundary polygon) that overlap `water_geom`. Used to exclude
+    natural water bodies (e.g. the Volta river) from residence placement.
+    """
+    mask = np.zeros_like(valid_cells_mask, dtype=bool)
+    if water_geom is None:
+        return mask
+
+    minx, miny, x_step, y_step = boundary_info
+    rows, cols = valid_cells_mask.shape
+    prepared_geom = prep(water_geom)
+
+    for r in range(rows):
+        for c in range(cols):
+            if not valid_cells_mask[r, c]:
+                continue
+            cell = box(minx + c * x_step, miny + r * y_step,
+                       minx + (c + 1) * x_step, miny + (r + 1) * y_step)
+            if prepared_geom.intersects(cell):
+                mask[r, c] = True
+    return mask
 
 def _coord_to_cell(lon: float, lat: float, boundary_info) -> tuple[int, int] | None:
     """
@@ -95,6 +167,10 @@ def _load_akuse_water_cells(boundary_info, valid_cells_mask: np.ndarray) -> np.n
     Returns a binary (0/1) array of shape (GRID_SIZE, GRID_SIZE) where 1
     marks a water source cell (initially CLEAN), or None if the CSV is
     missing or no points fall into the grid.
+
+    Note: intentionally uses the boundary-only `valid_cells_mask` (not the
+    natural-water-excluded residence mask) -- real sampling points are
+    expected to sit at or near actual water bodies.
     """
     if not WATER_SAMPLING_CSV.exists():
         print(f"  - Warning: water sampling CSV not found at {WATER_SAMPLING_CSV}.")
@@ -223,6 +299,21 @@ def create_and_save_realistic_grid():
     print(f"1. Generating grid with ID: {grid_id}")
 
     valid_cells, boundary_info = _initialize_grid_and_boundary()
+
+    # --- Exclude natural water bodies (rivers, lakes) from residence placement ---
+    print("   Fetching natural water body geometry (rivers, lakes) from OSM...")
+    boundary_polygon = Polygon(AKUSE_BOUNDARY_COORDS)
+    water_geom = _fetch_natural_water_geometry(boundary_polygon)
+    natural_water_mask = _rasterize_excluded_mask(valid_cells, boundary_info, water_geom)
+    residence_eligible = valid_cells & ~natural_water_mask
+
+    n_excluded = int(natural_water_mask.sum())
+    if n_excluded > 0:
+        print(f"   Excluded {n_excluded} cell(s) from residence placement "
+              f"(overlap natural water bodies, e.g. the Volta river).")
+    else:
+        print("   No natural water body cells found to exclude.")
+
     osm_layers, osm_occupied = _place_osm_pois(OSM_POI_TAGS, boundary_info, valid_cells)
     proc_layers = _place_procedural_pois(PROCEDURAL_POI_COUNTS, valid_cells, osm_occupied, boundary_info)
 
@@ -230,8 +321,8 @@ def create_and_save_realistic_grid():
     final_layers, property_map = [], {}
     all_poi_types = set(osm_layers.keys()) | set(proc_layers.keys())
 
-    # Layer 0: Residences
-    final_layers.append(valid_cells.astype(np.uint8))
+    # Layer 0: Residences (natural water bodies excluded)
+    final_layers.append(residence_eligible.astype(np.uint8))
     property_map[0] = GridLayer.RESIDENCES
 
     # POIs
@@ -242,6 +333,12 @@ def create_and_save_realistic_grid():
         final_layers.append(combined)
         property_map[layer_index] = amenity
         poi_layers_stack.append(combined)
+
+    # Natural water body mask (informational only -- not used for placement,
+    # kept so inspect_grid.py can visualize/verify the exclusion)
+    water_layer_index = len(final_layers)
+    final_layers.append(natural_water_mask.astype(np.uint8))
+    property_map[water_layer_index] = GridLayer.NATURAL_WATER
 
     final_grid = np.stack(final_layers, axis=-1)
 

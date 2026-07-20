@@ -1,16 +1,23 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.cm import ScalarMappable
 import os
 import argparse
+
+import numpy as np
+import torch
+import matplotlib.pyplot as plt
+from matplotlib.cm import ScalarMappable
 import contextily as cx
+
+from config import SVEIRCONFIG
+from abm.model.initialize_model import SVEIRModel
+from abm.utils.rng import set_global_seed
+from abm.constants import GridLayer
 
 
 TITLES = {
     "water":            "Water Sampling Points",
     "place_of_worship": "Places of Worship",
     "school":           "Schools",
-    "animal_density":   "Animal Density",
+    "zoonotic_density": "Zoonotic Density\n(poultry + ruminant, weighted)",
 }
 
 SCATTER_COLOR = {
@@ -96,15 +103,79 @@ def _scatter_on_map(ax, layer_data, bounds, color, title, fig):
     cbar.ax.set_visible(False)
 
 
-def _plot_continuous(ax, layer_data, title, fig):
+def _plot_continuous(ax, layer_data, title, fig, exclusion_mask=None):
     ax.set_box_aspect(1)
     im = ax.imshow(layer_data, cmap="plasma", origin="lower")
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     ax.set_title(title, pad=10, fontsize=24)
 
+    if exclusion_mask is not None and np.any(exclusion_mask):
+        # Outline cells excluded from residence placement (e.g. the river),
+        # so it's visually obvious those cells can't host agents/animals.
+        ax.contour(exclusion_mask.astype(float), levels=[0.5],
+                   colors="cyan", linewidths=2.0)
+        ax.plot([], [], color="cyan", linewidth=2.0,
+               label="Excluded (natural water body)")
+        ax.legend(loc="upper right", fontsize=10, framealpha=0.85)
+
 
 # ---------------------------------------------------------------------------
-# POI utilities
+# Zoonotic density layers (built dynamically, not read from grid.npz)
+# ---------------------------------------------------------------------------
+
+def build_zoonotic_density_layers(grid_id: str, seed: int | None = None, agents: int = 4000) -> dict:
+    """
+    Poultry/ruminant density are no longer baked into grid.npz - they depend
+    on a specific run's stochastic household placement and ownership draw
+    (abm/environment/animal_density.py), so they must be rebuilt by actually
+    running agent + environment initialization.
+
+    This runs SVEIRModel.initialize_model() (agent placement, household
+    ownership draw, dynamic layer construction) but never calls .run(), so
+    it's cheap relative to a full simulation. A temp directory is used for
+    the model's config/log output and is not needed afterward.
+
+    Returns a dict with 'poultry', 'ruminant', and 'combined' (the
+    poultry_weight/ruminant_weight-combined layer actually used in the
+    Campylobacter dose calculation), each a (rows, cols) numpy array.
+    """
+    cfg = SVEIRCONFIG.model_copy(deep=True)
+    cfg.spatial_creation_args.grid_id = grid_id
+    cfg.number_agents = agents
+    if seed is not None:
+        cfg.seed = seed
+    set_global_seed(cfg.seed)
+
+    model = SVEIRModel(
+        model_identifier="_inspect_grid_tmp",
+        root_path=os.path.join("outputs", "_inspect_grid_tmp"),
+    )
+    model.set_model_parameters(**cfg.model_dump())
+    model.initialize_model(verbose=False)
+
+    poultry = model.grid_environment.get_dynamic_layer("poultry_density")
+    ruminant = model.grid_environment.get_dynamic_layer("ruminant_density")
+
+    if poultry is None or ruminant is None:
+        raise RuntimeError(
+            "Poultry/ruminant density layers were not built. Is 'campy' "
+            "included in cfg.pathogens?"
+        )
+
+    poultry_np = poultry.cpu().numpy()
+    ruminant_np = ruminant.cpu().numpy()
+
+    campy_cfg = next(p for p in cfg.pathogens if p.name == "campy")
+    combined = np.clip(
+        poultry_np * campy_cfg.poultry_weight + ruminant_np * campy_cfg.ruminant_weight,
+        0.0, 1.0,
+    )
+
+    return {"poultry": poultry_np, "ruminant": ruminant_np, "combined": combined}
+
+
+# ---------------------------------------------------------------------------
+# POI utilities (unchanged)
 # ---------------------------------------------------------------------------
 
 def list_pois(grid_path, layer_name):
@@ -153,7 +224,6 @@ def remove_poi(grid_path, layer_name, row, col):
     grid_tensor[row, col, idx] = 0
     print(f"Removed {layer_name} at cell ({row}, {col}).")
 
-    # Re-save, preserving all other arrays
     save_kwargs = {"grid": grid_tensor, "property_map": data["property_map"]}
     if "bounds" in data:
         save_kwargs["bounds"] = data["bounds"]
@@ -165,7 +235,8 @@ def remove_poi(grid_path, layer_name, row, col):
 # Main plot
 # ---------------------------------------------------------------------------
 
-def inspect_grid(grid_id: str):
+def inspect_grid(grid_id: str, seed: int | None = None, agents: int = 4000,
+                  species_breakdown: bool = False):
     grid_path = os.path.join("grids", grid_id, "grid.npz")
 
     if not os.path.exists(grid_path):
@@ -179,18 +250,36 @@ def inspect_grid(grid_id: str):
 
     bounds = _decode_bounds(data["bounds"], grid_tensor.shape) if "bounds" in data else None
 
+    print("Building poultry/ruminant zoonotic density layers "
+          f"(seed={seed if seed is not None else SVEIRCONFIG.seed}, agents={agents})...")
+    density_layers = build_zoonotic_density_layers(grid_id, seed=seed, agents=agents)
+
+    natural_water_idx = name_to_idx.get(GridLayer.NATURAL_WATER)
+    natural_water_mask = (
+        grid_tensor[:, :, natural_water_idx] if natural_water_idx is not None else None
+    )
+    if natural_water_mask is None:
+        print("  - Note: no 'natural_water' layer found in this grid.npz. "
+              "Regenerate with the updated grid_generator.py to see the "
+              "river-exclusion overlay (older grids won't have this layer).")
+
     fig, axes = plt.subplots(2, 2, figsize=(16, 14))
 
     panel_map = [
         (0, 0, "water"),
         (0, 1, "place_of_worship"),
         (1, 0, "school"),
-        (1, 1, "animal_density"),
+        (1, 1, "zoonotic_density"),
     ]
 
     for row, col, layer_name in panel_map:
         ax = axes[row, col]
         title = TITLES.get(layer_name, layer_name.replace("_", " ").title())
+
+        if layer_name == "zoonotic_density":
+            _plot_continuous(ax, density_layers["combined"], title, fig,
+                             exclusion_mask=natural_water_mask)
+            continue
 
         if layer_name not in name_to_idx:
             ax.text(0.5, 0.5, f"Layer '{layer_name}'\nnot found",
@@ -200,11 +289,7 @@ def inspect_grid(grid_id: str):
             continue
 
         layer_data = grid_tensor[:, :, name_to_idx[layer_name]]
-
-        if layer_name == "animal_density":
-            _plot_continuous(ax, layer_data, title, fig)
-        else:
-            _scatter_on_map(ax, layer_data, bounds, SCATTER_COLOR[layer_name], title, fig)
+        _scatter_on_map(ax, layer_data, bounds, SCATTER_COLOR[layer_name], title, fig)
 
     plt.tight_layout(pad=2.0)
 
@@ -213,11 +298,30 @@ def inspect_grid(grid_id: str):
     print(f"Plot saved to '{out_file}'")
     plt.show()
 
+    if species_breakdown:
+        fig2, axes2 = plt.subplots(1, 2, figsize=(16, 7))
+        _plot_continuous(axes2[0], density_layers["poultry"], "Poultry Density (raw)", fig2,
+                         exclusion_mask=natural_water_mask)
+        _plot_continuous(axes2[1], density_layers["ruminant"], "Ruminant Density (raw)", fig2,
+                         exclusion_mask=natural_water_mask)
+        plt.tight_layout(pad=2.0)
+        out_file2 = os.path.join("grids", grid_id, "zoonotic_species_breakdown.jpg")
+        plt.savefig(out_file2, bbox_inches="tight", dpi=300, format="jpeg")
+        print(f"Species breakdown plot saved to '{out_file2}'")
+        plt.show()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--grid-id", type=str,
                         help="Grid ID to inspect. Defaults to the latest grid.")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Seed for the household placement/ownership draw "
+                             "used to build zoonotic density layers (default: config seed).")
+    parser.add_argument("--agents", type=int, default=4000,
+                        help="Number of agents to place when building density layers (default: 4000).")
+    parser.add_argument("--species-breakdown", action="store_true",
+                        help="Also save a separate figure with raw (unweighted) poultry and ruminant panels.")
     parser.add_argument("--list-pois", type=str, metavar="LAYER",
                         help="List all POI locations for a layer (e.g. 'school').")
     parser.add_argument("--remove-poi", type=str, metavar="LAYER",
@@ -246,4 +350,5 @@ if __name__ == "__main__":
             raise SystemExit("--remove-poi requires --row and --col.")
         remove_poi(grid_path, args.remove_poi, args.row, args.col)
     else:
-        inspect_grid(grid_id)
+        inspect_grid(grid_id, seed=args.seed, agents=args.agents,
+                     species_breakdown=args.species_breakdown)
