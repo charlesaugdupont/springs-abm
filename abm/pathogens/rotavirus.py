@@ -60,7 +60,10 @@ class Rotavirus(Pathogen):
 
     def _susceptible_to_exposed_h2h(self, agent_state: AgentState, location_ids: torch.Tensor, num_locations: int):
         status_key = AgentPropertyKeys.status(self.name)
-        sus_mask = (agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE | agent_state.ndata[status_key] == Compartment.RECOVERED)
+        sus_mask = (
+            (agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE) |
+            (agent_state.ndata[status_key] == Compartment.RECOVERED)
+        )
         self._apply_new_infections(
             agent_state, 
             target_nodes_mask=sus_mask, 

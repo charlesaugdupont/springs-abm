@@ -104,4 +104,4 @@ def calculate_illness_duration(
     )
     noise = torch.randn_like(mean_duration) * cfg.duration_noise_std
     duration = torch.round(mean_duration + noise).int()
-    return torch.clamp(duration, min=cfg.duration_min_days, max=cfg.duration_max_days)
+    return torch.clamp(duration, min=cfg.duration_min_days, max=cfg.duration_max_days).int()
