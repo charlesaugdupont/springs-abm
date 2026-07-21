@@ -57,35 +57,38 @@ from config import SVEIRCONFIG, SVEIRConfig
 from abm.model.initialize_model import SVEIRModel
 from abm.constants import AgentPropertyKeys, Compartment
 from abm.utils.rng import set_global_seed
+from experiments.calibration.targets import TARGETS
 
 # ---------------------------------------------------------------------------
 # Output directory
 # ---------------------------------------------------------------------------
 DEFAULT_OUTPUT_DIR = os.path.join("outputs", "sensitivity")
 
-# ---------------------------------------------------------------------------
-# Empirical target ranges
-# Literature: sub-Saharan Africa / Ghana; GEMS study; WHO rotavirus bulletins
-# ---------------------------------------------------------------------------
-TARGETS = {
-    "rota_episodes_per_child_year":  (1.5,  2.5),
-    "campy_episodes_per_child_year": (1.0,  3.0),
-    "rota_peak_prevalence":          (0.02, 0.10),
-    "campy_peak_prevalence":         (0.02, 0.15),
-    "campy_zoonotic_fraction":       (0.50, 0.80),
-}
+# Empirical target ranges: see experiments/calibration/targets.py (shared with
+# the LHS calibration search so both tools score against the same bands).
 
 # ---------------------------------------------------------------------------
 # Parameters to sweep and their candidate values
 # ---------------------------------------------------------------------------
+# The five transmission grids below are re-centered on the calibrated config.py
+# defaults (see experiments/calibration/, best-fit found via LHS search - 4/5
+# empirical targets met). The old grids were centered on pre-calibration
+# defaults and, for several params, no longer bracket the baseline at all
+# (e.g. campy human_animal_interaction_rate's old floor of 0.15 was 13x above
+# the new calibrated 0.0114) - which would silently produce misleading OAT
+# plots (baseline dashed-line off the edge of the sweep or missing entirely).
+# poultry_weight/ruminant_weight are untouched: calibration didn't sweep them.
 SWEEP_PARAMS = {
     # --- Rotavirus ---
-    "pathogens[rota].infection_prob_mean": [0.005, 0.01, 0.015, 0.02, 0.025],
-    "steering_parameters.water_to_human_infection_prob": [0.001, 0.005, 0.01, 0.02, 0.03],
+    # Lower bound pinned at 0.001, not 0: the daily H2H prob is drawn as
+    # max(0.001, Normal(infection_prob_mean, std)) (abm/pathogens/rotavirus.py:44),
+    # so values below the floor are indistinguishable from the floor itself.
+    "pathogens[rota].infection_prob_mean": [0.001, 0.0015, 0.002, 0.0025, 0.003],
+    "steering_parameters.water_to_human_infection_prob": [0.0, 0.0003, 0.0006, 0.0009, 0.0012],
     # --- Campylobacter ---
-    "pathogens[campy].human_animal_interaction_rate": [0.15, 0.2, 0.25, 0.3, 0.35],
-    "pathogens[campy].fecal_oral_prob": [0.01, 0.02, 0.03, 0.04, 0.05, 0.06],
-    "pathogens[campy].food_borne_prob": [0.0, 0.005, 0.01, 0.02, 0.03],
+    "pathogens[campy].human_animal_interaction_rate": [0.0, 0.0057, 0.0114, 0.0171, 0.0228],
+    "pathogens[campy].fecal_oral_prob": [0.0, 0.0077, 0.0154, 0.0231, 0.0308],
+    "pathogens[campy].food_borne_prob": [0.0, 0.0012, 0.0024, 0.0036, 0.0048],
     "pathogens[campy].poultry_weight": [0.25, 0.5, 0.75, 1.0, 1.5],
     "pathogens[campy].ruminant_weight": [0.0, 0.2, 0.45, 0.7, 1.0],
 }

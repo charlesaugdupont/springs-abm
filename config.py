@@ -24,9 +24,12 @@ class PathogenConfig(BaseModel):
 class RotavirusConfig(PathogenConfig):
     """Parameters specific to Rotavirus."""
     name: str = "rota"
-    infection_prob_mean: float = 0.0005
+    # Calibrated against sensitivity.py / experiments/calibration/targets.py
+    # empirical target ranges via experiments/calibration/run_calibration.py
+    # (LHS search, 4/5 targets met - see experiments/outputs/calibration/).
+    infection_prob_mean: float = 0.0015
     infection_prob_std: float = 0.0002
-    recovery_rate: float = 0.2
+    recovery_rate: float = 0.2968
     exposure_period: int = 2
     vaccination_rate: float = 0.001
     vaccine_efficacy: float = 0.55
@@ -41,11 +44,12 @@ class CampylobacterConfig(PathogenConfig):
     recovery_rate: float = 0.15 # ~1 week duration
     exposure_period: int = 3
     # Environmental
-    human_animal_interaction_rate: float = 0.25
+    # Calibrated (see rota's calibration note above; same search/output).
+    human_animal_interaction_rate: float = 0.0114
     # Fecal-oral (household) route
-    fecal_oral_prob: float = 0.03 # per-contact probability within household
+    fecal_oral_prob: float = 0.0154 # per-contact probability within household
     # Background risk due to food consumption
-    food_borne_prob: float = 0.01
+    food_borne_prob: float = 0.0024
 
     # Household animal ownership (zoonotic route)
     # Ownership probabilities calibrated from a compiled Ghana DHS/MICS-style
@@ -109,7 +113,8 @@ class SteeringParamsSVEIR(BaseModel):
 
     # Water Parameters (Shared Reservoir)
     human_to_water_infection_prob: float = 0.0001
-    water_to_human_infection_prob: float = 0.01
+    # Calibrated (see RotavirusConfig's calibration note; same search/output).
+    water_to_human_infection_prob: float = 0.0006
     water_recovery_prob: float = 0.2
     shock_daily_prob: float = 1/30
 
