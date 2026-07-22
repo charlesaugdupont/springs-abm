@@ -12,8 +12,9 @@ from config import GridCreationParams
 class EnvironmentFactory:
     """A class to handle the creation of the spatial grid and agent placement."""
 
-    def __init__(self, config: GridCreationParams):
+    def __init__(self, config: GridCreationParams, device: str = "cpu"):
         self.config = config
+        self.device = device
         self.grid_environment: GridEnvironment | None = None
         self.grid_tensor: np.ndarray | None = None
         self.grid_bounds: np.ndarray | None = None
@@ -35,7 +36,7 @@ class EnvironmentFactory:
             self.property_to_index = {v: k for k, v in data['property_map'].item().items()}
 
             self.grid_environment = GridEnvironment(
-                grid_tensor=torch.from_numpy(self.grid_tensor),
+                grid_tensor=torch.from_numpy(self.grid_tensor).to(self.device),
                 property_index=self.property_to_index
             )
         else:
@@ -53,31 +54,25 @@ class EnvironmentFactory:
         unique_households, household_indices = torch.unique(household_ids, return_inverse=True)
         num_households = len(unique_households)
 
-        if self.config.method == "realistic_import":
-            residence_idx = self.property_to_index.get(GridLayer.RESIDENCES)
-            if residence_idx is None:
-                raise ValueError("Grid for 'realistic_import' must contain a 'residences' layer.")
+        # create_grid() only ever succeeds for method == "realistic_import"
+        # (it raises otherwise), so that's the only case reachable here.
+        residence_idx = self.property_to_index.get(GridLayer.RESIDENCES)
+        if residence_idx is None:
+            raise ValueError("Grid for 'realistic_import' must contain a 'residences' layer.")
 
-            residence_mask = self.grid_tensor[:, :, residence_idx]
-            valid_cells = np.argwhere(residence_mask == 1)
-            if len(valid_cells) == 0:
-                raise ValueError("No valid residence cells found in the grid.")
+        residence_mask = self.grid_tensor[:, :, residence_idx]
+        valid_cells = np.argwhere(residence_mask == 1)
+        if len(valid_cells) == 0:
+            raise ValueError("No valid residence cells found in the grid.")
 
-            # Assign each household to a random valid residence cell
-            assigned_cell_indices = np.random.choice(len(valid_cells), num_households, replace=False)
-            household_coords = valid_cells[assigned_cell_indices] # Shape: (num_households, 2) [r, c]
+        # Assign each household to a random valid residence cell
+        assigned_cell_indices = np.random.choice(len(valid_cells), num_households, replace=False)
+        household_coords = valid_cells[assigned_cell_indices] # Shape: (num_households, 2) [r, c]
 
-            # Assign the cell coordinates to all agents based on their household
-            # household_coords is indexed by the mapped unique household ID
-            agent_coords = torch.from_numpy(household_coords[household_indices])
+        # Assign the cell coordinates to all agents based on their household
+        # household_coords is indexed by the mapped unique household ID
+        agent_coords = torch.from_numpy(household_coords[household_indices])
 
-            # Grid is (row, col), so coords are (y, x)
-            agent_state.ndata[AgentPropertyKeys.Y] = agent_coords[:, 0].float()
-            agent_state.ndata[AgentPropertyKeys.X] = agent_coords[:, 1].float()
-        else:
-            # Fallback to random placement for non-realistic grids
-            shape = self.grid_environment.grid_shape
-            hh_x = torch.randint(0, shape[0], (num_households,)).float()
-            hh_y = torch.randint(0, shape[1], (num_households,)).float()
-            agent_state.ndata[AgentPropertyKeys.X] = hh_x[household_indices]
-            agent_state.ndata[AgentPropertyKeys.Y] = hh_y[household_indices]
+        # Grid is (row, col), so coords are (y, x)
+        agent_state.ndata[AgentPropertyKeys.Y] = agent_coords[:, 0].float()
+        agent_state.ndata[AgentPropertyKeys.X] = agent_coords[:, 1].float()

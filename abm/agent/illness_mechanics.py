@@ -43,7 +43,7 @@ def _get_immunity_effect(
             torch.zeros(1, device=num_infections.device),
         )
     immunity_reduction += num_infections.float() * cfg.severity_reduction_per_infection
-    return torch.clamp(1.0 - immunity_reduction, min=0.1)
+    return torch.clamp(1.0 - immunity_reduction, min=0.1, max=1.0)
 
 
 def calculate_illness_severity(

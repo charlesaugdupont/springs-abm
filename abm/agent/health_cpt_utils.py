@@ -1,6 +1,5 @@
 # abm/agent/health_cpt_utils.py
 import torch
-from config import CPT_THETA, CPT_ETA
 
 
 # ---------------------------------------------------------------------------
@@ -23,19 +22,21 @@ def probability_weighting(p: float, gamma: float) -> float:
     return (p ** gamma) / denom
 
 
-def cpt_value_function(x: float) -> float:
+def cpt_value_function(x: float, theta: float, eta: float) -> float:
     """
     CPT value function (Tversky & Kahneman 1992).
 
-    Uses the module-level constants CPT_THETA (gain exponent) and CPT_ETA
-    (loss exponent). The loss-aversion coefficient lambda is applied by the
-    caller so that it can vary per agent.
+    theta: gain sensitivity exponent. eta: loss sensitivity exponent. Read
+    from steering_parameters.cpt_theta/cpt_eta by the caller, so they're
+    reachable via the same dot-path sweep/override mechanism as every other
+    steering parameter. The loss-aversion coefficient lambda is applied by
+    the caller so that it can vary per agent.
 
     Returns an *unscaled* value; multiply losses by -lambda outside.
     """
     if x >= 0:
-        return x ** CPT_THETA
-    return -((-x) ** CPT_ETA)
+        return x ** theta
+    return -((-x) ** eta)
 
 
 def utility(

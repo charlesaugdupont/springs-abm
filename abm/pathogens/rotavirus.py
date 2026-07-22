@@ -17,10 +17,14 @@ class Rotavirus(Pathogen):
 
     def step_progression(self, agent_state: AgentState):
         """Internal state progression (Once per day)."""
-        # 1. Update internal disease progression
+        # 1. Update internal disease progression. Recovery must be evaluated
+        # BEFORE the exposed->infectious transition: otherwise agents that
+        # become infectious this call would also face a same-day recovery
+        # roll, before ever reaching a transmission phase, letting some
+        # infections skip the infectious period entirely.
         self._increment_exposure_time(agent_state)
-        self._exposed_to_infectious(agent_state)
         self._infectious_to_recovered(agent_state)
+        self._exposed_to_infectious(agent_state)
 
         # 2. Update population states (vaccination)
         self._susceptible_to_vaccinated(agent_state)
@@ -48,8 +52,14 @@ class Rotavirus(Pathogen):
         )
 
     def _susceptible_to_vaccinated(self, agent_state: AgentState):
+        # Rotavirus vaccines are administered in infancy - restrict to
+        # children, matching real-world vaccination programs rather than a
+        # population-wide campaign.
         status_key = AgentPropertyKeys.status(self.name)
-        sus_mask = agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE
+        sus_mask = (
+            (agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE)
+            & agent_state.ndata[AgentPropertyKeys.IS_CHILD]
+        )
         if not torch.any(sus_mask):
             return
 

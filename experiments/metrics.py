@@ -90,11 +90,27 @@ def care_seeking_metrics(model) -> dict:
 
 
 def wellbeing_metrics(model) -> dict:
+    """
+    Wealth is a per-HOUSEHOLD pooled value (see EconomicSystem) duplicated
+    across every member's agent record, not an independent per-agent
+    quantity. mean_household_wealth weights every household equally
+    regardless of size - the "typical household" perspective, avoiding
+    double-counting large families. mean_parent_wealth is scoped
+    differently, not just weighted differently: it covers only households
+    that have a child (there is at most one IS_PARENT agent per household),
+    since those are the only ones that ever face a care-seeking decision.
+    The two can diverge substantially (e.g. parent-headed vs childless
+    households - see config.py's child_cost_weight notes).
+    """
     final = model.get_final_agent_states()
     is_parent = final["is_parent"].astype(bool)
+
+    _, hh_first_idx = np.unique(final["household_id"], return_index=True)
+    household_wealth = final["wealth"][hh_first_idx]
+
     return {
         "mean_final_health": float(final["health"].mean()),
-        "mean_final_wealth": float(final["wealth"].mean()),
+        "mean_household_wealth": float(household_wealth.mean()),
         "mean_parent_wealth": float(final["wealth"][is_parent].mean()) if is_parent.any() else 0.0,
     }
 

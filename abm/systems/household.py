@@ -131,6 +131,7 @@ class HouseholdSystem(System):
                 prob_multiplier=breakthrough_multiplier,
             )
         
+    @staticmethod
     def apply_household_wealth_delta(
         agent_state: AgentState,
         member_idx: torch.Tensor,

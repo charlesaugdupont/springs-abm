@@ -87,9 +87,14 @@ class Campylobacter(Pathogen):
         self._newly_exposed_this_day = torch.zeros(
             agent_state.num_nodes(), dtype=torch.bool, device=self.device
         )
+        # Recovery must be evaluated BEFORE the exposed->infectious
+        # transition: otherwise agents that become infectious this call
+        # would also face a same-day recovery roll, before ever reaching a
+        # transmission phase, letting some infections skip the infectious
+        # period entirely.
         self._increment_exposure_time(agent_state)
-        self._exposed_to_infectious(agent_state)
         self._infectious_to_recovered(agent_state)
+        self._exposed_to_infectious(agent_state)
         self._food_borne_transmission(agent_state)
 
     def step_transmission(

@@ -130,7 +130,7 @@ class SVEIRModel(Model):
 
         # 2. Create Environment and Place Agents
         if self.config.spatial:
-            env_factory = EnvironmentFactory(self.config.spatial_creation_args)
+            env_factory = EnvironmentFactory(self.config.spatial_creation_args, device=self.config.device)
             env_factory.create_grid()
             env_factory.place_agents(self.graph)
             self.grid_environment = env_factory.grid_environment
@@ -259,8 +259,7 @@ class SVEIRModel(Model):
                 self.graph, self.step_count, self.config,
                 self.grid_environment, self.pathogens, self.systems
             )
-            total_new_cases  = sum(new_cases_by_pathogen.values())
-            total_prevalence = sum(v for k, v in compartment_counts.items() if k.endswith("_I"))
+            total_new_cases = sum(new_cases_by_pathogen.values())
             self.infection_incidence.append(total_new_cases)
 
             # Record under-5 prevalence if a mask was supplied (i.e. called from run())
@@ -314,6 +313,7 @@ class SVEIRModel(Model):
         return {
             'health': self.graph.ndata[AgentPropertyKeys.HEALTH].cpu().numpy(),
             'wealth': self.graph.ndata[AgentPropertyKeys.WEALTH].cpu().numpy(),
+            'household_id': self.graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID].cpu().numpy(),
             'initial_health': self.graph.ndata[AgentPropertyKeys.INITIAL_HEALTH].cpu().numpy(),
             'initial_wealth': self.graph.ndata[AgentPropertyKeys.INITIAL_WEALTH].cpu().numpy(),
             'care_seeking_count': self.graph.ndata[AgentPropertyKeys.CARE_SEEKING_COUNT].cpu().numpy(),

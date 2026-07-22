@@ -16,7 +16,7 @@ Metrics recorded per run
   rota_extinct (peak < 1%), rota_attack_rate, rota_attack_rate_u5
   campy_* (same, as a control)
   conditional_care_rate, could_not_afford_rate, decisions_faced
-  mean_final_health, mean_final_wealth, mean_parent_wealth
+  mean_final_health, mean_household_wealth, mean_parent_wealth
 
 Time series (u5 prevalence per pathogen per day) are also recorded, so you
 can compute early-warning-signal indicators (rolling variance / lag-1

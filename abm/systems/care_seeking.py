@@ -88,19 +88,20 @@ from abm.constants import AgentPropertyKeys, Compartment
 from abm.agent.health_cpt_utils import cpt_value_function, probability_weighting
 from abm.systems.household import HouseholdSystem
 
-# Weight placed on child health in the parent's utility function.
-# 0.5 = equal weight on parent and child health.
-CHILD_HEALTH_WEIGHT: float = 0.5
-
-
 def _utility(w: float, h_eff: float, alpha: float) -> float:
     """Cobb-Douglas utility: w^alpha * h_eff^(1-alpha)."""
     return (w + 1e-9) ** alpha * (h_eff + 1e-9) ** (1.0 - alpha)
 
 
-def _h_eff(h_parent: float, h_child: float) -> float:
-    """Effective health combining parent and child health."""
-    return (1.0 - CHILD_HEALTH_WEIGHT) * h_parent + CHILD_HEALTH_WEIGHT * h_child
+def _h_eff(h_parent: float, h_child: float, child_health_weight: float) -> float:
+    """Effective health combining parent and child health.
+
+    child_health_weight: weight placed on child health (0.5 = equal weight
+    on parent and child). Read from steering_parameters.child_health_weight
+    at each call site so it's reachable via the same dot-path sweep/override
+    mechanism as every other steering parameter.
+    """
+    return (1.0 - child_health_weight) * h_parent + child_health_weight * h_child
 
 
 def _max_active_severity(agent_state: AgentState, pathogen_names: list[str]) -> torch.Tensor:
@@ -275,27 +276,65 @@ class CareSeekingSystem(System):
         """
         Return True if CPT favours seeking care.
 
-        Reference point = current state (child is sick).
-        Seek+success is a GAIN (child recovers to full health), making
-        loss aversion (lambda) genuinely operative.
+        Reference point = current state (child is sick). "Seek care" is a
+        two-outcome prospect: success (prob=treatment_success_prob) and
+        failure (prob=1-treatment_success_prob).
+
+        Success is usually, but NOT always, a gain: for a health-weighted
+        (low alpha) agent near the affordability floor with a mildly-sick
+        child, cost_of_care can outweigh a small health improvement, making
+        "successful" treatment a net loss too. (Numerically verified:
+        failure is a loss in ~100% of the realistic parameter space, but
+        success is a loss in a non-negligible - and, for mildly-sick
+        children, majority - share of it.) Textbook CPT (Tversky & Kahneman
+        1992) handles this with two distinct rules depending on whether the
+        outcomes land in the same domain:
+          - Different domains (one gain, one loss): each outcome, being
+            alone in its own domain, is weighted by the probability
+            weighting function applied to its OWN raw probability. These do
+            NOT sum to 1 (subadditivity is deliberate, not an error).
+          - Same domain (both losses here): outcomes are ranked by
+            severity; the WORSE loss gets w(its own probability), and the
+            less-bad loss gets the complementary w(1) - w(worse's
+            probability) = 1 - w(worse's probability) - this "1 minus"
+            form is only valid within a single domain, never across
+            domains.
         """
         w2 = w - params.cost_of_care
 
-        ref_u = _utility(w, _h_eff(h_p, h_c), alpha)
+        chw = params.child_health_weight
+        ref_u = _utility(w, _h_eff(h_p, h_c, chw), alpha)
 
-        u_s1 = _utility(w2, _h_eff(h_p, 1.0), alpha)
-        u_s2 = _utility(w2, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c), alpha)
+        u_s1 = _utility(w2, _h_eff(h_p, 1.0, chw), alpha)
+        u_s2 = _utility(w2, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c, chw), alpha)
 
         h_c_worsened = max(0.0, h_c - params.untreated_severity_penalty)
-        u_w1 = _utility(w, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c_worsened), alpha)
+        u_w1 = _utility(w, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c_worsened, chw), alpha)
 
-        pi_s1 = probability_weighting(params.treatment_success_prob, gamma)
-        pi_s2 = 1.0 - probability_weighting(params.treatment_success_prob, gamma)
+        d_s1 = u_s1 - ref_u
+        d_s2 = u_s2 - ref_u
+
+        p1 = params.treatment_success_prob
+        p2 = 1.0 - p1
+
+        if d_s1 >= 0:
+            # Mixed gamble: success is the lone gain, failure is the lone loss.
+            pi_s1 = probability_weighting(p1, gamma)
+            pi_s2 = probability_weighting(p2, gamma)
+        elif d_s1 <= d_s2:
+            # Both losses, success is the worse (or equally bad) outcome.
+            pi_s1 = probability_weighting(p1, gamma)
+            pi_s2 = 1.0 - pi_s1
+        else:
+            # Both losses, failure is the worse outcome.
+            pi_s2 = probability_weighting(p2, gamma)
+            pi_s1 = 1.0 - pi_s2
+
         pi_w1 = probability_weighting(params.natural_worsening_prob, gamma)
 
-        v_s1 = _cpt_v(u_s1 - ref_u, lam)
-        v_s2 = _cpt_v(u_s2 - ref_u, lam)
-        v_w1 = _cpt_v(u_w1 - ref_u, lam)
+        v_s1 = _cpt_v(d_s1, lam, params.cpt_theta, params.cpt_eta)
+        v_s2 = _cpt_v(d_s2, lam, params.cpt_theta, params.cpt_eta)
+        v_w1 = _cpt_v(u_w1 - ref_u, lam, params.cpt_theta, params.cpt_eta)
 
         ev_seek = pi_s1 * v_s1 + pi_s2 * v_s2
         ev_wait = pi_w1 * v_w1
@@ -316,13 +355,14 @@ class CareSeekingSystem(System):
         Return True if plain expected utility favours seeking care.
         """
         w2 = w - params.cost_of_care
+        chw = params.child_health_weight
 
-        u_s1 = _utility(w2, _h_eff(h_p, 1.0), alpha)
-        u_s2 = _utility(w2, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c), alpha)
+        u_s1 = _utility(w2, _h_eff(h_p, 1.0, chw), alpha)
+        u_s2 = _utility(w2, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c, chw), alpha)
 
         h_c_worsened = max(0.0, h_c - params.untreated_severity_penalty)
-        u_w1 = _utility(w, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c_worsened), alpha)
-        u_w2 = _utility(w, _h_eff(h_p, h_c), alpha)
+        u_w1 = _utility(w, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c_worsened, chw), alpha)
+        u_w2 = _utility(w, _h_eff(h_p, h_c, chw), alpha)
 
         ev_seek = (params.treatment_success_prob * u_s1
                    + (1.0 - params.treatment_success_prob) * u_s2)
@@ -403,12 +443,12 @@ class CareSeekingSystem(System):
                     1.0, current_severity + params.untreated_severity_penalty
                 )
 
-def _cpt_v(delta_u: float, lam: float) -> float:
+def _cpt_v(delta_u: float, lam: float, theta: float, eta: float) -> float:
     """
     CPT value function applied to a utility change delta_u.
     Losses (delta_u < 0) are scaled by the agent's loss-aversion lambda.
     """
-    raw = cpt_value_function(delta_u)
+    raw = cpt_value_function(delta_u, theta, eta)
     if delta_u < 0:
         return lam * raw
     return raw

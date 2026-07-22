@@ -8,10 +8,6 @@ import torch
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
-# --- CPT Constants (fixed, not per-agent) ---
-CPT_THETA: float = 0.88 # gain sensitivity exponent in the value function
-CPT_ETA: float = 0.88 # loss sensitivity exponent in the value function
-
 # --- Pathogen Configuration ---
 
 class PathogenConfig(BaseModel):
@@ -127,14 +123,31 @@ class SteeringParamsSVEIR(BaseModel):
     natural_worsening_prob: float = 0.35 # Prob illness worsens if untreated
     parent_stress_health_impact: float = 0.30
     untreated_severity_penalty: float = 0.20
+    cpt_theta: float = 0.88 # CPT gain sensitivity exponent in the value function
+    cpt_eta: float = 0.88 # CPT loss sensitivity exponent in the value function
     severity_health_impact_factor: float = 0.05 # Daily health reduction per unit of severity
-    daily_health_recovery_rate: float = 0.001 # Base daily recovery when not sick
+    # Base daily recovery when not sick. Must stay roughly in scale with
+    # daily_income_rate/daily_cost_of_living: with health_based_income=True,
+    # adult income is scaled by the adult's own health, and a rate an order
+    # of magnitude below those (as 0.001 was) left adults permanently below
+    # the income/cost breakeven, collapsing household wealth to 0 regardless
+    # of disease burden. Raised 10x to actually recover within weeks.
+    daily_health_recovery_rate: float = 0.01
     child_health_weight: float = 0.5 # weight placed on child health in the parent's utility function.
 
     # Income and wealth dynamics
     daily_income_rate: float = 0.03
     daily_cost_of_living: float = 0.025
     health_based_income: bool = True
+    # Equivalence-scale-style discount: a child costs this fraction of an
+    # adult's cost-of-living share (0.3 ~ OECD-modified equivalence scale).
+    # Without this, cost-of-living charged a full adult share per head
+    # regardless of age, while only adults earn income - so any household
+    # with a typical adult:child ratio (median ~0.67 for parent-headed
+    # households, see calibration notes) was structurally unable to break
+    # even at ANY health level, since breakeven required
+    # adult_fraction >= daily_cost_of_living/daily_income_rate = 0.833.
+    child_cost_weight: float = 0.3
 
 class SVEIRConfig(BaseModel):
     """Main configuration class for the SVEIR model."""
