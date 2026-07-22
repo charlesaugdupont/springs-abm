@@ -2,8 +2,20 @@
 """
 Vaccination & Immunology Sweep
 ===============================
-Maps the Rotavirus herd-immunity surface over vaccination_rate x
-vaccine_efficacy, looking for the extinction / persistence phase boundary.
+Maps Rotavirus disease burden over vaccination_rate x vaccine_efficacy.
+
+This was originally framed as a search for the herd-immunity extinction /
+persistence phase boundary, but a full 9x9 grid (rate up to 0.12/day,
+efficacy up to 0.95, 250 days, closed population of 4000) essentially never
+crosses the extinction threshold (peak u5 prevalence < 1%): even at the most
+extreme corner tested, the minimum peak prevalence across 20 replicates was
+1.24%, just above the cutoff. That's not a bug - a closed population with no
+births has no fresh susceptibles to replenish the chain, yet rota still
+persists at high coverage, implying a fairly high effective R0. Real
+vaccination programs routinely reduce burden substantially without ever
+achieving full elimination, so the more useful (and honest) question is not
+"does it go extinct" but "how much disease is averted" - hence the burden-
+reduction framing below.
 
 Campylobacter is left running in the background (unmanipulated) as a
 control - it shares no vaccination mechanism, so its outcomes should be
@@ -101,32 +113,65 @@ def plot_results(pilot: bool = False):
     rate_col = "pathogens[rota].vaccination_rate"
     eff_col = "pathogens[rota].vaccine_efficacy"
 
+    # Disease averted, relative to the no-vaccination baseline. Efficacy is
+    # irrelevant when rate=0 (nobody gets vaccinated), so pool all rate=0
+    # replicates regardless of their (meaningless) efficacy value for a more
+    # stable baseline estimate than any single cell would give.
+    baseline_days = df.loc[df[rate_col] == 0, "rota_cumulative_u5_days"].mean()
+    df = df.copy()
+    df["burden_reduction"] = 1.0 - df["rota_cumulative_u5_days"] / baseline_days
+
     pivot_peak = df.pivot_table(
         index=rate_col, columns=eff_col, values="rota_peak_u5_prevalence", aggfunc="mean",
     ).sort_index(ascending=False)
 
-    pivot_extinct = df.pivot_table(
-        index=rate_col, columns=eff_col, values="rota_extinct", aggfunc="mean",
-    ).sort_index(ascending=False)  # mean of a bool column -> extinction probability
+    pivot_reduction = df.pivot_table(
+        index=rate_col, columns=eff_col, values="burden_reduction", aggfunc="mean",
+    ).sort_index(ascending=False)
+
+    max_rate = df[rate_col].max()
+    max_eff = df[eff_col].max()
+    slice_by_rate = (
+        df[df[eff_col] == max_eff].groupby(rate_col)["burden_reduction"].agg(["mean", "std"])
+    )
+    slice_by_eff = (
+        df[df[rate_col] == max_rate].groupby(eff_col)["burden_reduction"].agg(["mean", "std"])
+    )
 
     sns.set_theme(style="white", font_scale=1.0)
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
+    fig, axes = plt.subplots(2, 2, figsize=(13, 11))
 
-    sns.heatmap(pivot_peak, annot=True, fmt=".2f", cmap="Reds", ax=axes[0],
+    sns.heatmap(pivot_peak, annot=True, fmt=".2f", cmap="Reds", ax=axes[0, 0],
                 cbar_kws={"label": "Mean peak u5 prevalence"})
-    axes[0].set_title("Peak Under-5 Prevalence (Rotavirus)")
-    axes[0].set_xlabel("Vaccine efficacy")
-    axes[0].set_ylabel("Vaccination rate (daily)")
+    axes[0, 0].set_title("Peak Under-5 Prevalence (Rotavirus)")
+    axes[0, 0].set_xlabel("Vaccine efficacy")
+    axes[0, 0].set_ylabel("Vaccination rate (daily)")
 
-    sns.heatmap(pivot_extinct, annot=True, fmt=".2f", cmap="Blues", ax=axes[1],
-                cbar_kws={"label": "P(extinction)"}, vmin=0, vmax=1)
-    axes[1].set_title("Extinction Probability\n(peak u5 prevalence < 1%)")
-    axes[1].set_xlabel("Vaccine efficacy")
-    axes[1].set_ylabel("")
+    sns.heatmap(pivot_reduction, annot=True, fmt=".0%", cmap="Greens", ax=axes[0, 1],
+                vmin=0, vmax=1, cbar_kws={"label": "Illness-days averted"})
+    axes[0, 1].set_title("Disease Burden Averted\n(vs. no-vaccination baseline)")
+    axes[0, 1].set_xlabel("Vaccine efficacy")
+    axes[0, 1].set_ylabel("")
+
+    axes[1, 0].errorbar(slice_by_rate.index, slice_by_rate["mean"], yerr=slice_by_rate["std"],
+                         marker="o", capsize=3, color="darkgreen")
+    axes[1, 0].set_title(f"Burden Averted vs. Rate (efficacy={max_eff:.2f})")
+    axes[1, 0].set_xlabel("Vaccination rate (daily)")
+    axes[1, 0].set_ylabel("Illness-days averted")
+    axes[1, 0].yaxis.set_major_formatter(lambda y, _: f"{y:.0%}")
+    axes[1, 0].set_ylim(0, 1)
+
+    axes[1, 1].errorbar(slice_by_eff.index, slice_by_eff["mean"], yerr=slice_by_eff["std"],
+                         marker="o", capsize=3, color="darkgreen")
+    axes[1, 1].set_title(f"Burden Averted vs. Efficacy (rate={max_rate:.3f})")
+    axes[1, 1].set_xlabel("Vaccine efficacy")
+    axes[1, 1].set_ylabel("Illness-days averted")
+    axes[1, 1].yaxis.set_major_formatter(lambda y, _: f"{y:.0%}")
+    axes[1, 1].set_ylim(0, 1)
 
     plt.tight_layout()
     out_dir = os.path.join("experiments", "outputs", spec_name)
-    out_path = os.path.join(out_dir, "vaccination_phase_map.png")
+    out_path = os.path.join(out_dir, "vaccination_burden_reduction.png")
     plt.savefig(out_path, dpi=180, bbox_inches="tight")
     print(f"Figure saved -> {out_path}")
     plt.show()
