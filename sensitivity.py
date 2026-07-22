@@ -70,25 +70,33 @@ DEFAULT_OUTPUT_DIR = os.path.join("outputs", "sensitivity")
 # ---------------------------------------------------------------------------
 # Parameters to sweep and their candidate values
 # ---------------------------------------------------------------------------
-# The five transmission grids below are re-centered on the calibrated config.py
-# defaults (see experiments/calibration/, best-fit found via LHS search - 4/5
-# empirical targets met). The old grids were centered on pre-calibration
-# defaults and, for several params, no longer bracket the baseline at all
-# (e.g. campy human_animal_interaction_rate's old floor of 0.15 was 13x above
-# the new calibrated 0.0114) - which would silently produce misleading OAT
-# plots (baseline dashed-line off the edge of the sweep or missing entirely).
-# poultry_weight/ruminant_weight are untouched: calibration didn't sweep them.
+# The transmission grids below are re-centered on the round-5 calibrated
+# config.py defaults (see experiments/calibration/ - LHS search with rota/
+# campy recovery_rate restricted to their ~3-7 day literature-plausible
+# ranges, 3/5 empirical targets met; both misses are rota, overshooting by
+# only ~6-11%). Only the two recovery_rate grids actually moved from round 4
+# (0.4035->0.3005 rota, 0.1221->0.1466 campy) - every other calibrated
+# parameter landed at essentially the same value as round 4, so those grids
+# still bracket the current baseline correctly. Each recovery_rate grid keeps
+# its round-4 step size, evenly spaced around the new exact baseline (a few
+# grid points intentionally fall outside the literature-plausible bound, e.g.
+# rota's 0.5005/0.6-ish region, to show how the OAT response continues beyond
+# the calibration-constrained range - not meant to imply those values are
+# themselves plausible). poultry_weight/ruminant_weight are untouched:
+# calibration doesn't sweep them.
 SWEEP_PARAMS = {
     # --- Rotavirus ---
     # Lower bound pinned at 0.001, not 0: the daily H2H prob is drawn as
     # max(0.001, Normal(infection_prob_mean, std)) (abm/pathogens/rotavirus.py:44),
     # so values below the floor are indistinguishable from the floor itself.
     "pathogens[rota].infection_prob_mean": [0.001, 0.0015, 0.002, 0.0025, 0.003],
-    "steering_parameters.water_to_human_infection_prob": [0.0, 0.0003, 0.0006, 0.0009, 0.0012],
+    "pathogens[rota].recovery_rate": [0.1005, 0.2005, 0.3005, 0.4005, 0.5005],
+    "steering_parameters.water_to_human_infection_prob": [0.0, 0.005, 0.0097, 0.0145, 0.0194],
     # --- Campylobacter ---
-    "pathogens[campy].human_animal_interaction_rate": [0.0, 0.0057, 0.0114, 0.0171, 0.0228],
-    "pathogens[campy].fecal_oral_prob": [0.0, 0.0077, 0.0154, 0.0231, 0.0308],
-    "pathogens[campy].food_borne_prob": [0.0, 0.0012, 0.0024, 0.0036, 0.0048],
+    "pathogens[campy].human_animal_interaction_rate": [0.0, 0.0031, 0.0062, 0.0093, 0.0124],
+    "pathogens[campy].fecal_oral_prob": [0.0, 0.0053, 0.0105, 0.0158, 0.021],
+    "pathogens[campy].food_borne_prob": [0.0, 0.0007, 0.0014, 0.0021, 0.0028],
+    "pathogens[campy].recovery_rate": [0.0266, 0.0866, 0.1466, 0.2066, 0.2666],
     "pathogens[campy].poultry_weight": [0.25, 0.5, 0.75, 1.0, 1.5],
     "pathogens[campy].ruminant_weight": [0.0, 0.2, 0.45, 0.7, 1.0],
 }

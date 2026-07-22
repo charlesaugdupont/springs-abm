@@ -81,15 +81,43 @@ DEFAULT_GRID_ID = "7d9ce7c720a6"
 # collapsed zoonotic_fraction to 0.07 (starving the zoonotic route breaks the
 # route-mix target instead). Fix: scale all three campy bounds down together
 # (~2x), preserving the successful ratio rather than just lowering one lever.
+# NOTE on round 4 (post code-review epidemic-core fix): the same-day
+# E->I->R bug (pathogen.py - _infectious_to_recovered used to catch agents
+# _exposed_to_infectious had JUST converted this same call, before any
+# transmission phase ran) meant ~recovery_rate fraction of new infections
+# never actually transmitted. Fixed by reordering the two calls, which
+# makes transmission somewhat MORE effective per the same nominal
+# recovery_rate than before - the old calibrated params no longer apply.
+# Round 4 widened rota recovery_rate to (0.15, 0.45) and added campy
+# recovery_rate as (0.1, 0.3) purely to give the search more room, WITHOUT
+# checking either against illness-duration literature the way the other
+# transmission parameters were. Round 4's 5/5 fit exploited exactly that:
+# rota recovery_rate=0.4035 implies a ~2.5 day infectious duration, faster
+# than the typical 3-7 day rotavirus illness range; campy's 0.1221 implies
+# ~8.2 days, slightly past the typical 5-7 day range.
+#
+# NOTE on round 5 (literature-constrained recovery rates): tested directly
+# (holding all other round-4 params fixed) whether rota's targets survive a
+# realistic recovery_rate - they don't: at 0.25 (4-day duration) episodes/yr
+# jumps to 3.44 and peak to 0.15, both well out of range; only 0.33 (3-day,
+# the fast edge of 3-7d) still clears both targets (barely). Campy is far
+# more forgiving: episodes/peak/zoonotic_fraction all stayed comfortably
+# in-range across the entire tested 0.14-0.18 (5-7 day) range, since campy's
+# other route parameters already have headroom. Bounds narrowed to the
+# literature-plausible ranges for both, letting the search retune the other
+# transmission parameters (already has room: rota water_to_human_infection_
+# prob isn't floor-limited) to compensate rather than exploiting biologically
+# implausible recovery speeds.
 CALIB_BOUNDS = {
     # --- Rotavirus transmission ---
     "pathogens[rota].infection_prob_mean":                (0.001, 0.010),
-    "pathogens[rota].recovery_rate":                      (0.15,  0.35),
+    "pathogens[rota].recovery_rate":                      (0.14,  0.33),
     "steering_parameters.water_to_human_infection_prob":  (0.0,   0.02),
     # --- Campylobacter transmission (all three routes) ---
     "pathogens[campy].human_animal_interaction_rate":     (0.0,   0.018),
     "pathogens[campy].fecal_oral_prob":                   (0.0,   0.02),
     "pathogens[campy].food_borne_prob":                   (0.0,   0.01),
+    "pathogens[campy].recovery_rate":                     (0.14,  0.2),
 }
 
 # Calibrate the BASELINE: vaccination off, matching the pre/peri-vaccine

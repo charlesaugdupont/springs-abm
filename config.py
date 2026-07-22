@@ -22,10 +22,13 @@ class RotavirusConfig(PathogenConfig):
     name: str = "rota"
     # Calibrated against sensitivity.py / experiments/calibration/targets.py
     # empirical target ranges via experiments/calibration/run_calibration.py
-    # (LHS search, 4/5 targets met - see experiments/outputs/calibration/).
-    infection_prob_mean: float = 0.0015
+    # (LHS search round 5, recovery_rate bound restricted to the ~3-7 day
+    # literature range for rotavirus illness duration - 3/5 targets met,
+    # both rota episodes/peak in-range misses are ~8% over their upper
+    # bound; see experiments/outputs/calibration/).
+    infection_prob_mean: float = 0.0011
     infection_prob_std: float = 0.0002
-    recovery_rate: float = 0.2968
+    recovery_rate: float = 0.3005 # ~3.3 day duration
     exposure_period: int = 2
     vaccination_rate: float = 0.001
     vaccine_efficacy: float = 0.55
@@ -37,15 +40,15 @@ class CampylobacterConfig(PathogenConfig):
     beta_poisson_alpha: float = 0.038
     beta_poisson_beta: float = 0.022
     # Disease Dynamics
-    recovery_rate: float = 0.15 # ~1 week duration
+    # Calibrated (see rota's calibration note above; same search/output).
+    recovery_rate: float = 0.1466 # ~6.8 day duration
     exposure_period: int = 3
     # Environmental
-    # Calibrated (see rota's calibration note above; same search/output).
-    human_animal_interaction_rate: float = 0.0114
+    human_animal_interaction_rate: float = 0.0062
     # Fecal-oral (household) route
-    fecal_oral_prob: float = 0.0154 # per-contact probability within household
+    fecal_oral_prob: float = 0.0105 # per-contact probability within household
     # Background risk due to food consumption
-    food_borne_prob: float = 0.0024
+    food_borne_prob: float = 0.0014
 
     # Household animal ownership (zoonotic route)
     # Ownership probabilities calibrated from a compiled Ghana DHS/MICS-style
@@ -110,7 +113,7 @@ class SteeringParamsSVEIR(BaseModel):
     # Water Parameters (Shared Reservoir)
     human_to_water_infection_prob: float = 0.0001
     # Calibrated (see RotavirusConfig's calibration note; same search/output).
-    water_to_human_infection_prob: float = 0.0006
+    water_to_human_infection_prob: float = 0.0097
     water_recovery_prob: float = 0.2
     shock_daily_prob: float = 1/30
 
