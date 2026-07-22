@@ -25,14 +25,16 @@ the comparison (e.g. shared household/economic dynamics).
 Metrics recorded per run
 -------------------------
   rota_peak_u5_prevalence, rota_peak_day, rota_cumulative_u5_days,
-  rota_extinct (peak < 1%), rota_attack_rate, rota_attack_rate_u5
+  rota_extinct (peak < 1%; kept for completeness, not the focus - see
+  above), rota_attack_rate, rota_attack_rate_u5
   campy_* (same, as a control)
   conditional_care_rate, could_not_afford_rate, decisions_faced
   mean_final_health, mean_household_wealth, mean_parent_wealth
 
 Time series (u5 prevalence per pathogen per day) are also recorded, so you
 can compute early-warning-signal indicators (rolling variance / lag-1
-autocorrelation) near the extinction boundary - see experiments/metrics.py.
+autocorrelation) on the burden-reduction trajectories - see
+experiments/metrics.py.
 
 Usage
 -----
@@ -57,8 +59,10 @@ from experiments.metrics import epidemic_metrics, care_seeking_metrics, wellbein
 SPEC_NAME = "vaccination"
 
 # Daily vaccination probability and vaccine efficacy, each 9 values -> 81
-# combinations. Widened relative to the old exp3 (5x5) so the extinction
-# boundary can actually be localised rather than just bracketed.
+# combinations. Widened relative to the old exp3 (5x5) grid for finer
+# resolution on the burden-reduction surface (see module docstring - this
+# grid was originally sized to localise an extinction boundary that turned
+# out to sit beyond its edge).
 VACC_RATES = np.round(np.linspace(0.0, 0.12, 9), 5)
 VACC_EFFICACIES = np.round(np.linspace(0.10, 0.95, 9), 4)
 
