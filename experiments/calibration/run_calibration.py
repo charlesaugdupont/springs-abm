@@ -108,16 +108,37 @@ DEFAULT_GRID_ID = "7d9ce7c720a6"
 # transmission parameters (already has room: rota water_to_human_infection_
 # prob isn't floor-limited) to compensate rather than exploiting biologically
 # implausible recovery speeds.
+#
+# NOTE on round 6 (recovery_rate removed from the search entirely): the
+# care-seeking/economics calibration ([[care_seeking_calibration_status]] -
+# daily_income_rate 0.03->0.0462, cost_of_care 0.025->0.0702, raising
+# episode_care_seeking_rate from 22% to 71% to match Ghana DHS) was run
+# holding these transmission parameters fixed at their round-5 values, and
+# turned out to cut transmission sharply (successful care-seeking forces an
+# immediate INFECTIOUS->RECOVERED, shortening effective infectious duration
+# model-wide) - rota_peak_u5_prevalence dropped from 0.099 to 0.045 and
+# cumulative illness-days by ~60% on the SAME round-5 transmission params,
+# so this round re-searches the remaining transmission/exposure parameters
+# under the new care-seeking defaults. recovery_rate is deliberately NOT
+# reopened as a lever this round (explicit user call): it reflects real
+# illness-duration literature/empirical findings, not a free tuning knob,
+# and round 5 already fixed it to the literature-plausible range. Keeping it
+# fixed also avoids a circularity risk: recovery_rate is the one transmission
+# parameter that directly sets how many days an untreated episode survives
+# (i.e. how many chances the parent's CPT decision gets to flip to
+# "seek care" before natural recovery ends the episode), so retuning it here
+# could have fed back into episode_care_seeking_rate and reopened the
+# care-seeking calibration. The other 5 parameters mainly affect incidence
+# (how often episodes occur) rather than any single episode's duration, a
+# much weaker channel back into care-seeking behavior.
 CALIB_BOUNDS = {
     # --- Rotavirus transmission ---
     "pathogens[rota].infection_prob_mean":                (0.001, 0.010),
-    "pathogens[rota].recovery_rate":                      (0.14,  0.33),
     "steering_parameters.water_to_human_infection_prob":  (0.0,   0.02),
     # --- Campylobacter transmission (all three routes) ---
     "pathogens[campy].human_animal_interaction_rate":     (0.0,   0.018),
     "pathogens[campy].fecal_oral_prob":                   (0.0,   0.02),
     "pathogens[campy].food_borne_prob":                   (0.0,   0.01),
-    "pathogens[campy].recovery_rate":                     (0.14,  0.2),
 }
 
 # Calibrate the BASELINE: vaccination off, matching the pre/peri-vaccine
