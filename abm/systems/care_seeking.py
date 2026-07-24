@@ -4,13 +4,16 @@ Parental care-seeking decisions via Cumulative Prospect Theory (CPT).
 
 Decision frame
 --------------
-Each day, for each child with a non-zero severity, the parent stochastically
-"notices" the child as sick with probability equal to the child's current
-severity score. A child may be concurrently ill with more than one pathogen
-(see ChildIllnessSystem, which tracks severity/duration per pathogen); the
-severity used here is the *maximum* across the child's currently active
-episodes — i.e. how sick the child appears overall. If noticed, the parent
-evaluates two prospects:
+Each day, for each child with a non-zero severity, the parent evaluates a
+care-seeking decision (diarrhea is highly visible, so awareness itself
+isn't modeled as uncertain - unlike, say, a low-grade fever, there's no
+realistic "might not notice" gate for a child with diarrhea, and severity
+already drives the decision directly through the utility comparison below,
+so a separate stochastic notice step would just double-count it). A child
+may be concurrently ill with more than one pathogen (see ChildIllnessSystem,
+which tracks severity/duration per pathogen); the severity used here is the
+*maximum* across the child's currently active episodes — i.e. how sick the
+child appears overall. The parent evaluates two prospects:
 
   Seek care
     Cost c is paid immediately (certain wealth loss).
@@ -75,9 +78,15 @@ child's "presenting" (most severe) active episode.
 
 Counters
 --------
-  decisions_faced : number of times a parent noticed a sick child.
+  decisions_faced : number of times a parent evaluated a sick child's care.
   care_sought : number of times the parent chose to seek care.
   could_not_afford : number of times the parent was priced out.
+  total_episodes : number of illness episodes (any pathogen, onset-to-
+      resolution).
+  episodes_with_care_sought : of those, how many had care sought at least
+      once. episode_care_seeking_rate (the ratio) is the DHS-comparable
+      figure - conditional_care_rate is NOT, since its denominator is
+      per-day decisions, not episodes.
 """
 
 import torch
@@ -110,7 +119,7 @@ def _max_active_severity(agent_state: AgentState, pathogen_names: list[str]) -> 
     pathogens. A child can be concurrently ill with more than one pathogen
     (ChildIllnessSystem tracks severity/duration per pathogen so concurrent
     episodes don't overwrite one another); this is what determines how sick
-    a child appears overall for notice-probability and "sickest child"
+    a child appears overall for the utility comparison and "sickest child"
     comparisons.
     """
     severities = torch.zeros(agent_state.num_nodes(), device=agent_state.device)
@@ -139,17 +148,40 @@ class CareSeekingSystem(System):
         self.care_sought: int = 0
         self.could_not_afford: int = 0
 
+        # Episode-level tracking. Lazily sized on the first update() call
+        # since num_nodes isn't known at construction time. Pure bookkeeping,
+        # not shared simulation state, so this lives as instance tensors
+        # rather than AgentPropertyKeys.
+        self.total_episodes: int = 0
+        self.episodes_with_care_sought: int = 0
+        self._was_sick_prev: torch.Tensor | None = None
+        self._care_sought_this_episode: torch.Tensor | None = None
+
     def reset_counters(self):
         """Reset all counters — call between independent simulation runs."""
         self.decisions_faced = 0
         self.care_sought = 0
         self.could_not_afford = 0
+        self.total_episodes = 0
+        self.episodes_with_care_sought = 0
+        self._was_sick_prev = None
+        self._care_sought_this_episode = None
 
     @property
     def conditional_care_rate(self) -> float:
         if self.decisions_faced == 0:
             return 0.0
         return self.care_sought / self.decisions_faced
+
+    @property
+    def episode_care_seeking_rate(self) -> float:
+        """Fraction of illness episodes (any pathogen, onset-to-resolution)
+        for which care was sought at least once - the DHS-comparable
+        figure. conditional_care_rate is NOT comparable to DHS: its
+        denominator is per-day decisions, not episodes."""
+        if self.total_episodes == 0:
+            return 0.0
+        return self.episodes_with_care_sought / self.total_episodes
 
     # ------------------------------------------------------------------
     # Main update
@@ -158,6 +190,9 @@ class CareSeekingSystem(System):
     def update(self, agent_state: AgentState, **kwargs):
         pathogen_names = [p.name for p in self.config.pathogens]
         child_severity = _max_active_severity(agent_state, pathogen_names)
+        is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
+
+        self._track_episodes(child_severity, is_child)
 
         candidate_mask = (
             (child_severity > 0.0)
@@ -167,17 +202,11 @@ class CareSeekingSystem(System):
             return
 
         candidate_indices = candidate_mask.nonzero(as_tuple=True)[0]
-        severities = child_severity[candidate_indices]
-        noticed_mask = torch.rand(len(candidate_indices), device=agent_state.device) < severities
-        noticed_indices = candidate_indices[noticed_mask]
 
-        if len(noticed_indices) == 0:
-            return
-
-        child_hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID][noticed_indices]
-        hh_to_noticed: dict[int, list] = {}
+        child_hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID][candidate_indices]
+        hh_to_sick_children: dict[int, list] = {}
         for i, hh_id in enumerate(child_hh_ids):
-            hh_to_noticed.setdefault(hh_id.item(), []).append(noticed_indices[i])
+            hh_to_sick_children.setdefault(hh_id.item(), []).append(candidate_indices[i])
 
         all_hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
         parent_mask = agent_state.ndata[AgentPropertyKeys.IS_PARENT]
@@ -186,10 +215,10 @@ class CareSeekingSystem(System):
 
         for i, parent_idx in enumerate(parent_indices):
             hh_id = parent_hh_ids[i].item()
-            if hh_id not in hh_to_noticed:
+            if hh_id not in hh_to_sick_children:
                 continue
 
-            children = hh_to_noticed[hh_id]
+            children = hh_to_sick_children[hh_id]
             idx_tensor = torch.tensor(
                 [idx.item() for idx in children],
                 device=agent_state.device, dtype=torch.long,
@@ -198,6 +227,42 @@ class CareSeekingSystem(System):
 
             self.decisions_faced += 1
             self._parent_makes_decision(agent_state, parent_idx, sickest)
+
+    # ------------------------------------------------------------------
+    # Episode-level tracking (DHS-comparable metric)
+    # ------------------------------------------------------------------
+
+    def _track_episodes(self, child_severity: torch.Tensor, is_child: torch.Tensor):
+        """
+        Maintains per-agent illness-episode bookkeeping for
+        episode_care_seeking_rate. An episode runs from the first day
+        `child_severity > 0` (any pathogen) until the first day it returns
+        to zero: onset increments total_episodes and clears the per-episode
+        "care sought" flag; resolution increments episodes_with_care_sought
+        if that flag was ever set during the episode (set in
+        _apply_treatment_outcome, regardless of treatment success/failure -
+        this measures whether care was SOUGHT, not whether it worked).
+        Episodes still open at simulation end are counted at onset but
+        never resolve, so they don't contribute to the numerator -
+        negligible given illness durations (days) are short relative to a
+        sweep's step count (months).
+        """
+        currently_sick = (child_severity > 0.0) & is_child
+
+        if self._was_sick_prev is None:
+            self._was_sick_prev = torch.zeros_like(currently_sick)
+            self._care_sought_this_episode = torch.zeros_like(currently_sick)
+
+        onset_mask = currently_sick & ~self._was_sick_prev
+        resolved_mask = self._was_sick_prev & ~currently_sick
+
+        self.total_episodes += int(onset_mask.sum().item())
+        self._care_sought_this_episode[onset_mask] = False
+        self.episodes_with_care_sought += int(
+            (resolved_mask & self._care_sought_this_episode).sum().item()
+        )
+
+        self._was_sick_prev = currently_sick
 
     # ------------------------------------------------------------------
     # Presenting-illness lookup
@@ -393,6 +458,7 @@ class CareSeekingSystem(System):
 
         HouseholdSystem.apply_household_wealth_delta(agent_state, parent_idx, -params.cost_of_care)
         agent_state.ndata[AgentPropertyKeys.CARE_SEEKING_COUNT][parent_idx] += 1
+        self._care_sought_this_episode[child_idx] = True
 
         if torch.rand(1).item() < params.treatment_success_prob:
             for p_config in self.config.pathogens:

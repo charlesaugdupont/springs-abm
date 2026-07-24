@@ -79,13 +79,30 @@ def campy_route_fractions(model) -> dict:
 
 
 def care_seeking_metrics(model) -> dict:
+    """
+    conditional_care_rate / could_not_afford_rate are scoped to per-day
+    decisions (decisions_faced), not illness episodes.
+    episode_care_seeking_rate (episodes_with_care_sought / total_episodes)
+    is the DHS-comparable figure instead - see
+    abm/systems/care_seeking.py's module docstring and
+    CareSeekingSystem._track_episodes for the distinction.
+    """
     care_system = next((s for s in model.systems if isinstance(s, CareSeekingSystem)), None)
-    if care_system is None or care_system.decisions_faced == 0:
-        return {"conditional_care_rate": 0.0, "could_not_afford_rate": 0.0, "decisions_faced": 0}
+    if care_system is None:
+        return {
+            "conditional_care_rate": 0.0, "could_not_afford_rate": 0.0, "decisions_faced": 0,
+            "episode_care_seeking_rate": 0.0, "total_episodes": 0, "episodes_with_care_sought": 0,
+        }
     return {
         "conditional_care_rate": care_system.conditional_care_rate,
-        "could_not_afford_rate": care_system.could_not_afford / care_system.decisions_faced,
+        "could_not_afford_rate": (
+            care_system.could_not_afford / care_system.decisions_faced
+            if care_system.decisions_faced > 0 else 0.0
+        ),
         "decisions_faced": care_system.decisions_faced,
+        "episode_care_seeking_rate": care_system.episode_care_seeking_rate,
+        "total_episodes": care_system.total_episodes,
+        "episodes_with_care_sought": care_system.episodes_with_care_sought,
     }
 
 
