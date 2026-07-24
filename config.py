@@ -121,7 +121,18 @@ class SteeringParamsSVEIR(BaseModel):
     social_interaction_radius: float = 5.0
 
     # --- Care-Seeking Parameters ---
-    cost_of_care: float = 0.025 # Cost as a proportion of max wealth
+    # cost_of_care/daily_income_rate calibrated together against the Ghana DHS
+    # childhood-diarrhea care-seeking rate (69.2%, 95% CI 65.6-72.8% from the
+    # n=621 survey) via experiments/care_seeking/run_care_seeking_calibration.py.
+    # The prior defaults (0.025/0.03) gave episode_care_seeking_rate=22.4% and
+    # could_not_afford_rate=85% - never actually checked against DHS before
+    # this calibration. This is the lowest-could_not_afford_rate point among
+    # several (income, cost) combos that equally hit the DHS band (a single
+    # 1D target underdetermines this 2D space - see
+    # experiments/outputs/care_seeking_calibration/care_seeking_calibration_ranked.csv
+    # for the full frontier); episode_care_seeking_rate=71.1%,
+    # could_not_afford_rate=27.4%.
+    cost_of_care: float = 0.0702 # Cost as a proportion of max wealth
     treatment_success_prob: float = 0.80
     natural_worsening_prob: float = 0.35 # Prob illness worsens if untreated
     parent_stress_health_impact: float = 0.30
@@ -139,7 +150,9 @@ class SteeringParamsSVEIR(BaseModel):
     child_health_weight: float = 0.5 # weight placed on child health in the parent's utility function.
 
     # Income and wealth dynamics
-    daily_income_rate: float = 0.03
+    # daily_income_rate calibrated jointly with cost_of_care above (see that
+    # field's comment) against the Ghana DHS care-seeking rate.
+    daily_income_rate: float = 0.0462
     daily_cost_of_living: float = 0.025
     health_based_income: bool = True
     # Equivalence-scale-style discount: a child costs this fraction of an
