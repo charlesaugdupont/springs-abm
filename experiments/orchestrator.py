@@ -9,6 +9,8 @@ Provides
   _get_param/_set_param helpers in sensitivity.py so every experiment script
   can reuse the same logic instead of reimplementing it.
 - SweepParam / SweepSpec : a declarative description of a parameter sweep.
+  SweepSpec.step_callback (optional) : per-day hook for mid-run config
+  mutation (e.g. a shock schedule) - see experiments/shocks/run_shock_sweep.py.
 - run_sweep()            : parallel replicate execution -> tidy long-format
   Parquet output (one row per run x metric), plus an optional companion
   time-series Parquet (one row per run x day) for complex-systems analyses
@@ -42,6 +44,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 import pandas as pd
 
 from config import SVEIRCONFIG, SVEIRConfig
+from abm.constants import AgentPropertyKeys
 from abm.model.initialize_model import SVEIRModel
 from abm.utils.rng import set_global_seed
 
@@ -119,6 +122,14 @@ class SweepSpec:
     output_dir: str = os.path.join("experiments", "outputs")
     n_cores: Optional[int] = None
     base_seed: Optional[int] = None
+    step_callback: Optional[Callable[[SVEIRModel, int, Dict[str, Any]], None]] = None
+    # Optional per-day hook: step_callback(model, day, combo), called once per
+    # simulated day BEFORE model.step(). Lets a sweep mutate
+    # model.config.steering_parameters.* mid-run (e.g. a shock schedule).
+    # MUST stay a top-level, importable, picklable function (not a lambda or
+    # a closure) - same constraint as metrics_fn, see module docstring.
+    # If None (default), _run_one()'s behavior is 100% unchanged: a single
+    # uninterrupted model.run() call, exactly as today.
 
     def output_path(self) -> Path:
         return Path(self.output_dir) / self.name
@@ -138,6 +149,8 @@ def _build_config(spec: SweepSpec, combo: Dict[str, Any], seed: int) -> SVEIRCon
     for path, value in spec.base_overrides.items():
         set_param(cfg, path, value)
     for path, value in combo.items():
+        if path.startswith("shock."):
+            continue  # schedule metadata, not a real SVEIRConfig path - consumed by step_callback via combo
         set_param(cfg, path, value)
     return cfg
 
@@ -157,7 +170,18 @@ def _run_one(task) -> Optional[Dict[str, Any]]:
             )
             model.set_model_parameters(**cfg.model_dump())
             model.initialize_model(verbose=False)
-            model.run()
+            if spec.step_callback is None:
+                model.run()
+            else:
+                # Manual day-by-day driver, replicating run()'s setup exactly
+                # (abm/model/initialize_model.py's run()) so
+                # u5_prevalence_history is populated identically to model.run().
+                model.infection_incidence.clear()
+                model.u5_prevalence_history = {p.name: [] for p in model.pathogens}
+                child_mask = model.graph.ndata[AgentPropertyKeys.IS_CHILD]
+                for day in range(spec.steps):
+                    spec.step_callback(model, day, combo)
+                    model.step(child_mask=child_mask)
 
         metrics = spec.metrics_fn(model)
         record = {"run_id": run_id, "rep": rep, "seed": seed, **combo, **metrics}

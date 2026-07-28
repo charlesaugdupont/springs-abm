@@ -292,3 +292,110 @@ def early_warning_signals(ts_df: pd.DataFrame, value_col: str = "u5_prevalence",
         rec["final_ac1"] = roll_ac1.iloc[-1] if len(roll_ac1) else np.nan
         out.append(rec)
     return pd.DataFrame(out)
+
+
+def shock_response_metrics(
+    ts_df: pd.DataFrame,
+    meta_df: pd.DataFrame,
+    start_day: int,
+    pathogen: str = "rota",
+    baseline_window: int = 30,
+    recovery_tolerance: float = 0.005,
+    recovery_sustain_days: int = 14,
+) -> pd.DataFrame:
+    """
+    Per-(combo, rep) dose-response summary of a water-contamination shock
+    window (see abm/systems/environment.py, experiments/shocks/run_shock_sweep.py):
+    pre-shock baseline prevalence, post-shock peak, time-to-recovery, and
+    excess-prevalence-days vs. a paired magnitude=1 control run sharing the
+    same rep (and therefore the same seed - orchestrator._run_one's
+    seed = base_seed + rep is independent of combo, so the control and every
+    shocked combo at a given rep share an identical stochastic environment
+    until the shock diverges them).
+
+    ts_df   : long time-series frame from run_sweep(..., record_timeseries=True)
+              - columns run_id, rep, pathogen, day, u5_prevalence.
+    meta_df : the companion results.parquet frame - must carry run_id, rep,
+              "shock.duration", "shock.magnitude".
+    start_day : the (fixed, non-swept) day the shock window begins.
+
+    There is exactly one magnitude==1 combo in the shocks design (the
+    explicit control, duration=0) - not one per duration value - so each
+    rep has exactly one control run to match against.
+
+    Recovery is judged against the paired control's OWN trajectory, not a
+    static pre-shock baseline: this model produces one large epidemic wave
+    from initial conditions that keeps declining naturally for ~150-200 days
+    regardless of any shock, so a fixed start_day=60 sits inside that decline
+    rather than at a quiescent equilibrium - a static-baseline definition
+    would read as "recovered" almost immediately everywhere, since prevalence
+    keeps falling on its own either way (confirmed empirically: it returned
+    ~0 days for nearly every combo in the first pass). Comparing against the
+    paired control's trajectory instead nets out that shared natural decline,
+    so "recovered" means the shock's marginal effect has faded, not that the
+    background epidemic has moved on. `recovered` = the trailing
+    `recovery_sustain_days`-day rolling mean of (shocked - control) first
+    drops to within +/- `recovery_tolerance` (absolute prevalence units) of
+    zero, sustained rather than a single-day crossing, since the two runs'
+    RNG streams decorrelate once the shock changes their infection counts
+    (same seed only guarantees identical draws up to first divergence), so a
+    single day's difference is noisy.
+    """
+    meta = meta_df[["run_id", "rep", "shock.duration", "shock.magnitude"]].drop_duplicates("run_id")
+    ts = ts_df[ts_df["pathogen"] == pathogen].drop(columns=["rep"], errors="ignore").merge(
+        meta, on="run_id", how="inner"
+    )
+
+    controls = meta[meta["shock.magnitude"] == 1].set_index("rep")["run_id"]
+    control_series = {
+        rep: ts.loc[ts["run_id"] == run_id].set_index("day")["u5_prevalence"].sort_index()
+        for rep, run_id in controls.items()
+    }
+
+    rows = []
+    for run_id, g in ts.groupby("run_id"):
+        g = g.sort_values("day")
+        rep = g["rep"].iloc[0]
+        duration = g["shock.duration"].iloc[0]
+        magnitude = g["shock.magnitude"].iloc[0]
+        end_day = start_day + duration
+
+        pre = g.loc[(g["day"] >= start_day - baseline_window) & (g["day"] < start_day), "u5_prevalence"]
+        baseline = float(pre.mean()) if len(pre) else float("nan")
+
+        post = g.loc[g["day"] >= start_day]
+        if len(post):
+            peak_idx = post["u5_prevalence"].idxmax()
+            peak_prevalence = float(post.loc[peak_idx, "u5_prevalence"])
+            peak_day = int(post.loc[peak_idx, "day"])
+        else:
+            peak_prevalence, peak_day = float("nan"), -1
+
+        control = control_series.get(rep)
+        if control is not None:
+            window = g.loc[g["day"] >= start_day, ["day", "u5_prevalence"]].set_index("day")["u5_prevalence"]
+            paired = window - control.reindex(window.index)
+            excess_prevalence_days = float(paired.sum())
+
+            after_window = paired.loc[paired.index >= end_day]
+            rolling = after_window.rolling(recovery_sustain_days, min_periods=recovery_sustain_days).mean().abs()
+            recovered_mask = rolling <= recovery_tolerance
+            if len(rolling) and recovered_mask.any():
+                recovery_idx = recovered_mask.idxmax()  # first True (chronological order preserved)
+                time_to_recovery = int(recovery_idx) - end_day
+                recovered = True
+            else:
+                time_to_recovery, recovered = float("nan"), False
+        else:
+            excess_prevalence_days = float("nan")
+            time_to_recovery, recovered = float("nan"), False
+
+        rows.append({
+            "run_id": run_id, "rep": rep,
+            "shock.duration": duration, "shock.magnitude": magnitude,
+            "baseline_prevalence": baseline,
+            "peak_prevalence": peak_prevalence, "peak_day": peak_day,
+            "time_to_recovery": time_to_recovery, "recovered_by_sim_end": recovered,
+            "excess_prevalence_days": excess_prevalence_days,
+        })
+    return pd.DataFrame(rows)
