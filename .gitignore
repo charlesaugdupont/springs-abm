@@ -211,6 +211,7 @@ cache/
 grids/
 outputs/
 data/
+docs/
 
 .DS_Store
 *.pdf

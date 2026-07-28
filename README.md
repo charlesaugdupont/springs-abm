@@ -24,26 +24,37 @@ The simulation is set in a geographical context inspired by Akuse, Ghana, using 
     *   Simulation output is handled by **Zarr** and **XArray**, allowing for efficient storage and analysis of large-scale, multi-dimensional data.
 
 ## 3. Project Structure
-The project is organized into several key directories:
+The project is organized into several key directories. Note there are two parallel workflows: the original single-run CLI (`main.py` + `abm/simulation_analysis/`) described in §5 below, and a newer, actively-developed multi-replicate sweep/calibration framework (`experiments/`) described in §6 — most of the project's calibration and published results are produced via the latter.
 
 ```
 ├── README.md
 ├── requirements.txt
-├── inspect_grid.py         # Script to inspect spatial layers
-├── main.py                 # Main entry point for running the simulation workflow
+├── inspect_grid.py         # Debug/visualization tool for inspecting spatial grid layers
+├── run_viz.py              # Quick single-run visualization (spatial + epidemic curves)
+├── sensitivity.py          # One-at-a-time parameter sensitivity sweeps (bridges main.py and experiments/)
+├── main.py                 # Entry point for the original single-run simulation workflow (see §5)
 ├── config.py               # Pydantic-based configuration for all model parameters
 ├── pyproject.toml          # Project dependencies and metadata
 ├── abm/                    # Core source code for the agent-based model
-│ ├── agent/                # Agent-specific logic (illness, CPT)
-│ ├── environment/          # Spatial grid creation and generation
-│ ├── factories/            # Factories for building agents and the environment
-│ ├── model/                # The main model class, stepping logic, and data collection
-│ ├── pathogens/            # Logic for pathogen-specific transmission and progression
-│ ├── simulation_analysis/  # Plotting and experiment management scripts
-│ ├── systems/              # Core behavioral and environmental processes (movement, etc.)
-│ └── utils/                # Utilities (RNG)
-├── grids/                  # Output directory for generated spatial grids
-└── outputs/                # Output directory for simulation results and plots
+│ ├── agent/                # Agent-level logic: CPT/utility math, illness severity & duration formulas
+│ ├── data/                 # Real-world input data (e.g. Akuse water-sampling points)
+│ ├── environment/          # Spatial grid creation, generation, and OpenStreetMap integration
+│ ├── factories/            # Builders that populate agents and the environment at model init
+│ ├── model/                # The main model class, day/night step loop, and data collection
+│ ├── pathogens/            # Pathogen-specific transmission and progression (Rotavirus, Campylobacter)
+│ ├── simulation_analysis/  # Plotting/output helpers for the legacy main.py workflow (see §5)
+│ ├── systems/              # Core per-day processes: movement, illness, care-seeking, environment, economics
+│ └── utils/                # Utilities (RNG seeding)
+├── experiments/            # Actively-developed sweep/calibration framework (see §6)
+│ ├── calibration/          # Epidemic transmission-parameter calibration (LHS search)
+│ ├── care_seeking/         # Care-seeking/economics OAT, interaction, and DHS-calibration sweeps
+│ ├── shocks/               # Ecological water-contamination disturbance sweeps
+│ ├── vaccination/          # Vaccination rate/efficacy sweep
+│ ├── metrics.py            # Reusable per-run and post-hoc metrics shared across all sweeps
+│ └── orchestrator.py       # Shared parallel sweep-execution engine
+├── notebooks/              # Exploratory data analysis (e.g. Ghana animal-ownership estimation)
+├── grids/                  # Cached generated spatial grids (one per unique grid_id)
+└── cache/                  # OpenStreetMap query cache (raw API responses)
 ```
 
 ## 4. Setup and Installation
@@ -67,7 +78,9 @@ The model requires Python >= 3.13.
     pip install -r requirements.txt
     ```
 
-## 5. Simulation Workflow
+## 5. Simulation Workflow (single-run, via `main.py`)
+
+This is the original workflow for running and inspecting one simulation at a time. For multi-replicate parameter sweeps and calibration (the primary way this project now generates results), see §6 instead.
 
 Running an experiment is a three-step process managed via `main.py`.
 
@@ -118,7 +131,21 @@ Finally, use the experiment name from Step 2 to generate relevant figures.
 
 Plots are displayed on-screen and saved to the `outputs/<experiment_name>/simulation_results/` directory.
 
-## 6. Configuration
+## 6. Sweep & Calibration Experiments (`experiments/`)
+
+For parameter sweeps, calibration searches, and multi-replicate scenario comparisons, use the `experiments/` package rather than `main.py`. It's built around a shared engine (`experiments/orchestrator.py`) that handles parallel replicate execution, seeding, and tidy Parquet output, so each individual experiment script only needs to declare *what* to sweep and *what to measure*.
+
+Each experiment lives in its own subpackage (`experiments/calibration/`, `experiments/care_seeking/`, `experiments/shocks/`, `experiments/vaccination/`) and is run as a module, e.g.:
+
+```bash
+python -m experiments.vaccination.run_vaccination_sweep --grid-id <GRID_ID> --pilot     # fast smoke test first
+python -m experiments.vaccination.run_vaccination_sweep --grid-id <GRID_ID>             # full sweep
+python -m experiments.vaccination.run_vaccination_sweep --plot-only                     # replot without rerunning
+```
+
+Common flags across these scripts: `--pilot` (small grid/reps/steps for a quick sanity check before committing to a full run), `--workers N` (parallel processes), `--plot-only`. Results and figures are written to `experiments/outputs/<experiment_name>/`. See each script's module docstring for its specific design (parameters swept, metrics recorded), and `experiments/orchestrator.py`'s docstring for the shared engine's design intent.
+
+## 7. Configuration
 
 All model parameters are defined in `config.py` using Pydantic models. To alter the model's behavior (e.g., pathogen infectiousness, number of agents, agent persona ranges), you can modify the values in this file before running a simulation.
 
