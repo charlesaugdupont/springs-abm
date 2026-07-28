@@ -46,7 +46,7 @@ def epidemic_metrics(model, pathogen_names=None) -> dict:
     is_child = model.graph.ndata[AgentPropertyKeys.IS_CHILD].cpu().numpy().astype(bool)
     n_u5 = int(is_child.sum())
 
-    out = {}
+    out = {"n_u5": n_u5}
     for pname in pathogen_names:
         prev = np.array(model.u5_prevalence_history.get(pname, []))
         out[f"{pname}_peak_u5_prevalence"] = float(prev.max()) if prev.size else 0.0
@@ -304,10 +304,10 @@ def shock_response_metrics(
     recovery_sustain_days: int = 14,
 ) -> pd.DataFrame:
     """
-    Per-(combo, rep) dose-response summary of a water-contamination shock
+    Per-(combo, rep) sensitivity summary of a water-contamination shock
     window (see abm/systems/environment.py, experiments/shocks/run_shock_sweep.py):
     pre-shock baseline prevalence, post-shock peak, time-to-recovery, and
-    excess-prevalence-days vs. a paired magnitude=1 control run sharing the
+    excess illness-days vs. a paired magnitude=1 control run sharing the
     same rep (and therefore the same seed - orchestrator._run_one's
     seed = base_seed + rep is independent of combo, so the control and every
     shocked combo at a given rep share an identical stochastic environment
@@ -340,10 +340,27 @@ def shock_response_metrics(
     RNG streams decorrelate once the shock changes their infection counts
     (same seed only guarantees identical draws up to first divergence), so a
     single day's difference is noisy.
+
+    `excess_illness_days` is reported in absolute under-5 child-days, not raw
+    prevalence-fraction-days, since "0.7 excess prevalence-days" is not a
+    directly interpretable quantity (prevalence is a fraction of the u5
+    population, so summing it over days gives fraction-days, not days).
+    n_u5 (under-5 population size, roughly constant per run since the
+    population is closed - see abm/model/initialize_model.py) is recovered
+    per run as `{pathogen}_cumulative_u5_days / (full-run sum of daily
+    prevalence)`, both already present in meta_df/ts_df, rather than
+    requiring metrics_fn to have recorded n_u5 explicitly - this keeps the
+    function usable on older saved results too.
     """
-    meta = meta_df[["run_id", "rep", "shock.duration", "shock.magnitude"]].drop_duplicates("run_id")
+    meta = meta_df[["run_id", "rep", "shock.duration", "shock.magnitude",
+                     f"{pathogen}_cumulative_u5_days"]].drop_duplicates("run_id")
     ts = ts_df[ts_df["pathogen"] == pathogen].drop(columns=["rep"], errors="ignore").merge(
         meta, on="run_id", how="inner"
+    )
+
+    full_run_prevalence_sum = ts.groupby("run_id")["u5_prevalence"].sum()
+    n_u5_by_run = (
+        meta.set_index("run_id")[f"{pathogen}_cumulative_u5_days"] / full_run_prevalence_sum
     )
 
     controls = meta[meta["shock.magnitude"] == 1].set_index("rep")["run_id"]
@@ -359,6 +376,7 @@ def shock_response_metrics(
         duration = g["shock.duration"].iloc[0]
         magnitude = g["shock.magnitude"].iloc[0]
         end_day = start_day + duration
+        n_u5 = float(n_u5_by_run[run_id])
 
         pre = g.loc[(g["day"] >= start_day - baseline_window) & (g["day"] < start_day), "u5_prevalence"]
         baseline = float(pre.mean()) if len(pre) else float("nan")
@@ -375,7 +393,7 @@ def shock_response_metrics(
         if control is not None:
             window = g.loc[g["day"] >= start_day, ["day", "u5_prevalence"]].set_index("day")["u5_prevalence"]
             paired = window - control.reindex(window.index)
-            excess_prevalence_days = float(paired.sum())
+            excess_illness_days = float(paired.sum()) * n_u5
 
             after_window = paired.loc[paired.index >= end_day]
             rolling = after_window.rolling(recovery_sustain_days, min_periods=recovery_sustain_days).mean().abs()
@@ -387,7 +405,7 @@ def shock_response_metrics(
             else:
                 time_to_recovery, recovered = float("nan"), False
         else:
-            excess_prevalence_days = float("nan")
+            excess_illness_days = float("nan")
             time_to_recovery, recovered = float("nan"), False
 
         rows.append({
@@ -396,6 +414,6 @@ def shock_response_metrics(
             "baseline_prevalence": baseline,
             "peak_prevalence": peak_prevalence, "peak_day": peak_day,
             "time_to_recovery": time_to_recovery, "recovered_by_sim_end": recovered,
-            "excess_prevalence_days": excess_prevalence_days,
+            "excess_illness_days": excess_illness_days,
         })
     return pd.DataFrame(rows)

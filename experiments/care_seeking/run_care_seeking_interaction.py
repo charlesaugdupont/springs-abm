@@ -124,38 +124,39 @@ def plot_results(pilot: bool = False, zoom: bool = False):
             index=cost_col, columns=income_col, values=metric, aggfunc="mean",
         ).sort_index(ascending=False)
 
-    sns.set_theme(style="white", font_scale=1.0)
-    fig, axes = plt.subplots(2, 2, figsize=(13, 11))
+    sns.set_theme(style="white", font_scale=1.5)
+    fig, axes = plt.subplots(2, 2, figsize=(11, 9.5), constrained_layout=True)
     title_prefix = "Zoomed-In " if zoom else ""
+    annot_kws = {"size": 10}
 
-    sns.heatmap(_pivot("could_not_afford_rate"), annot=True, fmt=".2f", cmap="Reds",
-                ax=axes[0, 0], cbar_kws={"label": "Could-not-afford rate"})
-    axes[0, 0].set_title(f"{title_prefix}Could-Not-Afford Rate")
+    sns.heatmap(_pivot("could_not_afford_rate") * 100, annot=True, fmt=".0f", cmap="Reds",
+                ax=axes[0, 0], annot_kws=annot_kws, cbar_kws={"label": "Could-not-afford rate (%)"})
+    axes[0, 0].tick_params(axis="y", labelrotation=0)
+    axes[0, 0].set_title(f"{title_prefix}Could-Not-Afford Rate", fontsize=15)
     axes[0, 0].set_xlabel("Daily income rate")
     axes[0, 0].set_ylabel("Cost of care")
 
-    sns.heatmap(_pivot("episode_care_seeking_rate"), annot=True, fmt=".0%", cmap="Blues",
-                ax=axes[0, 1], cbar_kws={"label": "Episode care-seeking rate"})
+    sns.heatmap(_pivot("episode_care_seeking_rate") * 100, annot=True, fmt=".0f", cmap="Blues",
+                ax=axes[0, 1], annot_kws=annot_kws, cbar_kws={"label": "Episode care-seeking rate (%)"})
     axes[0, 1].set_title(
         f"{title_prefix}Episode Care-Seeking Rate\n(Ghana DHS: {DHS_GHANA_RATE:.0%}, "
-        f"pooled SSA: {DHS_SSA_RATE_CI[0]:.0%}-{DHS_SSA_RATE_CI[1]:.0%})"
+        f"pooled SSA: {DHS_SSA_RATE_CI[0]:.0%}-{DHS_SSA_RATE_CI[1]:.0%})", fontsize=15
     )
     axes[0, 1].set_xlabel("Daily income rate")
     axes[0, 1].set_ylabel("")
 
     sns.heatmap(_pivot("illness_burden_u5_days"), annot=True, fmt=".0f", cmap="Oranges",
-                ax=axes[1, 0], cbar_kws={"label": "Illness-days (u5, both pathogens)"})
-    axes[1, 0].set_title(f"{title_prefix}Combined Illness Burden (Rota + Campy)")
+                ax=axes[1, 0], annot_kws=annot_kws, cbar_kws={"label": "Illness-days (u5, both pathogens)"})
+    axes[0, 0].tick_params(axis="y", labelrotation=0)
+    axes[1, 0].set_title(f"{title_prefix}Combined Illness Burden (Rota + Campy)", fontsize=15)
     axes[1, 0].set_xlabel("Daily income rate")
     axes[1, 0].set_ylabel("Cost of care")
 
-    sns.heatmap(_pivot("mean_parent_wealth"), annot=True, fmt=".2f", cmap="Greens",
-                ax=axes[1, 1], cbar_kws={"label": "Mean parent-household wealth"})
-    axes[1, 1].set_title(f"{title_prefix}Household Wealth (Parent-Headed Households)")
+    sns.heatmap(_pivot("mean_parent_wealth") * 100, annot=True, fmt=".0f", cmap="Greens",
+                ax=axes[1, 1], annot_kws=annot_kws, cbar_kws={"label": "Mean parent-household wealth (% of max)"})
+    axes[1, 1].set_title(f"{title_prefix}Household Wealth (Parent-Headed Households)", fontsize=15)
     axes[1, 1].set_xlabel("Daily income rate")
     axes[1, 1].set_ylabel("")
-
-    plt.tight_layout()
     out_dir = os.path.join("experiments", "outputs", spec_name)
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, "care_seeking_interaction.png")

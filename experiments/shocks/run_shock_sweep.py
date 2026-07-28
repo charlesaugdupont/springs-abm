@@ -20,8 +20,10 @@ archetypal regions of one shared (duration, magnitude) space: during
 extreme (flash flood), step = medium duration + extreme with sharp edges
 (major flood/infrastructure failure), continuous = long duration + moderate
 (rainy season). start_day is held fixed across the sweep; duration and
-magnitude are the two swept axes, giving a genuine dose-response surface
-with pulse/step/continuous as illustrative points on it.
+magnitude are the two swept axes, giving a genuine sensitivity surface
+with pulse/step/continuous as illustrative points on it. (Deliberately NOT
+called a "dose-response" surface here, to avoid colliding with the QMRA
+dose-response sense already used for Campylobacter's exposure model.)
 
 Mid-run config mutation is new orchestrator infrastructure - see
 experiments/orchestrator.py's SweepSpec.step_callback and _run_one(). When
@@ -29,9 +31,9 @@ step_callback is None (every other experiment), behavior is unchanged.
 
 Metrics recorded per run: same composed scalar set as the other experiments
 (epidemic_metrics + care_seeking_metrics + wellbeing_metrics) PLUS a
-post-hoc dose-response frame (experiments.metrics.shock_response_metrics)
+post-hoc sensitivity frame (experiments.metrics.shock_response_metrics)
 computed from the recorded time series after the sweep finishes: pre-shock
-baseline, post-shock peak, time-to-recovery, and excess-prevalence-days vs.
+baseline, post-shock peak, time-to-recovery, and excess illness-days vs.
 a paired magnitude=1 control run sharing the same rep/seed.
 
 Usage
@@ -67,7 +69,7 @@ MAGNITUDES = [2, 5, 10, 20, 30]          # multiplier on shock_daily_prob
 PILOT_DURATIONS = [7, 30]
 PILOT_MAGNITUDES = [10, 30]
 
-# Illustrative points on the dose-response surface for the trajectory figure -
+# Illustrative points on the sensitivity surface for the trajectory figure -
 # all members of the full grid above (no extra runs needed).
 NAMED_COMBOS = {
     "Control (no shock)":    {"shock.duration": 0,   "shock.magnitude": 1},
@@ -178,11 +180,11 @@ def plot_trajectories(pilot: bool = False, start_day: int | None = None, named_o
         for c in build_combos(pilot=True)
     }
 
-    sns.set_theme(style="white", font_scale=1.0)
+    sns.set_theme(style="white", font_scale=2.2)
     n = len(combos_to_plot)
     ncols = 2
     nrows = -(-n // ncols)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(13, 4.5 * nrows), sharey=True, squeeze=False)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(9.5, 4.3 * nrows), sharey=True, squeeze=False)
     flat_axes = axes.flat
 
     for ax, (label, c) in zip(flat_axes, combos_to_plot.items()):
@@ -195,10 +197,11 @@ def plot_trajectories(pilot: bool = False, start_day: int | None = None, named_o
         if c["shock.duration"] > 0:
             ax.axvspan(actual_start_day, actual_start_day + c["shock.duration"], color="steelblue",
                        alpha=0.15, label="Shock window")
-            ax.legend(loc="upper right", fontsize=8)
-        ax.set_title(label)
+            ax.legend(loc="upper right", fontsize=11)
+        ax.set_title(label, fontsize=16)
         ax.set_xlabel("Day")
         ax.set_ylabel("Rota u5 prevalence")
+        ax.tick_params(labelsize=13)
 
     for ax in list(flat_axes)[n:]:
         ax.set_visible(False)
@@ -212,7 +215,18 @@ def plot_trajectories(pilot: bool = False, start_day: int | None = None, named_o
     plt.close(fig)
 
 
-def plot_dose_response(pilot: bool = False, start_day: int | None = None):
+def plot_sensitivity_surface(pilot: bool = False, start_day: int | None = None):
+    """Duration x magnitude sensitivity surface. Named to avoid colliding
+    with "dose-response" in the QMRA sense already used elsewhere in this
+    project for Campylobacter's exposure model (abm/pathogens/campylobacter.py) -
+    this is a parameter-sensitivity sweep, not an exposure dose-response curve.
+
+    Drops a 4th "recovery reliability" panel that used to sit here: every
+    replicate recovered by simulation end at every combo tested (see
+    shock_response_metrics' recovered_by_sim_end), so that panel was a flat
+    100% everywhere - no information to show. Worth re-adding if a future,
+    more extreme grid actually produces a non-recovering regime.
+    """
     spec_name = _spec_name(pilot, start_day, named_only=False)
     meta_df = load_results(spec_name)
     ts_df = load_timeseries(spec_name)
@@ -224,41 +238,45 @@ def plot_dose_response(pilot: bool = False, start_day: int | None = None):
     resp = shock_response_metrics(ts_df, meta_df, start_day=actual_start_day, pathogen="rota")
     grid = resp[resp["shock.duration"] > 0]   # control has no (duration, magnitude) grid cell
 
+    recovered_frac = grid["recovered_by_sim_end"].mean()
+    print(f"Recovery check: {recovered_frac:.0%} of all (duration, magnitude, rep) replicates "
+          f"recovered by simulation end.")
+
     def _pivot(metric, agg="mean"):
         return grid.pivot_table(index="shock.duration", columns="shock.magnitude",
                                  values=metric, aggfunc=agg).sort_index(ascending=False)
 
-    sns.set_theme(style="white", font_scale=1.0)
-    fig, axes = plt.subplots(2, 2, figsize=(13, 11))
+    sns.set_theme(style="white", font_scale=1.3)
+    fig, axes = plt.subplots(2, 2, figsize=(9, 8))
+    annot_kws = {"size": 15}
 
-    sns.heatmap(_pivot("peak_prevalence"), annot=True, fmt=".3f", cmap="Reds", ax=axes[0, 0],
-                cbar_kws={"label": "Mean peak u5 prevalence"})
-    axes[0, 0].set_title("Peak Under-5 Prevalence (Rotavirus)")
+    sns.heatmap(_pivot("peak_prevalence") * 100, annot=True, fmt=".1f", cmap="Reds", ax=axes[0, 0],
+                annot_kws=annot_kws, cbar_kws={"label": "Mean peak u5 prevalence (%)"})
+    axes[0, 0].set_title("Peak Under-5 Prevalence\n(Rotavirus)", fontsize=17)
     axes[0, 0].set_xlabel("Magnitude (x baseline shock prob)")
     axes[0, 0].set_ylabel("Duration (days)")
 
-    sns.heatmap(_pivot("excess_prevalence_days"), annot=True, fmt=".1f", cmap="Oranges",
-                ax=axes[0, 1], cbar_kws={"label": "Excess prevalence-days vs. control"})
-    axes[0, 1].set_title("Excess Prevalence-Days\n(vs. paired magnitude=1 control, same rep/seed)")
+    sns.heatmap(_pivot("excess_illness_days"), annot=True, fmt=".0f", cmap="Oranges", ax=axes[0, 1],
+                annot_kws=annot_kws, cbar_kws={"label": "Excess under-5 illness-days vs. control"})
+    axes[0, 1].set_title("Excess Illness-Days\n(vs. paired same-seed control)", fontsize=17)
     axes[0, 1].set_xlabel("Magnitude (x baseline shock prob)")
     axes[0, 1].set_ylabel("")
 
     sns.heatmap(_pivot("time_to_recovery"), annot=True, fmt=".0f", cmap="Purples", ax=axes[1, 0],
-                cbar_kws={"label": "Days after window-end to recover"})
-    axes[1, 0].set_title("Time to Recovery\n(blank cell = not recovered by sim end, mean over reps that did)")
+                annot_kws=annot_kws, cbar_kws={"label": "Days after window-end to recover"})
+    axes[1, 0].set_title("Time to Recovery\n(mean over reps that recovered)", fontsize=17)
     axes[1, 0].set_xlabel("Magnitude (x baseline shock prob)")
     axes[1, 0].set_ylabel("Duration (days)")
 
-    sns.heatmap(_pivot("recovered_by_sim_end", agg="mean"), annot=True, fmt=".0%", cmap="Greens",
-                ax=axes[1, 1], vmin=0, vmax=1, cbar_kws={"label": "Fraction of reps recovered by sim end"})
-    axes[1, 1].set_title("Recovery Reliability")
-    axes[1, 1].set_xlabel("Magnitude (x baseline shock prob)")
-    axes[1, 1].set_ylabel("")
+    axes[1, 1].set_visible(False)
+
+    for ax in [axes[0, 0], axes[0, 1], axes[1, 0]]:
+        ax.tick_params(labelsize=14)
 
     plt.tight_layout()
     out_dir = os.path.join("experiments", "outputs", spec_name)
     os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, "shock_dose_response.png")
+    out_path = os.path.join(out_dir, "shock_sensitivity_surface.png")
     plt.savefig(out_path, dpi=180, bbox_inches="tight")
     print(f"Figure saved -> {out_path}")
     plt.close(fig)
@@ -267,11 +285,11 @@ def plot_dose_response(pilot: bool = False, start_day: int | None = None):
 def plot_results(pilot: bool = False, start_day: int | None = None, named_only: bool = False):
     plot_trajectories(pilot=pilot, start_day=start_day, named_only=named_only)
     if named_only:
-        print("named_only run: skipping the dose-response heatmap (needs the full duration x "
-              "magnitude grid) - see the trajectory figure and/or query shock_response_metrics "
+        print("named_only run: skipping the sensitivity-surface heatmap (needs the full duration "
+              "x magnitude grid) - see the trajectory figure and/or query shock_response_metrics "
               "directly for a numeric comparison.")
     else:
-        plot_dose_response(pilot=pilot, start_day=start_day)
+        plot_sensitivity_surface(pilot=pilot, start_day=start_day)
 
 
 def main():

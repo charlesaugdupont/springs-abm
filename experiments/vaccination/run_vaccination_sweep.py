@@ -142,38 +142,40 @@ def plot_results(pilot: bool = False):
         df[df[rate_col] == max_rate].groupby(eff_col)["burden_reduction"].agg(["mean", "std"])
     )
 
-    sns.set_theme(style="white", font_scale=1.0)
-    fig, axes = plt.subplots(2, 2, figsize=(13, 11))
+    sns.set_theme(style="white", font_scale=1.3)
+    fig, axes = plt.subplots(2, 2, figsize=(11, 9.5), constrained_layout=True)
+    annot_kws = {"size": 9.5}
 
-    sns.heatmap(pivot_peak, annot=True, fmt=".2f", cmap="Reds", ax=axes[0, 0],
-                cbar_kws={"label": "Mean peak u5 prevalence"})
-    axes[0, 0].set_title("Peak Under-5 Prevalence (Rotavirus)")
+    sns.heatmap(pivot_peak * 100, annot=True, fmt=".1f", cmap="Reds", ax=axes[0, 0],
+                annot_kws=annot_kws, cbar_kws={"label": "Mean peak u5 prevalence (%)"})
+    axes[0, 0].tick_params(axis="y", labelrotation=0)
+    axes[0, 0].set_title("Peak Under-5 Prevalence (Rotavirus)", fontsize=15)
     axes[0, 0].set_xlabel("Vaccine efficacy")
     axes[0, 0].set_ylabel("Vaccination rate (daily)")
 
-    sns.heatmap(pivot_reduction, annot=True, fmt=".0%", cmap="Greens", ax=axes[0, 1],
-                vmin=0, vmax=1, cbar_kws={"label": "Illness-days averted"})
-    axes[0, 1].set_title("Disease Burden Averted\n(vs. no-vaccination baseline)")
+    sns.heatmap(pivot_reduction * 100, annot=True, fmt=".0f", cmap="Greens", ax=axes[0, 1],
+                vmin=0, vmax=100, annot_kws=annot_kws, cbar_kws={"label": "Illness-days averted (%)"})
+    axes[0, 1].set_title("Disease Burden Averted\n(vs. no-vaccination baseline)", fontsize=15)
     axes[0, 1].set_xlabel("Vaccine efficacy")
     axes[0, 1].set_ylabel("")
 
     axes[1, 0].errorbar(slice_by_rate.index, slice_by_rate["mean"], yerr=slice_by_rate["std"],
                          marker="o", capsize=3, color="darkgreen")
-    axes[1, 0].set_title(f"Burden Averted vs. Rate (efficacy={max_eff:.2f})")
+    axes[1, 0].set_title(f"Burden Averted vs. Rate\n(efficacy={max_eff:.2f})", fontsize=15)
     axes[1, 0].set_xlabel("Vaccination rate (daily)")
     axes[1, 0].set_ylabel("Illness-days averted")
     axes[1, 0].yaxis.set_major_formatter(lambda y, _: f"{y:.0%}")
     axes[1, 0].set_ylim(0, 1)
+    axes[1, 0].tick_params(labelsize=13)
 
     axes[1, 1].errorbar(slice_by_eff.index, slice_by_eff["mean"], yerr=slice_by_eff["std"],
                          marker="o", capsize=3, color="darkgreen")
-    axes[1, 1].set_title(f"Burden Averted vs. Efficacy (rate={max_rate:.3f})")
+    axes[1, 1].set_title(f"Burden Averted vs. Efficacy\n(rate={max_rate:.3f})", fontsize=15)
     axes[1, 1].set_xlabel("Vaccine efficacy")
     axes[1, 1].set_ylabel("Illness-days averted")
     axes[1, 1].yaxis.set_major_formatter(lambda y, _: f"{y:.0%}")
     axes[1, 1].set_ylim(0, 1)
-
-    plt.tight_layout()
+    axes[1, 1].tick_params(labelsize=13)
     out_dir = os.path.join("experiments", "outputs", spec_name)
     out_path = os.path.join(out_dir, "vaccination_burden_reduction.png")
     plt.savefig(out_path, dpi=180, bbox_inches="tight")
