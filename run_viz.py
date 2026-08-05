@@ -23,7 +23,7 @@ from config import SVEIRCONFIG
 from abm.model.initialize_model import SVEIRModel
 from abm.constants import AgentPropertyKeys
 from abm.utils.rng import set_global_seed
-from abm.environment.grid_generator import AKUSE_BOUNDARY_COORDS, GRID_SIZE
+from abm.environment.grid_constants import AKUSE_BOUNDARY_COORDS, GRID_SIZE
 
 try:
     import contextily as cx

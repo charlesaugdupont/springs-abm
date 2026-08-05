@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Run a Scenario - SPRINGS-ABM{% endblock %}
+
+{% macro info_box(meta) %}
+<details class="info-box">
+  <summary>{{ meta.evidence_tier|title if meta.evidence_tier != 'literature' else 'Literature-grounded' }}</summary>
+  <p style="margin: 0.4rem 0 0;">{{ meta.rationale }}</p>
+  {% if meta.unit %}<p class="mono" style="margin: 0.3rem 0 0; opacity: 0.8;">Unit: {{ meta.unit }}</p>{% endif %}
+</details>
+{% endmacro %}
+
+{% macro editable_field(item, form_name) %}
+{% set meta = item.meta %}
+<div class="param-field">
+  <label for="{{ form_name }}">
+    {{ meta.label }}
+    <span class="tier-badge tier-{{ meta.evidence_tier }}">{{ meta.evidence_tier }}</span>
+  </label>
+  {% if meta.ui_widget == "number+randomize-button" %}
+    <div style="display:flex; gap:0.5rem; align-items:center;">
+      <input type="number" id="{{ form_name }}" name="{{ form_name }}"
+             value="{{ defaults[form_name] }}"
+             min="{{ meta.ui_min }}" max="{{ meta.ui_max }}" step="1" style="max-width: 12rem;">
+      <button type="button" class="secondary" style="width:auto;"
+              onclick="document.getElementById('{{ form_name }}').value = Math.floor(Math.random()*1000000)">
+        Randomize
+      </button>
+    </div>
+  {% else %}
+    <input type="range" id="{{ form_name }}" name="{{ form_name }}"
+           value="{{ defaults[form_name] }}"
+           min="{{ meta.ui_min }}" max="{{ meta.ui_max }}"
+           step="{{ ((meta.ui_max - meta.ui_min) / 200) or 1 }}"
+           oninput="document.getElementById('{{ form_name }}_val').textContent = this.value">
+    <span class="field-value mono" id="{{ form_name }}_val">{{ defaults[form_name] }}</span>
+    {% if meta.unit %}<span class="mono" style="opacity:0.7;"> {{ meta.unit }}</span>{% endif %}
+  {% endif %}
+  {{ info_box(meta) }}
+</div>
+{% endmacro %}
+
+{% block content %}
+<h2>Build a scenario</h2>
+<p>Configure a simulation of Rotavirus and Campylobacter transmission in Akuse, Ghana, then run it.
+Parameters are grouped by category below; each has a note on what it is and how well-grounded its
+value is - see the <a href="/about#trust-table">About page</a> for the full picture.</p>
+
+{% if errors %}
+<article style="border-left: 4px solid #a02020; background: #fbdada;"><strong>Couldn't run that scenario:</strong> {{ errors }}</article>
+{% endif %}
+
+<form method="post" action="/scenario/run">
+
+  <div class="param-category">
+    <h3>Pathogens</h3>
+    <label>
+      <input type="checkbox" name="rota_enabled" {% if defaults.rota_enabled %}checked{% endif %}>
+      Rotavirus
+    </label>
+    <label>
+      <input type="checkbox" name="campy_enabled" {% if defaults.campy_enabled %}checked{% endif %}>
+      Campylobacter
+    </label>
+    <p style="font-size:0.85rem; color: var(--springs-text-muted);">At least one must stay enabled.</p>
+  </div>
+
+  {% for category in categories %}
+  <div class="param-category">
+    <h3>{{ category.name }}</h3>
+
+    {% for item in category.editable %}
+      {{ editable_field(item, item.form_name) }}
+    {% endfor %}
+
+    {% if category.readonly %}
+      <details>
+        <summary>Fixed parameters in this category ({{ category.readonly|length }})</summary>
+        {% for meta in category.readonly %}
+        <div class="readonly-param">
+          <span>{{ meta.label }} <span class="tier-badge tier-{{ meta.evidence_tier }}">{{ meta.evidence_tier }}</span></span>
+        </div>
+        {{ info_box(meta) }}
+        {% endfor %}
+      </details>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <button type="submit">Run simulation</button>
+</form>
+{% endblock %}

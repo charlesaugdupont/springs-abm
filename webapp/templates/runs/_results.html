@@ -1,0 +1,95 @@
+<div id="run-content">
+
+<p>
+  Finished in {{ "%.1f"|format(result.runtime_seconds) }}s &middot;
+  {{ result.n_u5 }} children under 5 &middot;
+  {{ "%.1f"|format(result.proportion_infected_at_least_once * 100) }}% of the population
+  infected at least once &middot;
+  <a href="/runs/{{ job_id }}/data.json" download>Download raw results (JSON)</a>
+</p>
+
+<h3>Summary</h3>
+<div class="metric-grid">
+  {% for name in result.pathogen_names %}
+  <div class="metric-card">
+    <div class="label">{{ "Rotavirus" if name == "rota" else "Campylobacter" }} - peak U5 prevalence</div>
+    <div class="value">{{ "%.1f"|format(result.summary_metrics[name ~ "_peak_u5_prevalence"] * 100) }}%</div>
+    <div class="sub">on day {{ result.summary_metrics[name ~ "_peak_day"] }}</div>
+  </div>
+  <div class="metric-card">
+    <div class="label">{{ "Rotavirus" if name == "rota" else "Campylobacter" }} - cumulative U5 illness-days</div>
+    <div class="value">{{ "%.0f"|format(result.summary_metrics[name ~ "_cumulative_u5_days"]) }}</div>
+    <div class="sub">
+      {% if result.summary_metrics[name ~ "_extinct"] %}<span class="badge-extinct">extinct</span>
+      {% else %}<span class="badge-active">still circulating</span>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  <div class="metric-card">
+    <div class="label">Care-seeking rate</div>
+    <div class="value">{{ "%.1f"|format(result.summary_metrics.get("episode_care_seeking_rate", 0) * 100) }}%</div>
+    <div class="sub">Ghana DHS benchmark: 69.2% (65.6-72.8%)</div>
+  </div>
+  <div class="metric-card">
+    <div class="label">Could not afford care</div>
+    <div class="value">{{ "%.1f"|format(result.summary_metrics.get("could_not_afford_rate", 0) * 100) }}%</div>
+    <div class="sub">of care-seeking decisions faced</div>
+  </div>
+  <div class="metric-card">
+    <div class="label">Mean household wealth</div>
+    <div class="value">{{ "%.2f"|format(result.summary_metrics.get("mean_household_wealth", 0)) }}</div>
+    <div class="sub">fraction of max wealth, at run end</div>
+  </div>
+  <div class="metric-card">
+    <div class="label">Mean child health</div>
+    <div class="value">{{ "%.2f"|format(result.summary_metrics.get("mean_final_health", 0)) }}</div>
+    <div class="sub">at run end (1.0 = full health)</div>
+  </div>
+  {% if "campy" in result.pathogen_names and result.summary_metrics.get("campy_zoonotic_fraction") is not none %}
+  <div class="metric-card">
+    <div class="label">Campylobacter route split</div>
+    <div class="value" style="font-size:1rem;">
+      Zoonotic {{ "%.0f"|format(result.summary_metrics.get("campy_zoonotic_fraction", 0)*100) }}% &middot;
+      Fecal-oral {{ "%.0f"|format(result.summary_metrics.get("campy_fecal_oral_fraction", 0)*100) }}% &middot;
+      Food-borne {{ "%.0f"|format(result.summary_metrics.get("campy_food_borne_fraction", 0)*100) }}%
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<h3>Epidemic curves</h3>
+<div id="chart-prevalence" style="height: 380px;"></div>
+
+<h3>Cumulative under-5 illness-days</h3>
+<div id="chart-illness-days" style="height: 320px;"></div>
+
+<h3>Household trajectories</h3>
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+  <div id="chart-wealth" style="height: 320px;"></div>
+  <div id="chart-care-seeking" style="height: 320px;"></div>
+</div>
+
+<h3>Spatial spread</h3>
+<p>Cumulative infection footprint over Akuse's real geography - drag the slider to step through the simulation day by day.</p>
+<div id="chart-spatial" style="height: 500px;"></div>
+<div class="scrubber-controls">
+  <span>Day</span>
+  <input type="range" id="spatial-day-slider" min="0" value="0" step="1">
+  <span class="scrubber-day-label" id="spatial-day-label">Day 0</span>
+</div>
+
+<script type="application/json" id="run-data">
+{
+  "days": {{ result.days | tojson | safe }},
+  "pathogen_names": {{ result.pathogen_names | tojson | safe }},
+  "u5_prevalence": {{ result.u5_prevalence | tojson | safe }},
+  "all_ages_prevalence": {{ result.all_ages_prevalence | tojson | safe }},
+  "cumulative_u5_illness_days": {{ result.cumulative_u5_illness_days | tojson | safe }},
+  "mean_household_wealth": {{ result.mean_household_wealth | tojson | safe }},
+  "cumulative_care_seeking_events": {{ result.cumulative_care_seeking_events | tojson | safe }},
+  "spatial_daily_grids": {{ result.spatial_daily_grids | tojson | safe }},
+  "spatial_axes": {{ spatial_axes | tojson | safe }},
+  "basemap": {{ basemap | tojson | safe }}
+}
+</script>
+</div>

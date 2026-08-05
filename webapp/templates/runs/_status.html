@@ -1,0 +1,16 @@
+<div id="run-content"
+     {% if status.value not in ("done", "error") %}
+     hx-get="/runs/{{ job_id }}/status" hx-trigger="load delay:2s" hx-swap="outerHTML"
+     {% endif %}>
+  {% if status.value == "queued" %}
+    <p><span class="status-pill status-queued">Queued</span> Another run is in progress - yours will
+    start as soon as it's free. This page updates automatically.</p>
+  {% elif status.value == "running" %}
+    <p><span class="status-pill status-running">Running</span> Your simulation is in progress. This
+    can take anywhere from a few seconds to a few minutes depending on scenario size and current
+    server load - this page updates automatically.</p>
+  {% elif status.value == "error" %}
+    <p><span class="status-pill status-error">Error</span> This run failed: <code>{{ error }}</code></p>
+    <p><a href="/scenario">&larr; Back to the scenario builder</a></p>
+  {% endif %}
+</div>

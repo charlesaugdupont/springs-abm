@@ -13,15 +13,8 @@ import re
 
 from abm.constants import GridLayer
 from abm.utils.rng import get_np_rng
+from abm.environment.grid_constants import AKUSE_CENTER_POINT, AKUSE_BOUNDARY_COORDS, GRID_SIZE
 
-AKUSE_CENTER_POINT = (6.0993, 0.12821)
-AKUSE_BOUNDARY_COORDS = [
-    (0.1118, 6.1135),
-    (0.1661, 6.1135),
-    (0.1661, 6.0677),
-    (0.1118, 6.0677),
-]
-GRID_SIZE = 100
 POI_FETCH_RADIUS = 15000
 OSM_POI_TAGS = {"amenity": [GridLayer.SCHOOL, GridLayer.WORSHIP]}
 PROCEDURAL_POI_COUNTS = {GridLayer.SCHOOL: 0, GridLayer.WORSHIP: 0, GridLayer.WATER: 0}

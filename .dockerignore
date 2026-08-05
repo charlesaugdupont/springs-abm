@@ -1,0 +1,38 @@
+.git
+.gitignore
+.pytest_cache
+pytest.ini
+__pycache__
+*.pyc
+.DS_Store
+
+venv/
+env/
+
+# Not needed in the deployed image - see Dockerfile's COPY list, which
+# copies only what webapp/ actually imports.
+main.py
+run_viz.py
+inspect_grid.py
+sensitivity.py
+requirements.txt
+notebooks/
+scripts/
+abm/simulation_analysis/
+experiments/calibration/
+experiments/care_seeking/
+experiments/shocks/
+experiments/vaccination/
+
+cache/
+outputs/
+data/
+docs/
+streamlit_outputs/
+
+# Only the one cached grid the webapp actually uses is needed - matches
+# the .gitignore exception pattern.
+grids/*
+!grids/7d9ce7c720a6/
+grids/7d9ce7c720a6/*
+!grids/7d9ce7c720a6/grid.npz

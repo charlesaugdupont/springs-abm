@@ -1,0 +1,20 @@
+# Deployed-image dependencies for the webapp/ subsystem only - deliberately
+# narrower than the root requirements.txt. Excludes geopandas/rasterio/
+# osmnx/contextily/shapely (only needed by offline grid-creation tooling,
+# never touched at webapp runtime - see abm/factories/environment_factory.py
+# vs. abm/environment/grid_generator.py) and matplotlib/seaborn/pyarrow/
+# streamlit/altair/zarr (the results page renders client-side via Plotly.js,
+# not server-side matplotlib - see webapp/static/js/results.js). torch is
+# installed separately in the Dockerfile from the CPU-only wheel index, to
+# avoid pulling in the multi-GB CUDA build this project never uses.
+
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+jinja2==3.1.6
+python-multipart==0.0.32
+itsdangerous==2.2.0
+pydantic==2.12.5
+PyYAML==6.0.3
+numpy==2.4.3
+scipy==1.18.0
+pandas==2.3.3
