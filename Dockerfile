@@ -33,4 +33,9 @@ EXPOSE 8000
 # --workers 1 is REQUIRED, not a default left un-tuned: webapp/jobs.py's
 # in-memory job store and webapp/executor.py's single-slot execution queue
 # are both process-local singletons - see the plan's §2/§6.
-CMD ["uvicorn", "webapp.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+#
+# Shell form (not exec-form array) so $PORT expands - Render (like most
+# PaaS Docker hosts) injects its own PORT env var at runtime and expects
+# the container to listen on it, not on a value baked in at build time.
+# Falls back to 8000 for local `docker run` with no PORT set.
+CMD uvicorn webapp.app:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1

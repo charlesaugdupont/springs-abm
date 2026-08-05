@@ -8,14 +8,21 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from webapp import auth, executor
 from webapp.routers import about, runs, scenario
-from webapp.settings import IS_DEV, SESSION_SECRET_KEY, SHARED_PASSWORD
+from webapp.settings import DEV_INSECURE_SECRET_KEY, IS_DEV, SESSION_SECRET_KEY, SHARED_PASSWORD
 
 app = FastAPI(title="SPRINGS-ABM")
 
-if not SHARED_PASSWORD and not IS_DEV:
-    raise RuntimeError(
-        "WEBAPP_SHARED_PASSWORD must be set outside of local dev (WEBAPP_ENV=dev)."
-    )
+if not IS_DEV:
+    if not SHARED_PASSWORD:
+        raise RuntimeError(
+            "WEBAPP_SHARED_PASSWORD must be set outside of local dev (WEBAPP_ENV=dev)."
+        )
+    if SESSION_SECRET_KEY == DEV_INSECURE_SECRET_KEY:
+        raise RuntimeError(
+            "WEBAPP_SECRET_KEY must be set to a real random value outside of local dev "
+            "(WEBAPP_ENV=dev) - left at its insecure default, session cookies would be "
+            "forgeable. Generate one with: python3 -c \"import secrets; print(secrets.token_hex(32))\""
+        )
 
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY, same_site="lax")
 

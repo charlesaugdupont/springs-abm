@@ -5,8 +5,10 @@ import os
 DEFAULT_GRID_ID = "7d9ce7c720a6"  # the only grid that exists - see Finding #6, never derived from user input
 
 # Session/auth (see webapp/auth.py). No defaults for secrets in production:
-# app.py's startup check refuses to boot without WEBAPP_SHARED_PASSWORD set.
-SESSION_SECRET_KEY = os.environ.get("WEBAPP_SECRET_KEY", "dev-only-insecure-secret-change-me")
+# app.py's startup check refuses to boot outside dev if either is missing/
+# left at its insecure default.
+DEV_INSECURE_SECRET_KEY = "dev-only-insecure-secret-change-me"
+SESSION_SECRET_KEY = os.environ.get("WEBAPP_SECRET_KEY", DEV_INSECURE_SECRET_KEY)
 SHARED_PASSWORD = os.environ.get("WEBAPP_SHARED_PASSWORD")
 IS_DEV = os.environ.get("WEBAPP_ENV", "dev") == "dev"
 
