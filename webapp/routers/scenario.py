@@ -9,12 +9,17 @@ from pydantic import ValidationError
 from webapp.auth import require_login
 from webapp.executor import QueueFullError, submit_job
 from webapp.parameter_registry import CATEGORY_ORDER, by_category
-from webapp.scenario_form import FORM_FIELD_TO_PATH, ScenarioFormInput, build_sveir_config
+from webapp.scenario_form import FORM_FIELD_TO_PATH, RANGE_PAIR_TO_PATH, ScenarioFormInput, build_sveir_config
 from webapp.templating import templates
 
 router = APIRouter()
 
-PATH_TO_FORM_FIELD = {path: name for name, path in FORM_FIELD_TO_PATH.items()}
+# For range-pair fields (ui_widget="range-pair"), "form_name" is the BASE name - the
+# template builds the actual <name>_min/<name>_max input names itself (see scenario_form.py).
+PATH_TO_FORM_FIELD = {
+    **{path: name for name, path in FORM_FIELD_TO_PATH.items()},
+    **{path: name for name, path in RANGE_PAIR_TO_PATH.items()},
+}
 
 
 def _category_view() -> list[dict]:

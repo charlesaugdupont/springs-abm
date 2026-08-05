@@ -5,10 +5,17 @@
   {% if status.value == "queued" %}
     <p><span class="status-pill status-queued">Queued</span> Another run is in progress - yours will
     start as soon as it's free. This page updates automatically.</p>
+    <progress></progress>
   {% elif status.value == "running" %}
     <p><span class="status-pill status-running">Running</span> Your simulation is in progress. This
     can take anywhere from a few seconds to a few minutes depending on scenario size and current
     server load - this page updates automatically.</p>
+    {% if progress_total %}
+      <progress value="{{ progress_day }}" max="{{ progress_total }}"></progress>
+      <p class="mono progress-label">Day {{ progress_day }} of {{ progress_total }}</p>
+    {% else %}
+      <progress></progress>
+    {% endif %}
   {% elif status.value == "error" %}
     <p><span class="status-pill status-error">Error</span> This run failed: <code>{{ error }}</code></p>
     <p><a href="/scenario">&larr; Back to the scenario builder</a></p>

@@ -61,13 +61,28 @@ _field_definitions: dict[str, Any] = {
 # builder template, via routers/scenario.py's PATH_TO_FORM_FIELD) find them like any other
 # registry-driven field rather than needing special-cased lookups.
 FORM_FIELD_TO_PATH: dict[str, str] = {p: p for p in _STRUCTURAL_PATHS}
+# Range-valued fields (alpha/gamma/lambda_range) map one registry path to TWO form fields
+# (<name>_min / <name>_max), reassembled into a [min, max] list in build_sveir_config -
+# tracked separately since they don't fit FORM_FIELD_TO_PATH's 1:1 shape.
+RANGE_PAIR_TO_PATH: dict[str, str] = {}
 
 for _meta in editable_fields():
     if _meta.path in _STRUCTURAL_PATHS:
         continue  # handled explicitly above (hosting caps, not registry ui_max)
     _form_name = _form_field_name(_meta.path)
-    _default = float(get_param(SVEIRCONFIG, _meta.path))
-    _field_definitions[_form_name] = (float, Field(default=_default, ge=_meta.ui_min, le=_meta.ui_max))
+
+    if _meta.ui_widget == "range-pair":
+        _default_lo, _default_hi = get_param(SVEIRCONFIG, _meta.path)
+        _field_definitions[f"{_form_name}_min"] = (float, Field(default=float(_default_lo), ge=_meta.ui_min, le=_meta.ui_max))
+        _field_definitions[f"{_form_name}_max"] = (float, Field(default=float(_default_hi), ge=_meta.ui_min, le=_meta.ui_max))
+        RANGE_PAIR_TO_PATH[_form_name] = _meta.path
+        continue
+
+    _default = get_param(SVEIRCONFIG, _meta.path)
+    if _meta.is_integer:
+        _field_definitions[_form_name] = (int, Field(default=int(_default), ge=int(_meta.ui_min), le=int(_meta.ui_max)))
+    else:
+        _field_definitions[_form_name] = (float, Field(default=float(_default), ge=_meta.ui_min, le=_meta.ui_max))
     FORM_FIELD_TO_PATH[_form_name] = _meta.path
 
 ScenarioFormInput = create_model(
@@ -101,5 +116,11 @@ def build_sveir_config(form: "ScenarioFormInput") -> SVEIRConfig:
             if pname not in active:
                 continue  # no object to set this on - the pathogen isn't in cfg.pathogens
         set_param(cfg, path, getattr(form, form_name))
+
+    for form_name, path in RANGE_PAIR_TO_PATH.items():
+        lo, hi = getattr(form, f"{form_name}_min"), getattr(form, f"{form_name}_max")
+        if lo > hi:
+            lo, hi = hi, lo  # tolerate the two independent sliders being dragged past each other
+        set_param(cfg, path, [lo, hi])
 
     return cfg

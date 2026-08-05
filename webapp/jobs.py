@@ -60,6 +60,8 @@ class JobRecord:
     config_form: dict[str, Any]
     result: SimResultBundle | None = None
     error: str | None = None
+    progress_day: int = 0
+    progress_total: int = 0
 
 
 _JOBS: dict[str, JobRecord] = {}
@@ -85,10 +87,20 @@ def get_job(job_id: str) -> JobRecord | None:
         return _JOBS.get(job_id)
 
 
-def set_running(job_id: str) -> None:
+def set_running(job_id: str, total_days: int = 0) -> None:
     with _LOCK:
         if job_id in _JOBS:
             _JOBS[job_id].status = JobStatus.RUNNING
+            _JOBS[job_id].progress_total = total_days
+
+
+def set_progress(job_id: str, day: int) -> None:
+    """Called from inside the simulation's day loop (webapp/simulation_runner.py) to report
+    real progress - safe to call from the worker thread, this module's lock is a
+    threading.Lock (not asyncio), and jobs.py already assumes cross-thread access."""
+    with _LOCK:
+        if job_id in _JOBS:
+            _JOBS[job_id].progress_day = day
 
 
 def set_done(job_id: str, result: SimResultBundle) -> None:

@@ -58,39 +58,72 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monosp
 .springs-nav a:hover { text-decoration: underline; }
 .springs-nav .brand { font-weight: 700; font-size: 1.1rem; }
 .springs-nav .links { display: flex; gap: 1.5rem; align-items: center; }
-/* Pico.css makes <button>/<form> elements block-level and full-width by
-   default, which broke the nav's alignment - the Log out button stretched
-   to fill its flex slot instead of sitting inline with the links either
-   side of it. Explicit inline-flex/auto-width overrides that. */
-.springs-nav form { margin: 0; display: inline-flex; }
+/* Pico.css applies fairly involved button styling (padding/border/height
+   all driven by CSS custom properties) that a piecemeal override kept
+   fighting without fully winning. Two more definitive fixes instead:
+   `display: contents` makes the <form> wrapper disappear from the box
+   model entirely, so the button becomes a direct flex item of .links
+   (same row, same `gap` spacing as its <a> siblings); `all: unset` wipes
+   every inherited/UA/framework style off the button before reapplying
+   just what's needed, rather than overriding properties one at a time. */
+.springs-nav form { display: contents; }
 .springs-nav button.link-btn {
-  background: none; border: none; color: white; text-decoration: none;
-  cursor: pointer; font-weight: 500; padding: 0; font-size: 1rem;
-  width: auto; display: inline;
+  all: unset;
+  cursor: pointer;
+  color: white;
+  font-weight: 500;
+  font-size: 1rem;
 }
 .springs-nav button.link-btn:hover { text-decoration: underline; }
 
 main.container { max-width: 1100px; }
 
-/* ---- Info boxes: consistent everywhere a parameter's rationale appears ---- */
-.info-box {
-  border-left: 3px solid var(--springs-teal);
+/* ---- Info tooltips: a small (i) icon next to a label that opens a
+   floating popover on click, rather than an inline block that pushes the
+   rest of the page down - keeps each parameter row compact. ---- */
+.info-tooltip { position: relative; display: inline-block; margin-left: 0.4rem; vertical-align: middle; }
+.info-tooltip summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
   background: var(--springs-teal-light);
-  border-radius: 0 6px 6px 0;
-  padding: 0.6rem 0.9rem;
-  margin: 0.4rem 0 1rem;
-  font-size: 0.9rem;
+  color: var(--springs-teal-dark);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-style: normal;
+}
+.info-tooltip summary::-webkit-details-marker { display: none; }
+.info-tooltip summary::marker { display: none; }
+[data-theme="dark"] .info-tooltip summary { background: #163826; color: #7fd4c9; }
+.info-tooltip .tooltip-content {
+  position: absolute;
+  top: 1.6rem;
+  left: 0;
+  z-index: 30;
+  width: 280px;
+  max-width: 80vw;
+  background: var(--pico-card-background-color, white);
+  border: 1px solid var(--springs-border);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  font-size: 0.85rem;
+  font-weight: 400;
   color: var(--pico-color);
 }
-.info-box summary {
-  cursor: pointer;
-  color: var(--springs-teal-dark);
-  font-weight: 500;
-  list-style: none;
+/* Plain, non-interactive lookalike used in intro copy ("click the (i)..."). */
+.info-tooltip-inline {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.15rem; height: 1.15rem; border-radius: 50%;
+  background: var(--springs-teal-light); color: var(--springs-teal-dark);
+  font-size: 0.7rem; font-weight: 700; vertical-align: middle;
 }
-.info-box summary::-webkit-details-marker { display: none; }
-.info-box summary::before { content: "\24D8  "; }
-[data-theme="dark"] .info-box summary { color: #7fd4c9; }
+[data-theme="dark"] .info-tooltip-inline { background: #163826; color: #7fd4c9; }
 
 /* ---- Evidence-tier badges: same colors everywhere (scenario builder + About page) ---- */
 .tier-badge {
@@ -122,8 +155,14 @@ main.container { max-width: 1100px; }
 /* The always-visible "Pathogens" block still uses a plain h3 (not
    collapsible - it's the one category worth seeing without a click). */
 .param-category > h3 { margin: 0; padding: 1.2rem 1.5rem 0.4rem; color: var(--springs-teal-dark); }
-.param-category-static { padding-bottom: 1.2rem; }
+.param-category-static { padding: 0 1.5rem 1.2rem; }
 [data-theme="dark"] .param-category > h3 { color: #7fd4c9; }
+
+/* Compact horizontal row instead of Pico's default stacked/spaced labels -
+   two short checkboxes don't need a full line + margin each. */
+.pathogen-toggles { display: flex; align-items: center; gap: 1.75rem; flex-wrap: wrap; }
+.pathogen-toggle { display: flex; align-items: center; gap: 0.5rem; margin: 0; width: auto; }
+.pathogen-hint { font-size: 0.85rem; color: var(--springs-text-muted); }
 
 /* Two-column grid of collapsible categories, default-collapsed - the
    scenario builder was a very long single-column scroll before this. */
@@ -134,16 +173,14 @@ main.container { max-width: 1100px; }
   padding: 1.1rem 1.5rem;
   font-size: 1.1rem;
   font-weight: 700;
+  line-height: 1.2;
   color: var(--springs-teal-dark);
   cursor: pointer;
-  list-style: none;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
-.param-category > details > summary::-webkit-details-marker { display: none; }
-.param-category > details > summary::after { content: "\25BE"; font-size: 0.9rem; opacity: 0.6; }
-.param-category > details[open] > summary::after { content: "\25B4"; }
+/* Keep the browser's native disclosure triangle (no custom ::after arrow
+   here) - a previous attempt added a custom arrow on top of the native
+   one without fully suppressing it in every browser, rendering as two
+   overlapping arrows. */
 [data-theme="dark"] .param-category > details > summary { color: #7fd4c9; }
 .param-category .details-body { padding: 0 1.5rem 1.2rem; }
 
@@ -151,19 +188,25 @@ main.container { max-width: 1100px; }
 .nested-readonly > summary { font-weight: 500; font-size: 0.9rem; cursor: pointer; }
 .nested-readonly .details-body { padding: 0.5rem 0 0; }
 
-.param-field { margin-bottom: 1.1rem; }
-.param-field label { font-weight: 600; margin-bottom: 0.15rem; display: block; }
+/* Each parameter gets a clear, compact row with a visible separator from
+   its neighbors - previously it was hard to tell where one parameter's
+   controls ended and the next one's label began. */
+.param-field { padding: 0.65rem 0; border-bottom: 1px solid var(--springs-border); }
+.param-field:last-child { border-bottom: none; }
+.param-field label { font-weight: 600; margin-bottom: 0.4rem; display: block; }
 .param-field .field-value { color: var(--springs-teal-dark); font-weight: 600; }
 [data-theme="dark"] .param-field .field-value { color: #7fd4c9; }
 
-.readonly-param {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 0.35rem 0;
-  border-bottom: 1px dashed var(--springs-border);
+.field-row { display: flex; align-items: center; gap: 0.6rem; }
+.field-row input[type="range"] { flex: 1; }
+.field-unit { opacity: 0.7; font-size: 0.8rem; white-space: nowrap; }
+
+.range-pair { gap: 1.5rem; }
+.range-pair-label {
+  font-weight: 400 !important; font-size: 0.85rem;
+  display: flex; align-items: center; gap: 0.5rem; margin: 0 !important;
 }
-.readonly-param:last-child { border-bottom: none; }
+.range-pair-label input { max-width: 7rem; }
 
 /* ---- Preset chips ---- */
 .chip-group { display: flex; gap: 0.5rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
@@ -227,3 +270,6 @@ main.container { max-width: 1100px; }
 .status-pill { display:inline-block; padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600; }
 .status-queued, .status-running { background: var(--springs-accent-light); color: #8a4f0a; }
 .status-error { background: #fbdada; color: #a02020; }
+
+#run-content progress { width: 100%; margin-top: 0.5rem; }
+.progress-label { margin-top: 0.4rem; color: var(--springs-text-muted); font-size: 0.85rem; }

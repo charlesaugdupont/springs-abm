@@ -15,11 +15,13 @@ mechanism that keeps the About page from drifting out of sync with the
 model - see webapp/tests/test_parameter_registry.py for the completeness
 check that enforces it.
 
-Editability rule (a deliberate, disclosed default - not an arbitrary
-whitelist): evidence_tier="literature" or "structural" -> read-only;
-"calibrated" or "assumption" -> editable, UNLESS the field is non-scalar
-(e.g. a [min, max] range) or has a documented fragility (noted in its own
-rationale), in which case it's shown read-only despite its tier.
+Editability: every scientific/behavioral parameter is editable, regardless
+of evidence_tier - the tier badge tells you how much to trust the value,
+it is not a permission gate. The only fields kept out of the UI entirely
+are genuine internal plumbing (category="internal": device, grid_id,
+model_identifier, ...) that have no other valid value in this deployment.
+Range-valued parameters (alpha/gamma/lambda_range) are editable via a
+min+max pair (ui_widget="range-pair") rather than a single slider.
 """
 from __future__ import annotations
 
@@ -47,12 +49,16 @@ class ParamMeta:
     unit: str | None = None
     ui_min: float | None = None
     ui_max: float | None = None
-    ui_widget: str = "slider"       # "slider" | "number" | "toggle" | "number+randomize-button"
+    ui_widget: str = "slider"       # "slider" | "number+randomize-button" | "range-pair"
     ui_step: float | None = None    # explicit step for whole-number fields (e.g. agent/day counts);
                                      # None means "continuous" - the template renders step="any" so
                                      # the browser never rejects a dragged value as "off-grid" (a real
                                      # bug: a computed fractional step like 0.0035 combined with
                                      # floating-point drift made some sliders un-submittable)
+    is_integer: bool = False        # whole-number config field (e.g. exposure_period, in days) -
+                                     # the generated form field is typed int, not float, so a
+                                     # fractional slider value is rejected with a clear validation
+                                     # error rather than silently corrupting the config
 
 
 CATEGORY_ORDER = [
@@ -102,45 +108,44 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="step_target", label="Simulation length", category="Population & Demographics",
         evidence_tier="structural", editable=True, ui_widget="slider", unit="days",
-        ui_min=30, ui_max=200, ui_step=10,
+        ui_min=30, ui_max=500, ui_step=10,
         rationale="Number of simulated days. The model shows one large initial epidemic wave "
                   "(peaking around day 30) before settling into a lower quasi-equilibrium by "
                   "roughly day 150-200 - short runs may only capture the initial wave.",
     ),
     ParamMeta(
         path="average_household_size", label="Average household size", category="Population & Demographics",
-        evidence_tier="literature",
-        rationale="Mean household size (3.2), used as the Poisson-distribution parameter for "
+        evidence_tier="literature", editable=True, ui_min=1.5, ui_max=6.0, unit="people",
+        rationale="Mean household size, used as the Poisson-distribution parameter for "
                   "generating households. Empirically sourced from Ghana census/DHS-MICS-style "
                   "survey data, not an assumption.",
     ),
     ParamMeta(
         path="child_probability", label="Child probability", category="Population & Demographics",
-        evidence_tier="literature",
+        evidence_tier="literature", editable=True, ui_min=0.0, ui_max=0.5,
         rationale="Probability a non-first household member is a child. Empirically sourced from "
                   "the same Ghana census/DHS-MICS-style survey data as household size.",
     ),
     ParamMeta(
         path="alpha_range", label="Wealth/health utility weight range (α)", category="Population & Demographics",
-        evidence_tier="assumption",
+        evidence_tier="assumption", editable=True, ui_widget="range-pair", ui_min=0.0, ui_max=1.0,
         rationale="Sampling range for each agent's individual weighting of wealth vs. health in "
                   "their care-seeking decisions. A plausible, exploratory range representing "
-                  "behavioral diversity - not fit to measured risk preferences in this population. "
-                  "Not exposed as an editable control in v1 (it's a range, not a single value).",
+                  "behavioral diversity - not fit to measured risk preferences in this population.",
     ),
     ParamMeta(
         path="gamma_range", label="Probability-distortion range (γ)", category="Population & Demographics",
-        evidence_tier="assumption",
+        evidence_tier="assumption", editable=True, ui_widget="range-pair", ui_min=0.0, ui_max=1.0,
         rationale="Sampling range for each agent's Cumulative Prospect Theory probability-"
                   "distortion parameter. Same status as the α range above: plausible and "
-                  "exploratory, not independently fit; not editable in v1.",
+                  "exploratory, not independently fit.",
     ),
     ParamMeta(
         path="lambda_range", label="Loss-aversion range (λ)", category="Population & Demographics",
-        evidence_tier="assumption",
+        evidence_tier="assumption", editable=True, ui_widget="range-pair", ui_min=0.5, ui_max=5.0,
         rationale="Sampling range for each agent's loss-aversion parameter - how much more a "
                   "potential loss weighs versus an equivalent gain. Same status as the other "
-                  "persona ranges: plausible and exploratory, not editable in v1.",
+                  "persona ranges: plausible and exploratory.",
     ),
     ParamMeta(
         path="num_agent_personas", label="Number of behavioral personas", category="internal",
@@ -196,15 +201,15 @@ REGISTRY: list[ParamMeta] = [
     ),
     ParamMeta(
         path="pathogens[rota].recovery_rate", label="Recovery rate", category="Rotavirus",
-        evidence_tier="literature",
-        unit="probability/day (~3.3 day expected duration)",
+        evidence_tier="literature", editable=True, ui_min=0.1, ui_max=0.5,
+        unit="probability/day (default ~3.3 day expected duration)",
         rationale="Daily recovery probability. Constrained to the ~3-7 day rotavirus illness-"
                   "duration literature range; deliberately excluded from calibration search for "
-                  "this reason, so its value reflects clinical literature, not a model fit.",
+                  "this reason, so its default value reflects clinical literature, not a model fit.",
     ),
     ParamMeta(
         path="pathogens[rota].exposure_period", label="Latent period", category="Rotavirus",
-        evidence_tier="literature", unit="days",
+        evidence_tier="literature", editable=True, is_integer=True, ui_min=1, ui_max=7, ui_step=1, unit="days",
         rationale="Days between exposure and becoming infectious. Anchored to cited rotavirus "
                   "incubation-period literature in the paper's Methods.",
     ),
@@ -253,25 +258,26 @@ REGISTRY: list[ParamMeta] = [
     ),
     ParamMeta(
         path="pathogens[campy].recovery_rate", label="Recovery rate", category="Campylobacter",
-        evidence_tier="literature", unit="probability/day (~6.8 day expected duration)",
+        evidence_tier="literature", editable=True, ui_min=0.05, ui_max=0.3,
+        unit="probability/day (default ~6.8 day expected duration)",
         rationale="Daily recovery probability, literature-grounded illness-duration constraint; "
                   "excluded from calibration search for the same reason as rotavirus's.",
     ),
     ParamMeta(
         path="pathogens[campy].exposure_period", label="Latent period", category="Campylobacter",
-        evidence_tier="literature", unit="days",
+        evidence_tier="literature", editable=True, is_integer=True, ui_min=1, ui_max=10, ui_step=1, unit="days",
         rationale="Days between exposure and becoming infectious. Anchored to cited campylobacter "
                   "incubation-period literature in the paper's Methods.",
     ),
     ParamMeta(
         path="pathogens[campy].beta_poisson_alpha", label="Dose-response shape (α)",
-        category="Campylobacter", evidence_tier="literature",
+        category="Campylobacter", evidence_tier="literature", editable=True, ui_min=0.01, ui_max=0.1,
         rationale="Beta-Poisson dose-response shape parameter for the zoonotic transmission route "
                   "- a standard microbial dose-response model form from the QMRA literature.",
     ),
     ParamMeta(
         path="pathogens[campy].beta_poisson_beta", label="Dose-response scale (β)",
-        category="Campylobacter", evidence_tier="literature",
+        category="Campylobacter", evidence_tier="literature", editable=True, ui_min=0.005, ui_max=0.06,
         rationale="Beta-Poisson dose-response scale parameter, same literature basis as the shape parameter.",
     ),
     ParamMeta(
@@ -298,14 +304,14 @@ REGISTRY: list[ParamMeta] = [
     ),
     ParamMeta(
         path="pathogens[campy].poultry_ownership_prob", label="Poultry ownership rate",
-        category="Campylobacter", evidence_tier="literature",
+        category="Campylobacter", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
         rationale="Probability a household owns poultry. Sourced from a compiled Ghana DHS/MICS-"
                   "style rural survey (no cluster falls inside Akuse itself; a rural-southern-"
                   "Ghana average) - genuinely empirical, not an assumption.",
     ),
     ParamMeta(
         path="pathogens[campy].ruminant_ownership_prob", label="Ruminant ownership rate",
-        category="Campylobacter", evidence_tier="literature",
+        category="Campylobacter", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
         rationale="Probability a household owns ruminants (goats/sheep/cattle). Same DHS/MICS-"
                   "style survey source as poultry ownership.",
     ),
@@ -340,55 +346,55 @@ REGISTRY: list[ParamMeta] = [
     # ------------------------------------------------------------------
     ParamMeta(
         path="illness_mechanics.base_severity_rota", label="Base rotavirus severity",
-        category="Illness Mechanics", evidence_tier="literature",
+        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
         rationale="Base illness severity (0-1 scale) before age/immunity adjustments. Anchored to "
                   "cited literature in the paper's Methods.",
     ),
     ParamMeta(
         path="illness_mechanics.base_severity_campy", label="Base campylobacter severity",
-        category="Illness Mechanics", evidence_tier="literature",
+        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
         rationale="Base illness severity (0-1 scale) before age/immunity adjustments. Anchored to "
                   "cited literature in the paper's Methods.",
     ),
     ParamMeta(
         path="illness_mechanics.age_max_multiplier", label="Age severity multiplier (max)",
-        category="Illness Mechanics", evidence_tier="literature",
+        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=3.0,
         rationale="Extra severity multiplier at birth, decaying toward 1.0 as a child ages. "
                   "Anchored to cited literature on age-related severity in the paper's Methods.",
     ),
     ParamMeta(
         path="illness_mechanics.age_decay_rate", label="Age severity decay rate",
-        category="Illness Mechanics", evidence_tier="literature",
+        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=0.3,
         rationale="Rate at which the age-related severity multiplier decays toward 1.0. Same "
                   "literature basis as the age severity multiplier.",
     ),
     ParamMeta(
         path="illness_mechanics.immunity_factor_vaccine", label="Vaccine immunity factor",
-        category="Illness Mechanics", evidence_tier="literature",
+        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
         rationale="Severity reduction factor conferred by vaccination. Anchored to cited literature "
                   "in the paper's Methods.",
     ),
     ParamMeta(
         path="illness_mechanics.severity_reduction_per_infection", label="Immunity gain per infection",
-        category="Illness Mechanics", evidence_tier="literature",
+        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
         rationale="Severity reduction per prior infection. This immunity is deliberately floored, "
                   "never reaching zero - the mechanistic reason the model sustains transmission "
                   "indefinitely in a closed population with no births.",
     ),
     ParamMeta(
         path="illness_mechanics.duration_min_days", label="Illness duration (minimum)",
-        category="Illness Mechanics", evidence_tier="literature", unit="days",
+        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.5, ui_max=5.0, unit="days",
         rationale="Expected illness duration at severity = 0. Anchored to cited illness-duration "
                   "literature, consistent with each pathogen's recovery_rate.",
     ),
     ParamMeta(
         path="illness_mechanics.duration_max_days", label="Illness duration (maximum)",
-        category="Illness Mechanics", evidence_tier="literature", unit="days",
+        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=5.0, ui_max=25.0, unit="days",
         rationale="Expected illness duration at severity = 1. Same literature basis as the minimum duration.",
     ),
     ParamMeta(
         path="illness_mechanics.duration_noise_std", label="Illness duration (spread)",
-        category="Illness Mechanics", evidence_tier="literature", unit="days",
+        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=4.0, unit="days",
         rationale="Stochastic spread around the expected illness duration. Same literature basis "
                   "as the min/max duration.",
     ),
@@ -436,14 +442,16 @@ REGISTRY: list[ParamMeta] = [
     ),
     ParamMeta(
         path="steering_parameters.cpt_theta", label="CPT gain-sensitivity exponent (θ)",
-        category="Care-Seeking & Behavioral Economics", evidence_tier="literature",
+        category="Care-Seeking & Behavioral Economics", evidence_tier="literature", editable=True,
+        ui_min=0.3, ui_max=1.0,
         rationale="Cumulative Prospect Theory gain-sensitivity exponent, shared across every "
                   "agent. Set to Tversky & Kahneman's (1992) own estimated value, not fit to this "
                   "population.",
     ),
     ParamMeta(
         path="steering_parameters.cpt_eta", label="CPT loss-sensitivity exponent (η)",
-        category="Care-Seeking & Behavioral Economics", evidence_tier="literature",
+        category="Care-Seeking & Behavioral Economics", evidence_tier="literature", editable=True,
+        ui_min=0.3, ui_max=1.0,
         rationale="Cumulative Prospect Theory loss-sensitivity exponent, shared across every "
                   "agent. Same Tversky & Kahneman (1992) literature value as the gain-sensitivity exponent.",
     ),
@@ -456,12 +464,13 @@ REGISTRY: list[ParamMeta] = [
     ),
     ParamMeta(
         path="steering_parameters.daily_health_recovery_rate", label="Baseline health recovery rate",
-        category="Care-Seeking & Behavioral Economics", evidence_tier="structural",
-        rationale="Base daily health recovery when not sick. Must stay in scale with the household "
-                  "income and cost-of-living rates: a documented past bug found this rate an order "
-                  "of magnitude too low, which left adults permanently below the income/cost "
-                  "breakeven and collapsed household wealth to zero regardless of disease burden. "
-                  "Not exposed as an independent tuning knob given that fragility.",
+        category="Care-Seeking & Behavioral Economics", evidence_tier="structural", editable=True,
+        ui_min=0.001, ui_max=0.05,
+        rationale="Base daily health recovery when not sick. Worth caution: must stay roughly in "
+                  "scale with the household income and cost-of-living rates below - a documented "
+                  "past bug found this rate an order of magnitude too low, which left adults "
+                  "permanently below the income/cost breakeven and collapsed household wealth to "
+                  "zero regardless of disease burden.",
     ),
     ParamMeta(
         path="steering_parameters.child_health_weight", label="Weight on child health",
@@ -491,12 +500,12 @@ REGISTRY: list[ParamMeta] = [
     ),
     ParamMeta(
         path="steering_parameters.child_cost_weight", label="Child cost-of-living weight",
-        category="Household Economics", evidence_tier="structural",
+        category="Household Economics", evidence_tier="structural", editable=True,
+        ui_min=0.0, ui_max=1.0,
         rationale="A child's cost-of-living share, as a fraction of an adult's (~0.3, an OECD-"
-                  "modified-equivalence-scale-style discount). A documented past bug found that "
-                  "without this discount, typical parent-headed households were structurally "
-                  "unable to break even at any health level. Not exposed as an independent tuning "
-                  "knob given that fragility.",
+                  "modified-equivalence-scale-style discount). Worth caution: a documented past bug "
+                  "found that without this discount, typical parent-headed households were "
+                  "structurally unable to break even at any health level.",
     ),
     ParamMeta(
         path="steering_parameters.health_based_income", label="Health-based income scaling",

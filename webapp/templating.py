@@ -5,5 +5,8 @@ import json
 
 from fastapi.templating import Jinja2Templates
 
+from webapp.settings import STATIC_VERSION
+
 templates = Jinja2Templates(directory="webapp/templates")
 templates.env.filters["tojson"] = lambda v: json.dumps(v)
+templates.env.globals["static_version"] = STATIC_VERSION

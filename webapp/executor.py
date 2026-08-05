@@ -59,7 +59,7 @@ def _import_only() -> None:
 def _run_and_record(config: SVEIRConfig, job_id: str) -> None:
     """Runs inside the single worker thread. Any exception is caught here (not left to
     propagate into an unawaited Future) and recorded on the job so the UI can show it."""
-    jobs.set_running(job_id)
+    jobs.set_running(job_id, total_days=config.step_target)
     try:
         result = run_simulation_for_ui(config, job_id)
         jobs.set_done(job_id, result)

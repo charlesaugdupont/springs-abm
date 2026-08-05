@@ -26,6 +26,7 @@ from abm.utils.rng import set_global_seed
 from experiments.metrics import (
     campy_route_fractions, care_seeking_metrics, epidemic_metrics, wellbeing_metrics,
 )
+from webapp import jobs
 from webapp.jobs import SimResultBundle
 
 # Downsampled resolution for the results-page spatial scrubber - see the
@@ -105,9 +106,10 @@ def run_simulation_for_ui(config: SVEIRConfig, job_id: str) -> SimResultBundle:
     child_mask = model.graph.ndata[AgentPropertyKeys.IS_CHILD]
 
     daily: dict[str, list] = defaultdict(list)
-    for _day in range(config.step_target):
+    for day in range(config.step_target):
         model.step(child_mask=child_mask)
         _capture_daily_snapshot(model, daily)
+        jobs.set_progress(job_id, day + 1)
 
     pathogen_names = [p.name for p in model.pathogens]
     n_u5 = int(child_mask.sum().item())

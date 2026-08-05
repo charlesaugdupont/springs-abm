@@ -45,6 +45,8 @@ def _context(job_id: str) -> dict:
         "status": record.status,
         "error": record.error,
         "result": record.result,
+        "progress_day": record.progress_day,
+        "progress_total": record.progress_total,
         "basemap": _BASEMAP_META,
         "spatial_axes": _spatial_axes(),
     }
