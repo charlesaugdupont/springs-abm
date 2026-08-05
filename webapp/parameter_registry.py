@@ -48,6 +48,11 @@ class ParamMeta:
     ui_min: float | None = None
     ui_max: float | None = None
     ui_widget: str = "slider"       # "slider" | "number" | "toggle" | "number+randomize-button"
+    ui_step: float | None = None    # explicit step for whole-number fields (e.g. agent/day counts);
+                                     # None means "continuous" - the template renders step="any" so
+                                     # the browser never rejects a dragged value as "off-grid" (a real
+                                     # bug: a computed fractional step like 0.0035 combined with
+                                     # floating-point drift made some sliders un-submittable)
 
 
 CATEGORY_ORDER = [
@@ -90,14 +95,14 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="number_agents", label="Population size", category="Population & Demographics",
         evidence_tier="structural", editable=True, ui_widget="slider", unit="agents",
-        ui_min=500, ui_max=10_000,
+        ui_min=500, ui_max=10_000, ui_step=100,
         rationale="Total number of simulated agents. Larger populations give smoother, less noisy "
                   "outcomes but take longer to run.",
     ),
     ParamMeta(
         path="step_target", label="Simulation length", category="Population & Demographics",
         evidence_tier="structural", editable=True, ui_widget="slider", unit="days",
-        ui_min=30, ui_max=365,
+        ui_min=30, ui_max=200, ui_step=10,
         rationale="Number of simulated days. The model shows one large initial epidemic wave "
                   "(peaking around day 30) before settling into a lower quasi-equilibrium by "
                   "roughly day 150-200 - short runs may only capture the initial wave.",

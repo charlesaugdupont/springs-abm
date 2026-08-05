@@ -29,6 +29,11 @@ from webapp.settings import DEFAULT_GRID_ID, MAX_AGENTS, MAX_STEPS, MIN_AGENTS, 
 
 _STRUCTURAL_PATHS = ("seed", "number_agents", "step_target")
 
+# Fail loudly at import time if the registry's displayed slider bounds and the server's
+# actually-enforced bounds ever drift apart again (see settings.py's comment on MAX_AGENTS).
+assert (REGISTRY_BY_PATH["number_agents"].ui_min, REGISTRY_BY_PATH["number_agents"].ui_max) == (MIN_AGENTS, MAX_AGENTS)
+assert (REGISTRY_BY_PATH["step_target"].ui_min, REGISTRY_BY_PATH["step_target"].ui_max) == (MIN_STEPS, MAX_STEPS)
+
 
 def _form_field_name(path: str) -> str:
     """'pathogens[rota].vaccination_rate' -> 'rota_vaccination_rate'

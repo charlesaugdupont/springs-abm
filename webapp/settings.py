@@ -19,5 +19,13 @@ IS_DEV = os.environ.get("WEBAPP_ENV", "dev") == "dev"
 # registry's ui bounds (which reflect what's scientifically reasonable,
 # not what's currently affordable to compute) - loosen here, not there, if
 # hosting ever changes.
-MIN_AGENTS, MAX_AGENTS = 500, 5_000
+MIN_AGENTS, MAX_AGENTS = 500, 10_000
 MIN_STEPS, MAX_STEPS = 30, 200
+
+# These MUST match parameter_registry.py's number_agents/step_target ui_min/
+# ui_max exactly - the registry drives what the slider's HTML min/max
+# attributes show, these drive what the server actually accepts (see
+# scenario_form.py). A past mismatch here (registry allowed up to 365 days,
+# this cap only allowed 200) meant dragging into that gap produced a value
+# the server then rejected - the two are asserted equal at import time so
+# that class of bug fails loudly instead of silently drifting again.

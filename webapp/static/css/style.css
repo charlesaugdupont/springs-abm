@@ -58,10 +58,15 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monosp
 .springs-nav a:hover { text-decoration: underline; }
 .springs-nav .brand { font-weight: 700; font-size: 1.1rem; }
 .springs-nav .links { display: flex; gap: 1.5rem; align-items: center; }
-.springs-nav form { margin: 0; }
+/* Pico.css makes <button>/<form> elements block-level and full-width by
+   default, which broke the nav's alignment - the Log out button stretched
+   to fill its flex slot instead of sitting inline with the links either
+   side of it. Explicit inline-flex/auto-width overrides that. */
+.springs-nav form { margin: 0; display: inline-flex; }
 .springs-nav button.link-btn {
   background: none; border: none; color: white; text-decoration: none;
   cursor: pointer; font-weight: 500; padding: 0; font-size: 1rem;
+  width: auto; display: inline;
 }
 .springs-nav button.link-btn:hover { text-decoration: underline; }
 
@@ -110,14 +115,44 @@ main.container { max-width: 1100px; }
 .param-category {
   border: 1px solid var(--springs-border);
   border-radius: 8px;
-  padding: 1.2rem 1.5rem;
   margin-bottom: 1.5rem;
   background: var(--pico-card-background-color, white);
+  overflow: hidden;
 }
-.param-category > h3 { margin-top: 0; color: var(--springs-teal-dark); }
+/* The always-visible "Pathogens" block still uses a plain h3 (not
+   collapsible - it's the one category worth seeing without a click). */
+.param-category > h3 { margin: 0; padding: 1.2rem 1.5rem 0.4rem; color: var(--springs-teal-dark); }
+.param-category-static { padding-bottom: 1.2rem; }
 [data-theme="dark"] .param-category > h3 { color: #7fd4c9; }
+
+/* Two-column grid of collapsible categories, default-collapsed - the
+   scenario builder was a very long single-column scroll before this. */
+.category-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
+@media (max-width: 900px) { .category-grid { grid-template-columns: 1fr; } }
+
+.param-category > details > summary {
+  padding: 1.1rem 1.5rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--springs-teal-dark);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.param-category > details > summary::-webkit-details-marker { display: none; }
+.param-category > details > summary::after { content: "\25BE"; font-size: 0.9rem; opacity: 0.6; }
+.param-category > details[open] > summary::after { content: "\25B4"; }
+[data-theme="dark"] .param-category > details > summary { color: #7fd4c9; }
+.param-category .details-body { padding: 0 1.5rem 1.2rem; }
+
+.nested-readonly { margin-top: 0.5rem; }
+.nested-readonly > summary { font-weight: 500; font-size: 0.9rem; cursor: pointer; }
+.nested-readonly .details-body { padding: 0.5rem 0 0; }
+
 .param-field { margin-bottom: 1.1rem; }
-.param-field label { font-weight: 600; margin-bottom: 0.15rem; }
+.param-field label { font-weight: 600; margin-bottom: 0.15rem; display: block; }
 .param-field .field-value { color: var(--springs-teal-dark); font-weight: 600; }
 [data-theme="dark"] .param-field .field-value { color: #7fd4c9; }
 
@@ -165,14 +200,20 @@ main.container { max-width: 1100px; }
 .badge-active { color: var(--springs-accent); font-weight: 600; }
 
 /* ---- About page ---- */
+/* Pico.css styles <nav> as a horizontal flex bar by default (it assumes
+   top-of-page navigation) - this is a vertical sidebar list, so the flex
+   default has to be explicitly overridden or the links wrap inline into
+   a jumble instead of stacking. */
 .about-nav {
+  display: block;
   position: sticky; top: 1rem;
   border: 1px solid var(--springs-border);
   border-radius: 8px;
   padding: 1rem;
   font-size: 0.9rem;
 }
-.about-nav a { display: block; padding: 0.2rem 0; }
+.about-nav ul { list-style: none; margin: 0; padding: 0; }
+.about-nav a { display: block; padding: 0.25rem 0; }
 .about-section { margin-bottom: 2.5rem; scroll-margin-top: 1rem; }
 .about-section h2 { color: var(--springs-teal-dark); border-bottom: 2px solid var(--springs-teal-light); padding-bottom: 0.4rem; }
 [data-theme="dark"] .about-section h2 { color: #7fd4c9; }
