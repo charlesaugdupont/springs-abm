@@ -208,7 +208,10 @@ __marimo__/
 
 # data
 cache/
-grids/
+grids/*
+!grids/7d9ce7c720a6/
+grids/7d9ce7c720a6/*
+!grids/7d9ce7c720a6/grid.npz
 outputs/
 data/
 docs/
@@ -216,6 +219,7 @@ docs/
 .DS_Store
 *.pdf
 *.png
+!webapp/static/img/akuse_basemap.png
 streamlit_outputs/
 
 
