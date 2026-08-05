@@ -145,6 +145,8 @@ python -m experiments.vaccination.run_vaccination_sweep --plot-only             
 
 Common flags across these scripts: `--pilot` (small grid/reps/steps for a quick sanity check before committing to a full run), `--workers N` (parallel processes), `--plot-only`. Results and figures are written to `experiments/outputs/<experiment_name>/`. See each script's module docstring for its specific design (parameters swept, metrics recorded), and `experiments/orchestrator.py`'s docstring for the shared engine's design intent.
 
+`experiments/shocks/` has two scripts: `run_shock_sweep.py` (a single rectangular duration x magnitude shock window; produces the `shocks_day200` result) and `run_shock_scenarios.py` (GoodBYE-paper-inspired cyclical background stress + punctuated/persistent shock recovery shapes, layered on the same underlying mechanism; produces `shocks_scenarios_named`).
+
 ## 7. Configuration
 
 All model parameters are defined in `config.py` using Pydantic models. To alter the model's behavior (e.g., pathogen infectiousness, number of agents, agent persona ranges), you can modify the values in this file before running a simulation.

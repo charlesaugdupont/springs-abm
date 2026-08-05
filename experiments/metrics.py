@@ -302,26 +302,56 @@ def shock_response_metrics(
     baseline_window: int = 30,
     recovery_tolerance: float = 0.005,
     recovery_sustain_days: int = 14,
+    pairing_cols: tuple = ("rep",),
+    recovery_search_from: str = "window_end",
+    control_mask: pd.Series | None = None,
 ) -> pd.DataFrame:
     """
     Per-(combo, rep) sensitivity summary of a water-contamination shock
-    window (see abm/systems/environment.py, experiments/shocks/run_shock_sweep.py):
-    pre-shock baseline prevalence, post-shock peak, time-to-recovery, and
-    excess illness-days vs. a paired magnitude=1 control run sharing the
-    same rep (and therefore the same seed - orchestrator._run_one's
-    seed = base_seed + rep is independent of combo, so the control and every
-    shocked combo at a given rep share an identical stochastic environment
-    until the shock diverges them).
+    window (see abm/systems/environment.py, experiments/shocks/run_shock_sweep.py,
+    experiments/shocks/run_shock_scenarios.py): pre-shock baseline prevalence,
+    post-shock peak, time-to-recovery, and excess illness-days vs. a paired
+    magnitude=1 control run sharing the same rep (and therefore the same seed -
+    orchestrator._run_one's seed = base_seed + rep is independent of combo, so
+    the control and every shocked combo at a given rep share an identical
+    stochastic environment until the shock diverges them).
 
     ts_df   : long time-series frame from run_sweep(..., record_timeseries=True)
               - columns run_id, rep, pathogen, day, u5_prevalence.
     meta_df : the companion results.parquet frame - must carry run_id, rep,
-              "shock.duration", "shock.magnitude".
+              "shock.duration", "shock.magnitude", plus every column in
+              `pairing_cols`.
     start_day : the (fixed, non-swept) day the shock window begins.
 
-    There is exactly one magnitude==1 combo in the shocks design (the
-    explicit control, duration=0) - not one per duration value - so each
-    rep has exactly one control run to match against.
+    pairing_cols : which meta_df columns identify a run's matching control
+        (duration==0, magnitude==1 run). Default ("rep",) reproduces the
+        original run_shock_sweep.py design, which has exactly one control
+        combo total, so `rep` alone is a unique key. run_shock_scenarios.py's
+        design has *multiple* controls (one flat control plus one per cyclical
+        background, e.g. the low-stress and high-stress backgrounds each
+        double as the control for their own shock-on-background scenarios) -
+        pass e.g. pairing_cols=("shock.bg_freq","shock.bg_amp","shock.bg_anchor","rep")
+        there so each scenario pairs against its own matching background,
+        not an unrelated one.
+
+    control_mask : boolean Series aligned with meta_df's index identifying
+        which rows count as "the control" to pair against. Default (None)
+        uses (shock.duration==0) & (shock.magnitude==1), reproducing the
+        original behavior. run_shock_scenarios.py needs this to be
+        overridable because it has *multiple* duration==0/magnitude==1 rows
+        (a flat control plus each cyclical-background-only scenario) that
+        serve different comparison purposes depending on the question asked:
+        pass the default mask with pairing_cols=("shock.bg_freq",...,"rep")
+        to isolate a shock's marginal effect against its own matching
+        background, or pass a mask selecting only the single true flat
+        control (e.g. (bg_freq==0)&(bg_amp==0)&is_control) with
+        pairing_cols=("rep",) to rank every scenario's *total* severity
+        against one common baseline (the GoodBYE-Fig-3-style ranking). Two
+        separate calls, not one call trying to do both at once - a static
+        pairing_cols can't express "scenario 5 pairs with scenario 1, but
+        scenario 1 itself pairs with scenario 0" in a single pass, since
+        scenario 1 is simultaneously a control (for 5/6) and a non-control
+        (relative to scenario 0).
 
     Recovery is judged against the paired control's OWN trajectory, not a
     static pre-shock baseline: this model produces one large epidemic wave
@@ -341,6 +371,15 @@ def shock_response_metrics(
     (same seed only guarantees identical draws up to first divergence), so a
     single day's difference is noisy.
 
+    recovery_search_from : where the recovery search window begins.
+        "window_end" (default, original behavior) = start_day + duration -
+        correct for a "persistent" shock shape, which holds flat at peak
+        magnitude for the whole window before an instant revert, so recovery
+        can only begin once the hold ends. "start_day" = search the whole
+        post-onset period instead - needed for a "punctuated" shape (gradual/
+        continuous decay from the moment of onset, no flat hold to wait out)
+        and harmless for pure-cyclical scenarios (duration=0, see below).
+
     `excess_illness_days` is reported in absolute under-5 child-days, not raw
     prevalence-fraction-days, since "0.7 excess prevalence-days" is not a
     directly interpretable quantity (prevalence is a fraction of the u5
@@ -351,9 +390,19 @@ def shock_response_metrics(
     prevalence)`, both already present in meta_df/ts_df, rather than
     requiring metrics_fn to have recorded n_u5 explicitly - this keeps the
     function usable on older saved results too.
+
+    For duration=0 combos (pure-cyclical background scenarios, no discrete
+    shock event), `time_to_recovery`/`recovered_by_sim_end` are reported as
+    NaN/False rather than a degenerate value - there is no discrete event to
+    recover from, so "time to recovery" isn't a meaningful quantity there;
+    `excess_illness_days` (a paired-control diff over the whole post-onset
+    window) still is, and remains the primary comparison metric.
     """
-    meta = meta_df[["run_id", "rep", "shock.duration", "shock.magnitude",
-                     f"{pathogen}_cumulative_u5_days"]].drop_duplicates("run_id")
+    pairing_cols = list(pairing_cols)
+    meta_cols = ["run_id", "shock.duration", "shock.magnitude", f"{pathogen}_cumulative_u5_days"]
+    meta_cols += [c for c in pairing_cols if c not in meta_cols]
+    meta_cols += [c for c in meta_df.columns if c.startswith("shock.") and c not in meta_cols]
+    meta = meta_df[meta_cols].drop_duplicates("run_id")
     ts = ts_df[ts_df["pathogen"] == pathogen].drop(columns=["rep"], errors="ignore").merge(
         meta, on="run_id", how="inner"
     )
@@ -363,10 +412,21 @@ def shock_response_metrics(
         meta.set_index("run_id")[f"{pathogen}_cumulative_u5_days"] / full_run_prevalence_sum
     )
 
-    controls = meta[meta["shock.magnitude"] == 1].set_index("rep")["run_id"]
+    if control_mask is None:
+        is_control = (meta["shock.duration"] == 0) & (meta["shock.magnitude"] == 1)
+    else:
+        is_control = control_mask.reindex(meta.index).fillna(False).astype(bool)
+    controls = meta.loc[is_control].set_index(pairing_cols)["run_id"]
+    if controls.index.has_duplicates:
+        dupes = controls.index[controls.index.duplicated()].unique().tolist()
+        raise ValueError(
+            f"shock_response_metrics: pairing_cols={pairing_cols} does not uniquely identify a "
+            f"control run for key(s) {dupes[:5]} - multiple control rows share the same pairing "
+            f"key. Narrow control_mask (e.g. to a single scenario) or widen pairing_cols."
+        )
     control_series = {
-        rep: ts.loc[ts["run_id"] == run_id].set_index("day")["u5_prevalence"].sort_index()
-        for rep, run_id in controls.items()
+        key: ts.loc[ts["run_id"] == run_id].set_index("day")["u5_prevalence"].sort_index()
+        for key, run_id in controls.items()
     }
 
     rows = []
@@ -377,6 +437,9 @@ def shock_response_metrics(
         magnitude = g["shock.magnitude"].iloc[0]
         end_day = start_day + duration
         n_u5 = float(n_u5_by_run[run_id])
+
+        pairing_key = g[pairing_cols].iloc[0]
+        pairing_key = pairing_key.iloc[0] if len(pairing_cols) == 1 else tuple(pairing_key)
 
         pre = g.loc[(g["day"] >= start_day - baseline_window) & (g["day"] < start_day), "u5_prevalence"]
         baseline = float(pre.mean()) if len(pre) else float("nan")
@@ -389,21 +452,51 @@ def shock_response_metrics(
         else:
             peak_prevalence, peak_day = float("nan"), -1
 
-        control = control_series.get(rep)
+        control = control_series.get(pairing_key)
         if control is not None:
             window = g.loc[g["day"] >= start_day, ["day", "u5_prevalence"]].set_index("day")["u5_prevalence"]
             paired = window - control.reindex(window.index)
             excess_illness_days = float(paired.sum()) * n_u5
 
-            after_window = paired.loc[paired.index >= end_day]
-            rolling = after_window.rolling(recovery_sustain_days, min_periods=recovery_sustain_days).mean().abs()
-            recovered_mask = rolling <= recovery_tolerance
-            if len(rolling) and recovered_mask.any():
-                recovery_idx = recovered_mask.idxmax()  # first True (chronological order preserved)
-                time_to_recovery = int(recovery_idx) - end_day
-                recovered = True
-            else:
+            if duration == 0:
                 time_to_recovery, recovered = float("nan"), False
+            else:
+                # "window_end" (original, unchanged): search starts at
+                # end_day. By then a flat-held ("persistent") shock has had
+                # its full `duration` to diverge the two trajectories, so
+                # there's no risk of the rolling check firing before real
+                # divergence has built up.
+                #
+                # "start_day" (new, for "punctuated"): searching from the
+                # literal moment of onset is unsafe - right at start_day the
+                # two runs are still identical (same seed, no divergence
+                # yet), so the rolling-mean-near-zero check can spuriously
+                # fire within the very first evaluable window (found via
+                # run_shock_scenarios.py's pilot: this produced NEGATIVE
+                # time_to_recovery for punctuated combos - "recovered"
+                # before the window had even ended). Fixed by giving the
+                # effect `recovery_sustain_days` to build up before
+                # searching - NOT by hunting for the trajectory-wide peak
+                # |paired diff| (tried first, reverted: the two runs' RNG
+                # streams decorrelate over the whole rest of the run once
+                # the shock changes infection counts, so a late, unrelated
+                # noise spike can dominate a global argmax and push the
+                # search arbitrarily far into the future - confirmed on the
+                # real shocks_day200 data, where it inflated several
+                # time_to_recovery values from ~13-18 days to 50-100+ days).
+                if recovery_search_from == "start_day":
+                    search_from = start_day + recovery_sustain_days
+                else:
+                    search_from = end_day
+                after_window = paired.loc[paired.index >= search_from]
+                rolling = after_window.rolling(recovery_sustain_days, min_periods=recovery_sustain_days).mean().abs()
+                recovered_mask = rolling <= recovery_tolerance
+                if len(rolling) and recovered_mask.any():
+                    recovery_idx = recovered_mask.idxmax()  # first True (chronological order preserved)
+                    time_to_recovery = int(recovery_idx) - end_day
+                    recovered = True
+                else:
+                    time_to_recovery, recovered = float("nan"), False
         else:
             excess_illness_days = float("nan")
             time_to_recovery, recovered = float("nan"), False
