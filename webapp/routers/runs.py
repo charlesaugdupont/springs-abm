@@ -1,69 +1,56 @@
-"""Results page: shows a job's status while running, and its curves/spatial
-scrubber/summary metrics once done. GET /runs/{id}/status is the HTMX poll
-target - it returns the same _results.html fragment once done, so a fast
-job that finishes before the browser's first poll still renders correctly
-on the very first response."""
+"""Run status/results as JSON. GET /api/runs/{id} is the poll target the
+frontend's React Query hook re-fetches on an interval while a job is
+queued/running (replacing the old HTMX partial-swap poll) - it always
+returns the same shape regardless of status, so a fast job that finishes
+before the first poll still renders correctly on the very first response.
+
+Critically, this now returns `config_form` on every response - the actual
+fix for "submitted parameters vanish after a run starts" (see the plan's
+Context section): the value was already captured server-side before this
+phase, just never sent back to any client.
+
+The former _spatial_axes() helper (mapping the spatial grid's row/col
+indices onto the basemap's geographic extent) is deliberately not carried
+over here - it's pure display-coordinate arithmetic with no server-side
+state dependency, so it's been reimplemented client-side instead, in
+frontend/src/lib/spatialAxes.ts."""
 from __future__ import annotations
 
-import json
 from dataclasses import asdict
-from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 from webapp.auth import require_login
-from webapp.jobs import JobStatus, get_job
-from webapp.templating import templates
+from webapp.jobs import get_job, list_recent
 
 router = APIRouter()
 
-_BASEMAP_META = json.loads(Path("webapp/static/img/akuse_basemap.json").read_text())
 
-
-def _spatial_axes() -> dict:
-    """Maps the downsampled spatial grid's row/col indices onto the basemap's geographic
-    extent, so the heatmap trace lines up with the background image (see
-    webapp/simulation_runner.py's _spatial_grid: row=y-bin index (0=south), col=x-bin index
-    (0=west), matching the basemap PNG's own [minx,maxx] x [miny,maxy] orientation)."""
-    from webapp.simulation_runner import SPATIAL_GRID_SIZE
-
-    minx, maxx = _BASEMAP_META["minx"], _BASEMAP_META["maxx"]
-    miny, maxy = _BASEMAP_META["miny"], _BASEMAP_META["maxy"]
-    xs = [minx + (k + 0.5) / SPATIAL_GRID_SIZE * (maxx - minx) for k in range(SPATIAL_GRID_SIZE)]
-    ys = [miny + (k + 0.5) / SPATIAL_GRID_SIZE * (maxy - miny) for k in range(SPATIAL_GRID_SIZE)]
-    return {"x": xs, "y": ys}
-
-
-def _context(job_id: str) -> dict:
-    record = get_job(job_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Run not found (it may have expired).")
+def _run_json(record) -> dict:
     return {
-        "authenticated": True,
-        "job_id": job_id,
-        "status": record.status,
+        "job_id": record.job_id,
+        "status": record.status.value,
+        "created_at": record.created_at,
+        "config_form": record.config_form,
         "error": record.error,
-        "result": record.result,
         "progress_day": record.progress_day,
         "progress_total": record.progress_total,
-        "basemap": _BASEMAP_META,
-        "spatial_axes": _spatial_axes(),
+        "result": asdict(record.result) if record.result is not None else None,
     }
 
 
-@router.get("/runs/{job_id}", response_class=HTMLResponse, dependencies=[Depends(require_login)])
-def run_page(request: Request, job_id: str):
-    ctx = {"request": request, **_context(job_id)}
-    template = "runs/_results.html" if ctx["status"] == JobStatus.DONE else "runs/_status.html"
-    return templates.TemplateResponse(request, "runs/page.html", {**ctx, "inner_template": template})
+@router.get("/runs", dependencies=[Depends(require_login)])
+def list_runs(limit: int = 20):
+    return {"runs": list_recent(limit=limit)}
 
 
-@router.get("/runs/{job_id}/status", response_class=HTMLResponse, dependencies=[Depends(require_login)])
-def run_status(request: Request, job_id: str):
-    ctx = _context(job_id)
-    template = "runs/_results.html" if ctx["status"] == JobStatus.DONE else "runs/_status.html"
-    return templates.TemplateResponse(request, template, ctx)
+@router.get("/runs/{job_id}", dependencies=[Depends(require_login)])
+def run_detail(job_id: str):
+    record = get_job(job_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Run not found (it may have expired).")
+    return _run_json(record)
 
 
 @router.get("/runs/{job_id}/data.json", dependencies=[Depends(require_login)])

@@ -1,7 +1,0 @@
-{% extends "base.html" %}
-{% block title %}Run {{ job_id[:8] }} - SPRINGS-ABM{% endblock %}
-{% block head %}<script src="/static/vendor/plotly.min.js" defer></script>{% endblock %}
-{% block content %}
-<h2>Simulation run <span class="mono" style="font-size: 1rem; opacity: 0.6;">{{ job_id[:8] }}</span></h2>
-{% include inner_template %}
-{% endblock %}

@@ -3,15 +3,17 @@
 # osmnx/contextily/shapely (only needed by offline grid-creation tooling,
 # never touched at webapp runtime - see abm/factories/environment_factory.py
 # vs. abm/environment/grid_generator.py) and matplotlib/seaborn/pyarrow/
-# streamlit/altair/zarr (the results page renders client-side via Plotly.js,
-# not server-side matplotlib - see webapp/static/js/results.js). torch is
+# streamlit/altair/zarr (the results page renders client-side via ECharts,
+# not server-side matplotlib - see frontend/src/components/charts/). torch is
 # installed separately in the Dockerfile from the CPU-only wheel index, to
 # avoid pulling in the multi-GB CUDA build this project never uses.
+#
+# FastAPI serves a clean JSON API plus the built frontend/ SPA as static
+# files (see webapp/app.py) - no server-side templating or multipart form
+# parsing anywhere anymore, so jinja2/python-multipart were dropped.
 
 fastapi==0.141.1
 uvicorn[standard]==0.52.1
-jinja2==3.1.6
-python-multipart==0.0.32
 itsdangerous==2.2.0
 pydantic==2.12.5
 PyYAML==6.0.3

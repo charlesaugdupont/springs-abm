@@ -1,0 +1,41 @@
+# Cloud Build config for continuous deployment to Cloud Run, triggered on
+# push to main (see the "springs-abm-deploy-on-push" trigger). Builds the
+# same Dockerfile used for local verification, pushes it, then deploys with
+# the exact flags manual deploys used - most importantly --no-cpu-throttling
+# (required: this app runs simulations in a background thread outside the
+# HTTP request that submitted them, which Cloud Run's default CPU-only-
+# during-requests throttling starves - see webui_overhaul_status memory)
+# and --max-instances=1 (required: the SQLite job store and single-worker
+# executor both assume exactly one process).
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-t', '${_IMAGE}', '.']
+
+  - name: gcr.io/cloud-builders/docker
+    args: ['push', '${_IMAGE}']
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - springs-abm
+      - --image=${_IMAGE}
+      - --region=europe-west1
+      - --max-instances=1
+      - --min-instances=0
+      - --memory=2Gi
+      - --no-cpu-throttling
+      - --allow-unauthenticated
+      - --set-env-vars=WEBAPP_ENV=production
+      - --set-secrets=WEBAPP_SECRET_KEY=webapp-secret-key:latest,WEBAPP_SHARED_PASSWORD=webapp-shared-password:latest
+      - --quiet
+
+images:
+  - '${_IMAGE}'
+
+substitutions:
+  _IMAGE: europe-west1-docker.pkg.dev/springs-abm/cloud-run-source-deploy/springs-abm:${SHORT_SHA}
+
+options:
+  logging: CLOUD_LOGGING_ONLY

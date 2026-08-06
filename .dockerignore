@@ -30,6 +30,17 @@ data/
 docs/
 streamlit_outputs/
 
+# The frontend-builder stage does its own `npm ci` + `npm run build` inside
+# the image (see Dockerfile) - a local node_modules/ or a stale local build
+# of webapp/frontend_dist/ would only bloat the build context and risk
+# shipping outdated JS if ever accidentally relied upon.
+frontend/node_modules/
+frontend/dist/
+webapp/frontend_dist/
+e2e-results/
+frontend/test-results/
+frontend/playwright-report/
+
 # Only the one cached grid the webapp actually uses is needed - matches
 # the .gitignore exception pattern.
 grids/*

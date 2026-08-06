@@ -7,19 +7,26 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+# Rooted (leading /) so these Python-packaging-artifact names don't also
+# match unrelated nested directories of the same name elsewhere in the repo
+# - a bare `lib/` here previously matched frontend/src/lib/ too and quietly
+# kept those files out of git entirely (only noticed when `gcloud run
+# deploy --source` used the same .gitignore to filter its upload and the
+# build failed with "Cannot find module '@/lib/...'").
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
+/build/
+/develop-eggs/
+/dist/
+webapp/frontend_dist/
+/downloads/
+/eggs/
+/.eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
 share/python-wheels/
 *.egg-info/
 .installed.cfg

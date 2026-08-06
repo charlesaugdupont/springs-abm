@@ -1,15 +1,14 @@
 """Deployment-facing settings, sourced from environment variables where
 they need to differ between local dev and the hosted deployment."""
 import os
-import time
-
-# Cache-busting query param appended to static asset URLs (see base.html) -
-# a fresh value every process start (i.e. every deploy), so a browser that
-# cached an old stylesheet/script from a previous version fetches the new
-# one instead of silently keeping the stale cached copy after a redeploy.
-STATIC_VERSION = str(int(time.time()))
 
 DEFAULT_GRID_ID = "7d9ce7c720a6"  # the only grid that exists - see Finding #6, never derived from user input
+
+# SQLite job-store path (see webapp/db.py). Relative to the process's cwd
+# (the repo root, both in local dev and in the Dockerfile's WORKDIR) - kept
+# under webapp/ so the existing blanket `data/` rule in .gitignore/
+# .dockerignore already covers it without further changes.
+WEBAPP_DB_PATH = os.environ.get("WEBAPP_DB_PATH", "webapp/data/runs.db")
 
 # Session/auth (see webapp/auth.py). No defaults for secrets in production:
 # app.py's startup check refuses to boot outside dev if either is missing/

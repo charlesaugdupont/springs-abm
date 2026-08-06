@@ -204,7 +204,7 @@ REGISTRY: list[ParamMeta] = [
     ),
     ParamMeta(
         path="pathogens[rota].recovery_rate", label="Recovery rate", category="Rotavirus",
-        evidence_tier="literature", editable=True, ui_min=0.1, ui_max=0.5,
+        evidence_tier="literature", editable=True, ui_min=0.14, ui_max=0.33,
         unit="probability/day",
         rationale="Daily recovery probability (default 0.3005, a ~3.3 day expected duration). "
                   "Constrained to the ~3-7 day rotavirus illness-duration literature range; "
@@ -262,7 +262,7 @@ REGISTRY: list[ParamMeta] = [
     ),
     ParamMeta(
         path="pathogens[campy].recovery_rate", label="Recovery rate", category="Campylobacter",
-        evidence_tier="literature", editable=True, ui_min=0.05, ui_max=0.3,
+        evidence_tier="literature", editable=True, ui_min=0.14, ui_max=0.18,
         unit="probability/day",
         rationale="Daily recovery probability (default 0.1466, a ~6.8 day expected duration), "
                   "literature-grounded illness-duration constraint; excluded from calibration "
@@ -470,12 +470,13 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="steering_parameters.daily_health_recovery_rate", label="Baseline health recovery rate",
         category="Care-Seeking & Behavioral Economics", evidence_tier="structural", editable=True,
-        ui_min=0.001, ui_max=0.05,
+        ui_min=0.005, ui_max=0.05,
         rationale="Base daily health recovery when not sick. Worth caution: must stay roughly in "
                   "scale with the household income and cost-of-living rates below - a documented "
                   "past bug found this rate an order of magnitude too low, which left adults "
                   "permanently below the income/cost breakeven and collapsed household wealth to "
-                  "zero regardless of disease burden.",
+                  "zero regardless of disease burden. ui_min is set well above that bug's exact "
+                  "value (0.001) so the slider can't silently reintroduce it.",
     ),
     ParamMeta(
         path="steering_parameters.child_health_weight", label="Weight on child health",
@@ -506,11 +507,12 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="steering_parameters.child_cost_weight", label="Child cost-of-living weight",
         category="Household Economics", evidence_tier="structural", editable=True,
-        ui_min=0.0, ui_max=1.0,
+        ui_min=0.0, ui_max=0.85,
         rationale="A child's cost-of-living share, as a fraction of an adult's (~0.3, an OECD-"
                   "modified-equivalence-scale-style discount). Worth caution: a documented past bug "
                   "found that without this discount, typical parent-headed households were "
-                  "structurally unable to break even at any health level.",
+                  "structurally unable to break even at any health level. ui_max is set below 1.0 "
+                  "(the bug's exact 'no discount' value) so the slider can't silently reintroduce it.",
     ),
     ParamMeta(
         path="steering_parameters.health_based_income", label="Health-based income scaling",

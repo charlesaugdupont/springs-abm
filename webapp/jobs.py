@@ -1,18 +1,21 @@
 """
-In-memory job store for simulation runs triggered from the scenario
-builder. Deliberately not a database - see the plan's "Result storage"
-note: light/occasional consortium use, no run-history feature in v1, and
-this module is a process-local singleton by design (the deployed process
-runs with exactly one worker - see the Dockerfile).
+Job store for simulation runs triggered from the scenario builder. Backed
+by SQLite (webapp/db.py) rather than an in-memory dict - see that module's
+docstring for why. Every function here keeps its original signature from
+the in-memory-dict version (public API used by webapp/executor.py and
+webapp/simulation_runner.py, both of which need zero changes as a result),
+plus one new function (list_recent) added for the recent-runs feature.
 """
 from __future__ import annotations
 
+import json
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass
 from enum import Enum
-from threading import Lock
 from typing import Any
+
+from webapp import db
 
 
 class JobStatus(str, Enum):
@@ -52,6 +55,16 @@ class SimResultBundle:
     runtime_seconds: float
 
 
+# Fields of SimResultBundle cheap enough to duplicate into the `runs` table's
+# denormalized `summary` column, so GET /api/runs (the list view) never has
+# to load a full run's (potentially multi-MB) time-series/spatial payload
+# just to show a "recent runs" row.
+_SUMMARY_FIELDS = (
+    "pathogen_names", "summary_metrics", "proportion_infected_at_least_once",
+    "n_u5", "runtime_seconds",
+)
+
+
 @dataclass
 class JobRecord:
     job_id: str
@@ -64,80 +77,77 @@ class JobRecord:
     progress_total: int = 0
 
 
-_JOBS: dict[str, JobRecord] = {}
-_LOCK = Lock()
-
 MAX_RETAINED_JOBS = 50
 MAX_RETENTION_SECONDS = 2 * 60 * 60  # 2 hours
 
 
+def _row_to_record(row) -> JobRecord:
+    result = None
+    if row["result"] is not None:
+        result = SimResultBundle(**json.loads(row["result"]))
+    return JobRecord(
+        job_id=row["job_id"],
+        status=JobStatus(row["status"]),
+        created_at=row["created_at"],
+        config_form=json.loads(row["config_form"]),
+        result=result,
+        error=row["error"],
+        progress_day=row["progress_day"],
+        progress_total=row["progress_total"],
+    )
+
+
 def new_job(config_form: dict[str, Any]) -> JobRecord:
     job_id = uuid.uuid4().hex
-    record = JobRecord(
-        job_id=job_id, status=JobStatus.QUEUED, created_at=time.time(), config_form=config_form,
-    )
-    with _LOCK:
-        _evict_locked()
-        _JOBS[job_id] = record
-    return record
+    created_at = time.time()
+    db.evict_old(MAX_RETAINED_JOBS, MAX_RETENTION_SECONDS)
+    db.insert_run(job_id, JobStatus.QUEUED.value, created_at, config_form)
+    return JobRecord(job_id=job_id, status=JobStatus.QUEUED, created_at=created_at, config_form=config_form)
 
 
 def get_job(job_id: str) -> JobRecord | None:
-    with _LOCK:
-        return _JOBS.get(job_id)
+    row = db.get_run(job_id)
+    return _row_to_record(row) if row is not None else None
 
 
 def set_running(job_id: str, total_days: int = 0) -> None:
-    with _LOCK:
-        if job_id in _JOBS:
-            _JOBS[job_id].status = JobStatus.RUNNING
-            _JOBS[job_id].progress_total = total_days
+    db.update_status(job_id, JobStatus.RUNNING.value, progress_total=total_days)
 
 
 def set_progress(job_id: str, day: int) -> None:
     """Called from inside the simulation's day loop (webapp/simulation_runner.py) to report
-    real progress - safe to call from the worker thread, this module's lock is a
-    threading.Lock (not asyncio), and jobs.py already assumes cross-thread access."""
-    with _LOCK:
-        if job_id in _JOBS:
-            _JOBS[job_id].progress_day = day
+    real progress - safe to call from the worker thread, db.py's lock is a threading.Lock
+    (not asyncio), and this module already assumes cross-thread access."""
+    db.update_progress(job_id, day)
 
 
 def set_done(job_id: str, result: SimResultBundle) -> None:
-    with _LOCK:
-        if job_id in _JOBS:
-            _JOBS[job_id].status = JobStatus.DONE
-            _JOBS[job_id].result = result
+    full = asdict(result)
+    summary = {k: full[k] for k in _SUMMARY_FIELDS}
+    db.set_done(job_id, JobStatus.DONE.value, summary, full)
 
 
 def set_error(job_id: str, error: str) -> None:
-    with _LOCK:
-        if job_id in _JOBS:
-            _JOBS[job_id].status = JobStatus.ERROR
-            _JOBS[job_id].error = error
+    db.set_error(job_id, JobStatus.ERROR.value, error)
 
 
 def count_active() -> int:
     """Number of jobs currently queued or running - used to cap accepted jobs."""
-    with _LOCK:
-        return sum(1 for j in _JOBS.values() if j.status in (JobStatus.QUEUED, JobStatus.RUNNING))
+    return db.count_active()
 
 
-def _evict_locked() -> None:
-    """Drops old DONE/ERROR jobs. Caller must hold _LOCK. Never evicts QUEUED/RUNNING jobs."""
-    now = time.time()
-    finished = [
-        j for j in _JOBS.values()
-        if j.status in (JobStatus.DONE, JobStatus.ERROR)
-    ]
-    stale = [j for j in finished if now - j.created_at > MAX_RETENTION_SECONDS]
-    for j in stale:
-        del _JOBS[j.job_id]
-
-    finished = sorted(
-        (j for j in _JOBS.values() if j.status in (JobStatus.DONE, JobStatus.ERROR)),
-        key=lambda j: j.created_at,
-    )
-    overflow = len(finished) - MAX_RETAINED_JOBS
-    for j in finished[:max(0, overflow)]:
-        del _JOBS[j.job_id]
+def list_recent(limit: int = 20) -> list[dict[str, Any]]:
+    """Lightweight recent-runs listing - reads only the denormalized `summary`
+    column, not the full per-day result blob (see _SUMMARY_FIELDS)."""
+    rows = db.list_recent(limit)
+    out = []
+    for row in rows:
+        out.append({
+            "job_id": row["job_id"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "config_form": json.loads(row["config_form"]),
+            "summary": json.loads(row["summary"]) if row["summary"] is not None else None,
+            "error": row["error"],
+        })
+    return out
