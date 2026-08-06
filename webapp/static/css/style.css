@@ -99,6 +99,12 @@ main.container { max-width: 1100px; }
 }
 .info-tooltip summary::-webkit-details-marker { display: none; }
 .info-tooltip summary::marker { display: none; }
+/* Pico gives every <details><summary> its own chevron via ::after
+   (background-image, not `content`) - the same rule that caused the
+   double-arrow bug on category headers leaks onto this icon too unless
+   explicitly suppressed. Confirmed visually via a real screenshot - the
+   icon had a faint grey squiggle next to it before this. */
+.info-tooltip summary::after { display: none; content: none; }
 [data-theme="dark"] .info-tooltip summary { background: #163826; color: #7fd4c9; }
 .info-tooltip .tooltip-content {
   position: absolute;
@@ -170,7 +176,11 @@ main.container { max-width: 1100px; }
 @media (max-width: 900px) { .category-grid { grid-template-columns: 1fr; } }
 
 .param-category > details > summary {
-  padding: 1.1rem 1.5rem;
+  /* Confirmed via direct inspection (getBoundingClientRect): 1.1rem
+     vertical padding + this line-height was producing a ~70px-tall
+     collapsed header - noticeably bulkier than a regular field row
+     (~45px). Tightened, not a rendering bug. */
+  padding: 0.8rem 1.5rem;
   font-size: 1.1rem;
   font-weight: 700;
   line-height: 1.2;
@@ -197,9 +207,15 @@ main.container { max-width: 1100px; }
 .param-field .field-value { color: var(--springs-teal-dark); font-weight: 600; }
 [data-theme="dark"] .param-field .field-value { color: #7fd4c9; }
 
-.field-row { display: flex; align-items: center; gap: 0.6rem; }
-.field-row input[type="range"] { flex: 1; }
-.field-unit { opacity: 0.7; font-size: 0.8rem; white-space: nowrap; }
+/* A long unit string (nowrap, natural content width) sitting next to a
+   flex:1 range input with no minimum will crush the input to 0 width to
+   make room, since flex-basis defaults to 0% - confirmed via direct DOM
+   inspection (an actual case had a 500px-wide unit string and a 0px-wide
+   slider). min-width guarantees the slider stays usable; letting the
+   unit wrap instead of forcing nowrap is the other half of the fix. */
+.field-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.field-row input[type="range"] { flex: 1 1 160px; min-width: 160px; }
+.field-unit { opacity: 0.7; font-size: 0.8rem; }
 
 .range-pair { gap: 1.5rem; }
 .range-pair-label {

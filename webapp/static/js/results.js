@@ -67,13 +67,30 @@ window.renderResultsCharts = function () {
       colorbar: { title: "Cumulative<br>infections" },
     }], {
       margin: { t: 10, r: 20, l: 50, b: 40 },
-      xaxis: { title: "Longitude", range: [basemap.minx, basemap.maxx] },
-      yaxis: { title: "Latitude", range: [basemap.miny, basemap.maxy], scaleanchor: "x" },
+      // constrain:"domain" on both axes matters here: scaleanchor locks the
+      // map to true geographic proportions, but Plotly's default response
+      // to a container wider than the data's own aspect ratio is to EXPAND
+      // the x-axis range to fill it - leaving a gap past the basemap
+      // image's true edge (confirmed visually: a grey band with no image
+      // and a stray heatmap cell floating past it). constrain:"domain"
+      // shrinks the plotting area with padding instead, keeping the axis
+      // range locked to the image's actual extent.
+      xaxis: { title: "Longitude", range: [basemap.minx, basemap.maxx], constrain: "domain" },
+      yaxis: { title: "Latitude", range: [basemap.miny, basemap.maxy], scaleanchor: "x", constrain: "domain" },
       images: [{
         source: "/static/img/akuse_basemap.png", xref: "x", yref: "y",
         x: basemap.minx, y: basemap.maxy,
         sizex: basemap.maxx - basemap.minx, sizey: basemap.maxy - basemap.miny,
         xanchor: "left", yanchor: "top", layer: "below",
+        // Plotly's default sizing ("contain") preserves the source image's
+        // own aspect ratio and letterboxes it into sizex/sizey, leaving a
+        // visible blank gap since the basemap PNG is a square 1000x1000
+        // render of a non-square (wider than tall) geographic box.
+        // "stretch" fills the box exactly, matching how the image was
+        // actually baked (see scripts/bake_basemap.py - it renders into a
+        // square canvas from the same non-square lon/lat extent, so this
+        // un-does that squeeze rather than adding a new one).
+        sizing: "stretch",
       }],
     }, commonConfig);
     dayLabel.textContent = "Day " + dayIdx;

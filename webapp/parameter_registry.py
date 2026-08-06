@@ -127,22 +127,25 @@ REGISTRY: list[ParamMeta] = [
                   "the same Ghana census/DHS-MICS-style survey data as household size.",
     ),
     ParamMeta(
-        path="alpha_range", label="Wealth/health utility weight range (α)", category="Population & Demographics",
-        evidence_tier="assumption", editable=True, ui_widget="range-pair", ui_min=0.0, ui_max=1.0,
+        # Deliberately kept out of the UI (category="internal") per explicit user request -
+        # these still exist and are used exactly as before, just not exposed as a control.
+        # editable=False too, not just hidden: no path from the UI to change these anymore.
+        path="alpha_range", label="Wealth/health utility weight range (α)", category="internal",
+        evidence_tier="assumption",
         rationale="Sampling range for each agent's individual weighting of wealth vs. health in "
                   "their care-seeking decisions. A plausible, exploratory range representing "
                   "behavioral diversity - not fit to measured risk preferences in this population.",
     ),
     ParamMeta(
-        path="gamma_range", label="Probability-distortion range (γ)", category="Population & Demographics",
-        evidence_tier="assumption", editable=True, ui_widget="range-pair", ui_min=0.0, ui_max=1.0,
+        path="gamma_range", label="Probability-distortion range (γ)", category="internal",
+        evidence_tier="assumption",
         rationale="Sampling range for each agent's Cumulative Prospect Theory probability-"
                   "distortion parameter. Same status as the α range above: plausible and "
                   "exploratory, not independently fit.",
     ),
     ParamMeta(
-        path="lambda_range", label="Loss-aversion range (λ)", category="Population & Demographics",
-        evidence_tier="assumption", editable=True, ui_widget="range-pair", ui_min=0.5, ui_max=5.0,
+        path="lambda_range", label="Loss-aversion range (λ)", category="internal",
+        evidence_tier="assumption",
         rationale="Sampling range for each agent's loss-aversion parameter - how much more a "
                   "potential loss weighs versus an equivalent gain. Same status as the other "
                   "persona ranges: plausible and exploratory.",
@@ -202,10 +205,11 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="pathogens[rota].recovery_rate", label="Recovery rate", category="Rotavirus",
         evidence_tier="literature", editable=True, ui_min=0.1, ui_max=0.5,
-        unit="probability/day (default ~3.3 day expected duration)",
-        rationale="Daily recovery probability. Constrained to the ~3-7 day rotavirus illness-"
-                  "duration literature range; deliberately excluded from calibration search for "
-                  "this reason, so its default value reflects clinical literature, not a model fit.",
+        unit="probability/day",
+        rationale="Daily recovery probability (default 0.3005, a ~3.3 day expected duration). "
+                  "Constrained to the ~3-7 day rotavirus illness-duration literature range; "
+                  "deliberately excluded from calibration search for this reason, so its default "
+                  "value reflects clinical literature, not a model fit.",
     ),
     ParamMeta(
         path="pathogens[rota].exposure_period", label="Latent period", category="Rotavirus",
@@ -259,9 +263,10 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="pathogens[campy].recovery_rate", label="Recovery rate", category="Campylobacter",
         evidence_tier="literature", editable=True, ui_min=0.05, ui_max=0.3,
-        unit="probability/day (default ~6.8 day expected duration)",
-        rationale="Daily recovery probability, literature-grounded illness-duration constraint; "
-                  "excluded from calibration search for the same reason as rotavirus's.",
+        unit="probability/day",
+        rationale="Daily recovery probability (default 0.1466, a ~6.8 day expected duration), "
+                  "literature-grounded illness-duration constraint; excluded from calibration "
+                  "search for the same reason as rotavirus's.",
     ),
     ParamMeta(
         path="pathogens[campy].exposure_period", label="Latent period", category="Campylobacter",
@@ -405,7 +410,7 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="steering_parameters.cost_of_care", label="Cost of seeking care",
         category="Care-Seeking & Behavioral Economics", evidence_tier="calibrated", editable=True,
-        ui_min=0.0, ui_max=0.3, unit="fraction of max household wealth",
+        ui_min=0.0, ui_max=0.3, unit="fraction of wealth",
         rationale="Cost of seeking medical care, as a fraction of max household wealth. Calibrated "
                   "jointly with the household income rate against the Ghana DHS childhood-diarrhea "
                   "care-seeking rate (69.2%, 95% CI 65.6-72.8%, n=621). Changing this without also "
@@ -486,7 +491,7 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="steering_parameters.daily_income_rate", label="Daily household income rate",
         category="Household Economics", evidence_tier="calibrated", editable=True,
-        ui_min=0.0, ui_max=0.15, unit="fraction of max household wealth",
+        ui_min=0.0, ui_max=0.15, unit="fraction of wealth",
         rationale="Daily household income, as a fraction of max wealth. Calibrated jointly with "
                   "the cost of care against the Ghana DHS care-seeking rate - see that field's note. "
                   "Changing this alone may pull the model away from the validated DHS-matched fit.",
@@ -494,7 +499,7 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="steering_parameters.daily_cost_of_living", label="Daily cost of living",
         category="Household Economics", evidence_tier="assumption", editable=True,
-        ui_min=0.0, ui_max=0.1, unit="fraction of max household wealth",
+        ui_min=0.0, ui_max=0.1, unit="fraction of wealth",
         rationale="Daily household cost of living, as a fraction of max wealth. A plausible "
                   "modeling default, not independently calibrated (unlike income and cost of care).",
     ),
