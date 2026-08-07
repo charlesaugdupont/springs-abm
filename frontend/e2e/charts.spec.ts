@@ -29,11 +29,12 @@ test('all result charts render after a completed run, and the spatial scrubber v
   const daySlider = page.getByRole('slider', { name: 'Simulation day' })
   await daySlider.focus()
   await daySlider.press('Home')
-  await expect(page.getByText('Day 0')).toBeVisible()
+  // The day label is 1-indexed and shows the total ("Day 1 / 150").
+  await expect(page.getByText(/^Day 1 \/ \d+$/)).toBeVisible()
   const dayZeroShot = await spatialCard.screenshot({ path: 'e2e/screenshots/chart-spatial-day0.png' })
 
   await daySlider.press('End')
-  await expect(page.getByText(/^Day \d+$/)).not.toHaveText('Day 0')
+  await expect(page.getByText(/^Day \d+ \/ \d+$/)).not.toHaveText(/^Day 1 \//)
   const lastDayShot = await spatialCard.screenshot({ path: 'e2e/screenshots/chart-spatial-lastday.png' })
 
   expect(Buffer.compare(dayZeroShot, lastDayShot)).not.toBe(0)

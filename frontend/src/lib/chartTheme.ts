@@ -118,3 +118,25 @@ export function axisStyle(colors: ThemeColors) {
     splitLine: { lineStyle: { color: colors.gridline, width: 1, type: "solid" as const } },
   }
 }
+
+// Shared axis-trigger tooltip formatter that prefixes the day ("Day 132")
+// on the header row - ECharts' `valueFormatter` only formats the value rows,
+// not the axis header, so the bare day number showed otherwise. `valueFmt`
+// formats each series value (e.g. as a percentage). Typed loosely because the
+// ECharts callback-params type is a broad union.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function dayAxisTooltip(valueFmt?: (v: number) => string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (params: any): string => {
+    const arr = Array.isArray(params) ? params : [params]
+    if (arr.length === 0) return ""
+    const rows = arr
+      .map((p) => {
+        const raw = Array.isArray(p.value) ? p.value[p.value.length - 1] : p.value
+        const val = valueFmt ? valueFmt(raw as number) : `${raw}`
+        return `${p.marker ?? ""}${p.seriesName ?? ""}: <b>${val}</b>`
+      })
+      .join("<br/>")
+    return `<span style="font-size:11px;opacity:0.7">Day ${arr[0].axisValue}</span><br/>${rows}`
+  }
+}

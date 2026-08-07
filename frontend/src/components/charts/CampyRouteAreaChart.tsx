@@ -6,22 +6,25 @@ import {
   axisStyle,
   baseGridAxisOption,
   campyRouteColors,
+  dayAxisTooltip,
   CAMPY_ROUTE_ORDER,
   CAMPY_ROUTE_LABEL,
 } from "@/lib/chartTheme"
+import type { EChartsLike } from "@/lib/download"
 
 interface CampyRouteAreaChartProps {
   days: number[]
   /** Per-day NEW Campylobacter infections keyed by route (zoonotic /
    * fecal_oral / food_borne). */
   infectionsByRoute: Record<string, number[]>
+  onReady?: (chart: EChartsLike) => void
 }
 
 /** 100%-stacked area of Campylobacter's three transmission routes over time.
  * Plots the CUMULATIVE-to-date composition (each route's share of all campy
  * infections so far), not raw daily shares: it's smooth, always defined after
  * the first case (no 0/0), and converges to the run-level route fractions. */
-export function CampyRouteAreaChart({ days, infectionsByRoute }: CampyRouteAreaChartProps) {
+export function CampyRouteAreaChart({ days, infectionsByRoute, onReady }: CampyRouteAreaChartProps) {
   const { containerRef, chartRef } = useECharts()
 
   const option = useMemo<EChartsOption>(() => {
@@ -75,7 +78,7 @@ export function CampyRouteAreaChart({ days, infectionsByRoute }: CampyRouteAreaC
       legend: { top: 0, textStyle: { color: colors.secondary, fontSize: 11 } },
       tooltip: {
         trigger: "axis",
-        valueFormatter: (v) => `${(v as number).toFixed(1)}%`,
+        formatter: dayAxisTooltip((v) => `${v.toFixed(1)}%`),
       },
       xAxis: {
         type: "category",
@@ -100,6 +103,10 @@ export function CampyRouteAreaChart({ days, infectionsByRoute }: CampyRouteAreaC
   useEffect(() => {
     chartRef.current?.setOption(option, true)
   }, [chartRef, option])
+
+  useEffect(() => {
+    if (chartRef.current) onReady?.(chartRef.current)
+  }, [chartRef, onReady])
 
   return <div ref={containerRef} className="h-80 w-full" />
 }

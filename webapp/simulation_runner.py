@@ -59,6 +59,72 @@ def _spatial_grid(x: np.ndarray, y: np.ndarray, weights: np.ndarray) -> list[lis
     return downsampled.tolist()
 
 
+def _as_numpy(t) -> np.ndarray:
+    return t.detach().cpu().numpy() if hasattr(t, "detach") else np.asarray(t)
+
+
+def _downsample(layer: np.ndarray, agg: str) -> list[list[float]]:
+    """Downsample a full-res (GRID_SIZE, GRID_SIZE) [y, x] layer to SPATIAL_GRID_SIZE with the
+    same block-binning as _spatial_grid. agg='sum' for point/count masks, 'mean' for continuous
+    [0, 1] density/fraction layers - result is [y_bin][x_bin], aligned with spatial_daily_grids."""
+    blocks = layer.reshape(SPATIAL_GRID_SIZE, _BLOCK, SPATIAL_GRID_SIZE, _BLOCK)
+    reduced = blocks.sum(axis=(1, 3)) if agg == "sum" else blocks.mean(axis=(1, 3))
+    return reduced.astype(float).tolist()
+
+
+def _static_layers(model: SVEIRModel, config: SVEIRConfig, pathogen_names: list[str]) -> dict[str, list[list[float]]]:
+    """Static/reference spatial layers for the results-map overlays (households, animal density,
+    schools/worship/water points, water bodies), all downsampled to the same SPATIAL_GRID_SIZE
+    [y][x] frame as the infection grids so they line up with the basemap. Best-effort: each block
+    is guarded so an optional overlay never breaks a simulation run."""
+    layers: dict[str, list[list[float]]] = {}
+    g = model.graph
+
+    # Household locations: dedup by household and bin their home cells. The day loop ends on the
+    # night phase (everyone home), so the final X/Y are home cells.
+    try:
+        household_id = g.ndata[AgentPropertyKeys.HOUSEHOLD_ID].cpu().numpy()
+        x = g.ndata[AgentPropertyKeys.X].cpu().numpy()
+        y = g.ndata[AgentPropertyKeys.Y].cpu().numpy()
+        _, first_idx = np.unique(household_id, return_index=True)
+        hx = np.clip(x[first_idx].astype(int), 0, GRID_SIZE - 1)
+        hy = np.clip(y[first_idx].astype(int), 0, GRID_SIZE - 1)
+        hh = np.zeros((GRID_SIZE, GRID_SIZE), dtype=float)
+        np.add.at(hh, (hy, hx), 1.0)
+        layers["household_density"] = _downsample(hh, "sum")
+    except Exception:  # pragma: no cover - optional overlay, never fatal
+        pass
+
+    # Animal density (weighted poultry + ruminant) - only built when campy is enabled.
+    if "campy" in pathogen_names:
+        try:
+            poultry = _as_numpy(model.grid_environment.get_dynamic_layer("poultry_density"))
+            ruminant = _as_numpy(model.grid_environment.get_dynamic_layer("ruminant_density"))
+            campy = next(p for p in model.pathogens if p.name == "campy")
+            w_p = float(getattr(campy.config, "poultry_weight", 1.0))
+            w_r = float(getattr(campy.config, "ruminant_weight", 0.45))
+            combined = np.clip(poultry * w_p + ruminant * w_r, 0.0, 1.0)
+            layers["animal_density"] = _downsample(combined, "mean")
+        except Exception:  # pragma: no cover
+            pass
+
+    # Static POI / water-body masks baked into the grid file for this grid_id.
+    try:
+        grid_id = config.spatial_creation_args.grid_id
+        data = np.load(f"grids/{grid_id}/grid.npz", allow_pickle=True)
+        grid = data["grid"]
+        property_map = data["property_map"].item()
+        name_to_idx = {v: k for k, v in property_map.items()}
+        for name, agg in (("school", "sum"), ("place_of_worship", "sum"),
+                          ("water", "sum"), ("natural_water", "mean")):
+            if name in name_to_idx:
+                layers[name] = _downsample(grid[:, :, name_to_idx[name]].astype(float), agg)
+    except Exception:  # pragma: no cover
+        pass
+
+    return layers
+
+
 def _capture_daily_snapshot(model: SVEIRModel, daily: dict[str, list]) -> None:
     """Called once per simulated day, right after model.step(). Reads model.graph.ndata
     directly - cheap vectorized ops, capturing state that isn't tracked historically anywhere
@@ -162,6 +228,7 @@ def run_simulation_for_ui(config: SVEIRConfig, job_id: str) -> SimResultBundle:
         cumulative_care_seeking_events=daily["cumulative_care_seeking_events"],
         spatial_grid_size=SPATIAL_GRID_SIZE,
         spatial_daily_grids=daily["spatial_grid"],
+        static_layers=_static_layers(model, config, pathogen_names),
         campy_daily_infections_by_route=campy_daily_infections_by_route,
         summary_metrics=summary_metrics,
         proportion_infected_at_least_once=model.get_proportion_infected_at_least_once(),

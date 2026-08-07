@@ -91,8 +91,9 @@ export default function SimulationPage() {
       <header>
         <h1 className="text-2xl font-semibold">Simulation</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Configure a scenario, run it, and review results - all on one page. Tweak a parameter and
-          re-run anytime without losing your other settings.
+          Configure a scenario, run it, and review results on one page. Your settings stay put as you
+          re-run this session — but finished runs are kept only temporarily (the last 50, ~2 hours),
+          so download anything you want to keep.
         </p>
       </header>
 

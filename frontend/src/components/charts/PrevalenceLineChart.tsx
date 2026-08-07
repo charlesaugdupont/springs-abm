@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from "react"
 import type { EChartsOption } from "echarts"
 import { useECharts } from "@/hooks/useECharts"
-import { chartColors, baseGridAxisOption, axisStyle, PATHOGEN_COLOR } from "@/lib/chartTheme"
+import { chartColors, baseGridAxisOption, axisStyle, dayAxisTooltip, PATHOGEN_COLOR } from "@/lib/chartTheme"
+import type { EChartsLike } from "@/lib/download"
 
 const PATHOGEN_LABEL: Record<string, string> = { rota: "Rotavirus", campy: "Campylobacter" }
 
@@ -10,9 +11,10 @@ interface PrevalenceLineChartProps {
   u5Prevalence: Record<string, number[]>
   allAgesPrevalence: Record<string, number[]>
   pathogenNames: string[]
+  onReady?: (chart: EChartsLike) => void
 }
 
-export function PrevalenceLineChart({ days, u5Prevalence, allAgesPrevalence, pathogenNames }: PrevalenceLineChartProps) {
+export function PrevalenceLineChart({ days, u5Prevalence, allAgesPrevalence, pathogenNames, onReady }: PrevalenceLineChartProps) {
   const { containerRef, chartRef } = useECharts()
 
   const option = useMemo<EChartsOption>(() => {
@@ -45,7 +47,7 @@ export function PrevalenceLineChart({ days, u5Prevalence, allAgesPrevalence, pat
       legend: { top: 0, textStyle: { color: colors.secondary, fontSize: 11 } },
       tooltip: {
         trigger: "axis",
-        valueFormatter: (v) => `${((v as number) * 100).toFixed(2)}%`,
+        formatter: dayAxisTooltip((v) => `${(v * 100).toFixed(2)}%`),
       },
       xAxis: { type: "category", data: days.map(String), name: "Day", nameLocation: "middle", nameGap: 26, ...ax },
       yAxis: {
@@ -60,6 +62,10 @@ export function PrevalenceLineChart({ days, u5Prevalence, allAgesPrevalence, pat
   useEffect(() => {
     chartRef.current?.setOption(option, true)
   }, [chartRef, option])
+
+  useEffect(() => {
+    if (chartRef.current) onReady?.(chartRef.current)
+  }, [chartRef, onReady])
 
   return <div ref={containerRef} className="h-80 w-full" />
 }

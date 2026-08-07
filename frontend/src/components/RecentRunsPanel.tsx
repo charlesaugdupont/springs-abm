@@ -7,7 +7,7 @@ import type { JobStatus, RunSummary, ScenarioFormValues } from "@/api/types"
 const STATUS_STYLES: Record<JobStatus, string> = {
   queued: "bg-muted text-muted-foreground",
   running: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
-  done: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+  done: "bg-[#3dd498]/20 text-[#0a6650] dark:bg-[#3dd498]/15 dark:text-[#3dd498]",
   error: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
 }
 

@@ -20,53 +20,57 @@ interface Accent {
   content: string
 }
 
+// Muted, tonally-cohesive palette (chosen over the earlier disjointed Tailwind
+// hues). Per accent: `border` = mid-hue left rail, `title` = a darker step of
+// the same hue (kept >=4.5:1 on the wash), `header`/`content` = faint washes.
+// Arbitrary hex values as whole literal strings so Tailwind's scanner keeps them.
 const CATEGORY_ACCENT: Record<string, Accent> = {
   "Population & Demographics": {
-    border: "border-l-violet-400 dark:border-l-violet-500",
-    header: "bg-violet-50/70 dark:bg-violet-950/25",
-    title: "text-violet-700 dark:text-violet-300",
-    content: "bg-violet-50/30 dark:bg-violet-950/10",
+    border: "border-l-[#5A6BA8]",
+    header: "bg-[#5A6BA8]/8",
+    title: "text-[#3E4E86]",
+    content: "bg-[#5A6BA8]/[0.045]",
   },
   Rotavirus: {
-    border: "border-l-blue-400 dark:border-l-blue-500",
-    header: "bg-blue-50/70 dark:bg-blue-950/25",
-    title: "text-blue-700 dark:text-blue-300",
-    content: "bg-blue-50/30 dark:bg-blue-950/10",
+    border: "border-l-[#3B7CB5]",
+    header: "bg-[#3B7CB5]/8",
+    title: "text-[#2A5E90]",
+    content: "bg-[#3B7CB5]/[0.045]",
   },
   Campylobacter: {
-    border: "border-l-orange-400 dark:border-l-orange-500",
-    header: "bg-orange-50/70 dark:bg-orange-950/25",
-    title: "text-orange-700 dark:text-orange-300",
-    content: "bg-orange-50/30 dark:bg-orange-950/10",
+    border: "border-l-[#C77A4A]",
+    header: "bg-[#C77A4A]/8",
+    title: "text-[#9A5528]",
+    content: "bg-[#C77A4A]/[0.045]",
   },
   "Illness Mechanics": {
-    border: "border-l-rose-400 dark:border-l-rose-500",
-    header: "bg-rose-50/70 dark:bg-rose-950/25",
-    title: "text-rose-700 dark:text-rose-300",
-    content: "bg-rose-50/30 dark:bg-rose-950/10",
+    border: "border-l-[#B15C79]",
+    header: "bg-[#B15C79]/8",
+    title: "text-[#8A3F5A]",
+    content: "bg-[#B15C79]/[0.045]",
   },
   "Care-Seeking & Behavioral Economics": {
-    border: "border-l-emerald-400 dark:border-l-emerald-500",
-    header: "bg-emerald-50/70 dark:bg-emerald-950/25",
-    title: "text-emerald-700 dark:text-emerald-300",
-    content: "bg-emerald-50/30 dark:bg-emerald-950/10",
+    border: "border-l-[#3E9B84]",
+    header: "bg-[#3E9B84]/8",
+    title: "text-[#2A7261]",
+    content: "bg-[#3E9B84]/[0.045]",
   },
   "Household Economics": {
-    border: "border-l-amber-400 dark:border-l-amber-500",
-    header: "bg-amber-50/70 dark:bg-amber-950/25",
-    title: "text-amber-700 dark:text-amber-300",
-    content: "bg-amber-50/30 dark:bg-amber-950/10",
+    border: "border-l-[#B08A3E]",
+    header: "bg-[#B08A3E]/8",
+    title: "text-[#856326]",
+    content: "bg-[#B08A3E]/[0.045]",
   },
   "Environment, Water & Shocks": {
-    border: "border-l-sky-400 dark:border-l-sky-500",
-    header: "bg-sky-50/70 dark:bg-sky-950/25",
-    title: "text-sky-700 dark:text-sky-300",
-    content: "bg-sky-50/30 dark:bg-sky-950/10",
+    border: "border-l-[#5B93B0]",
+    header: "bg-[#5B93B0]/8",
+    title: "text-[#3F7089]",
+    content: "bg-[#5B93B0]/[0.045]",
   },
 }
 
 const FALLBACK_ACCENT: Accent = {
-  border: "border-l-slate-300 dark:border-l-slate-600",
+  border: "border-l-slate-300",
   header: "bg-muted/60",
   title: "text-foreground",
   content: "bg-muted/20",

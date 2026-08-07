@@ -60,6 +60,12 @@ class SimResultBundle:
     # SimResultBundle(**json.loads(...)) in _row_to_record.
     campy_daily_infections_by_route: dict[str, list[float]] = field(default_factory=dict)
 
+    # Static reference overlays for the spatial map, each a 25x25 [y][x] grid in
+    # the same frame as spatial_daily_grids (household_density, animal_density,
+    # school, place_of_worship, water, natural_water). Defaulted for the same
+    # backward-compatible-deserialization reason as the field above.
+    static_layers: dict[str, list[list[float]]] = field(default_factory=dict)
+
 
 # Fields of SimResultBundle cheap enough to duplicate into the `runs` table's
 # denormalized `summary` column, so GET /api/runs (the list view) never has

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
 import * as echarts from "echarts/core"
 import { CanvasRenderer } from "echarts/renderers"
-import { LineChart, HeatmapChart } from "echarts/charts"
+import { LineChart, HeatmapChart, ScatterChart } from "echarts/charts"
 import {
   GridComponent,
   TooltipComponent,
@@ -16,6 +16,7 @@ echarts.use([
   CanvasRenderer,
   LineChart,
   HeatmapChart,
+  ScatterChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,

@@ -63,6 +63,10 @@ export interface SimResultBundle {
   cumulative_care_seeking_events: number[]
   spatial_grid_size: number
   spatial_daily_grids: number[][][]
+  // Static reference overlays for the spatial map, each a 25x25 [y][x] grid in
+  // the same frame as spatial_daily_grids. Keys: household_density,
+  // animal_density (campy only), school, place_of_worship, water, natural_water.
+  static_layers?: Record<string, number[][]>
   // Per-day new Campylobacter infections split by route (keys: zoonotic,
   // fecal_oral, food_borne). Optional/empty when campy is disabled or for runs
   // created before this field existed.

@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from "react"
 import type { EChartsOption } from "echarts"
 import { useECharts } from "@/hooks/useECharts"
-import { chartColors, baseGridAxisOption, axisStyle, PATHOGEN_COLOR } from "@/lib/chartTheme"
+import { chartColors, baseGridAxisOption, axisStyle, dayAxisTooltip, PATHOGEN_COLOR } from "@/lib/chartTheme"
+import type { EChartsLike } from "@/lib/download"
 
 const PATHOGEN_LABEL: Record<string, string> = { rota: "Rotavirus", campy: "Campylobacter" }
 
@@ -9,9 +10,10 @@ interface IllnessDaysAreaChartProps {
   days: number[]
   cumulativeU5IllnessDays: Record<string, number[]>
   pathogenNames: string[]
+  onReady?: (chart: EChartsLike) => void
 }
 
-export function IllnessDaysAreaChart({ days, cumulativeU5IllnessDays, pathogenNames }: IllnessDaysAreaChartProps) {
+export function IllnessDaysAreaChart({ days, cumulativeU5IllnessDays, pathogenNames, onReady }: IllnessDaysAreaChartProps) {
   const { containerRef, chartRef } = useECharts()
 
   const option = useMemo<EChartsOption>(() => {
@@ -35,7 +37,7 @@ export function IllnessDaysAreaChart({ days, cumulativeU5IllnessDays, pathogenNa
       ...baseGridAxisOption(),
       color: [colors.rota, colors.campy],
       legend: { top: 0, textStyle: { color: colors.secondary, fontSize: 11 } },
-      tooltip: { trigger: "axis" },
+      tooltip: { trigger: "axis", formatter: dayAxisTooltip((v) => v.toFixed(1)) },
       // No y-axis `name` here: it duplicated the card title and, drawn
       // horizontally at the top-left, was the label that clipped. The card
       // title "Cumulative under-5 illness-days" already names the metric.
@@ -48,6 +50,10 @@ export function IllnessDaysAreaChart({ days, cumulativeU5IllnessDays, pathogenNa
   useEffect(() => {
     chartRef.current?.setOption(option, true)
   }, [chartRef, option])
+
+  useEffect(() => {
+    if (chartRef.current) onReady?.(chartRef.current)
+  }, [chartRef, onReady])
 
   return <div ref={containerRef} className="h-80 w-full" />
 }
