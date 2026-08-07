@@ -70,32 +70,34 @@ DEFAULT_OUTPUT_DIR = os.path.join("outputs", "sensitivity")
 # ---------------------------------------------------------------------------
 # Parameters to sweep and their candidate values
 # ---------------------------------------------------------------------------
-# The transmission grids below are re-centered on the round-5 calibrated
-# config.py defaults (see experiments/calibration/ - LHS search with rota/
-# campy recovery_rate restricted to their ~3-7 day literature-plausible
-# ranges, 3/5 empirical targets met; both misses are rota, overshooting by
-# only ~6-11%). Only the two recovery_rate grids actually moved from round 4
-# (0.4035->0.3005 rota, 0.1221->0.1466 campy) - every other calibrated
-# parameter landed at essentially the same value as round 4, so those grids
-# still bracket the current baseline correctly. Each recovery_rate grid keeps
-# its round-4 step size, evenly spaced around the new exact baseline (a few
-# grid points intentionally fall outside the literature-plausible bound, e.g.
-# rota's 0.5005/0.6-ish region, to show how the OAT response continues beyond
-# the calibration-constrained range - not meant to imply those values are
-# themselves plausible). poultry_weight/ruminant_weight are untouched:
-# calibration doesn't sweep them.
+# The transmission grids below are re-centered on the round-7 calibrated
+# config.py defaults (see experiments/calibration/ + calibration_status memory).
+# Round 7 followed the HOME_LOCATION view-aliasing fix in movement.py: with
+# agents now sitting at their true, spread-out homes (not collapsed onto ~20
+# activity cells), rota's H2H clustering leverage dropped, so infection_prob_mean
+# had to rise sharply (0.0011->0.01263) and the campy route params shifted too.
+# The five transmission grids that moved from round 5 are re-centered here so
+# each still brackets the current baseline as its exact middle grid point,
+# spanning ~0 (or the 0.001 rota floor) to ~2x baseline - matching the file's
+# prior "0 -> 2x baseline, baseline at centre" convention. The two recovery_rate
+# grids are UNCHANGED (round 7 did not move recovery_rate: rota 0.3005, campy
+# 0.1466 both remain the exact centre of their existing grids). poultry_weight/
+# ruminant_weight are untouched: calibration doesn't sweep them.
 SWEEP_PARAMS = {
     # --- Rotavirus ---
     # Lower bound pinned at 0.001, not 0: the daily H2H prob is drawn as
     # max(0.001, Normal(infection_prob_mean, std)) (abm/pathogens/rotavirus.py:44),
     # so values below the floor are indistinguishable from the floor itself.
-    "pathogens[rota].infection_prob_mean": [0.001, 0.0015, 0.002, 0.0025, 0.003],
+    # Baseline 0.01263 at centre; low anchor is the 0.001 floor, top ~1.9x.
+    "pathogens[rota].infection_prob_mean": [0.001, 0.0068, 0.01263, 0.0185, 0.0243],
     "pathogens[rota].recovery_rate": [0.1005, 0.2005, 0.3005, 0.4005, 0.5005],
-    "steering_parameters.water_to_human_infection_prob": [0.0, 0.005, 0.0097, 0.0145, 0.0194],
+    # Baseline 0.01272 at centre, 0 -> 2x baseline.
+    "steering_parameters.water_to_human_infection_prob": [0.0, 0.00636, 0.01272, 0.01908, 0.02544],
     # --- Campylobacter ---
-    "pathogens[campy].human_animal_interaction_rate": [0.0, 0.0031, 0.0062, 0.0093, 0.0124],
-    "pathogens[campy].fecal_oral_prob": [0.0, 0.0053, 0.0105, 0.0158, 0.021],
-    "pathogens[campy].food_borne_prob": [0.0, 0.0007, 0.0014, 0.0021, 0.0028],
+    # Each baseline at centre, 0 -> 2x baseline.
+    "pathogens[campy].human_animal_interaction_rate": [0.0, 0.0024, 0.0048, 0.0072, 0.0096],
+    "pathogens[campy].fecal_oral_prob": [0.0, 0.0037, 0.0074, 0.0111, 0.0148],
+    "pathogens[campy].food_borne_prob": [0.0, 0.00093, 0.00186, 0.00279, 0.00372],
     "pathogens[campy].recovery_rate": [0.0266, 0.0866, 0.1466, 0.2066, 0.2666],
     "pathogens[campy].poultry_weight": [0.25, 0.5, 0.75, 1.0, 1.5],
     "pathogens[campy].ruminant_weight": [0.0, 0.2, 0.45, 0.7, 1.0],
