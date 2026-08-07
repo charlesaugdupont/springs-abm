@@ -220,7 +220,7 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="pathogens[rota].infection_prob_mean", label="Infection probability (mean)",
         category="Rotavirus", evidence_tier="calibrated", editable=True,
-        ui_min=0.0, ui_max=0.004,
+        ui_min=0.0, ui_max=0.025,
         rationale="Mean per-exposure infection probability. LHS-calibrated to hit literature "
                   "target ranges for episodes/child-year and peak prevalence - not independently "
                   "measured for Akuse. Changing this moves the model away from that calibrated fit.",

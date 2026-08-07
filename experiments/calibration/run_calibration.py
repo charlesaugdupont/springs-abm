@@ -131,9 +131,24 @@ DEFAULT_GRID_ID = "7d9ce7c720a6"
 # care-seeking calibration. The other 5 parameters mainly affect incidence
 # (how often episodes occur) rather than any single episode's duration, a
 # much weaker channel back into care-seeking behavior.
+# NOTE on round 7 (post HOME_LOCATION view-aliasing fix in
+# abm/systems/movement.py::reset_to_home): the bug used to corrupt HOME_LOCATION
+# during a run (ndata[Y]/[X] became views of its columns, so the day-phase move
+# writes bled back), collapsing every agent's stored home to the ~20 activity
+# POIs. That night-time clustering was LOAD-BEARING for rotavirus: cramming
+# everyone into ~20 cells created huge co-location groups that drove rota's H2H
+# spread. With the fix (homes stay spread) rota collapses at the old params
+# (peak u5 ~7% -> ~0.6%). A 1-D scan on the fixed model shows both rota targets
+# re-enter their bands around infection_prob_mean ~0.010-0.0145 (episodes is the
+# tighter constraint), so its upper bound is raised ~2x to bracket that region.
+# Campylobacter is barely affected (zoonotic/within-household, not night-cell),
+# but campy_episodes_per_child_year drifted marginally over (~3.18 vs 3.0 ceiling)
+# because agents now sit at their true homes where the animal-density layer is
+# stamped - so the three campy bounds are kept (unchanged) to let the search
+# nudge it back under 3.0 without disturbing the zoonotic_fraction/peak fit.
 CALIB_BOUNDS = {
     # --- Rotavirus transmission ---
-    "pathogens[rota].infection_prob_mean":                (0.001, 0.010),
+    "pathogens[rota].infection_prob_mean":                (0.008, 0.018),
     "steering_parameters.water_to_human_infection_prob":  (0.0,   0.02),
     # --- Campylobacter transmission (all three routes) ---
     "pathogens[campy].human_animal_interaction_rate":     (0.0,   0.018),
