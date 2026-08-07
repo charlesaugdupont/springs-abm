@@ -48,8 +48,12 @@ class MovementSystem(System):
         Forces all agents to return to their home location (Night Phase).
         """
         home_locations = agent_state.ndata[AgentPropertyKeys.HOME_LOCATION]
-        agent_state.ndata[AgentPropertyKeys.Y] = home_locations[:, 0]
-        agent_state.ndata[AgentPropertyKeys.X] = home_locations[:, 1]
+        # .clone() is REQUIRED: without it, ndata[Y]/[X] become torch views into
+        # HOME_LOCATION's columns, so the next Day Phase's in-place move writes
+        # (update(): `ndata[Y][mask] = ...`) bleed back and corrupt HOME_LOCATION
+        # - agents' stored homes drift to their activity locations over the run.
+        agent_state.ndata[AgentPropertyKeys.Y] = home_locations[:, 0].clone()
+        agent_state.ndata[AgentPropertyKeys.X] = home_locations[:, 1].clone()
 
     def _move_social_agents_spatial(self, agent_state: AgentState, social_mask: torch.Tensor):
         params = self.config.steering_parameters

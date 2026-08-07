@@ -31,9 +31,12 @@ class RotavirusConfig(PathogenConfig):
     # both rota episodes/peak in-range misses are ~8% over their upper
     # bound; see experiments/outputs/calibration/).
     infection_prob_mean: float = Field(
-        0.0011,
+        0.01263,
         description="Mean per-exposure infection probability. LHS-calibrated to hit literature "
-                    "target ranges for episodes/child-year and peak prevalence.",
+                    "target ranges for episodes/child-year and peak prevalence. Round 7 raised this "
+                    "~11x (from 0.0011) after the HOME_LOCATION view-aliasing fix in "
+                    "movement.reset_to_home removed the night-time home-clustering that had been "
+                    "inflating rota's person-to-person spread.",
     )
     infection_prob_std: float = Field(
         0.0002, description="Spread of the per-agent infection-probability draw around the mean."
@@ -76,15 +79,15 @@ class CampylobacterConfig(PathogenConfig):
     )
     # Environmental
     human_animal_interaction_rate: float = Field(
-        0.0062, description="Daily probability of zoonotic-route exposure for an animal-owning household."
+        0.0048, description="Daily probability of zoonotic-route exposure for an animal-owning household."
     )
     # Fecal-oral (household) route
     fecal_oral_prob: float = Field(
-        0.0105, description="Per-contact fecal-oral transmission probability within an infected household."
+        0.0074, description="Per-contact fecal-oral transmission probability within an infected household."
     )
     # Background risk due to food consumption
     food_borne_prob: float = Field(
-        0.0014, description="Daily background infection probability via food-borne exposure."
+        0.00186, description="Daily background infection probability via food-borne exposure."
     )
 
     # Household animal ownership (zoonotic route)
@@ -186,7 +189,7 @@ class SteeringParamsSVEIR(BaseModel):
     )
     # Calibrated (see RotavirusConfig's calibration note; same search/output).
     water_to_human_infection_prob: float = Field(
-        0.0097,
+        0.01272,
         description="Daily probability a susceptible agent is infected via contaminated water. "
                     "LHS-calibrated tuning knob, not independently measured for Akuse.",
     )
