@@ -4,6 +4,7 @@ import { useECharts } from "@/hooks/useECharts"
 import {
   chartColors,
   axisStyle,
+  axisNameStyle,
   baseGridAxisOption,
   campyRouteColors,
   dayAxisTooltip,
@@ -73,7 +74,7 @@ export function CampyRouteAreaChart({ days, infectionsByRoute, onReady }: CampyR
 
     return {
       ...baseGridAxisOption(),
-      grid: { left: 12, right: 20, top: 30, bottom: 40, containLabel: true },
+      grid: { left: 66, right: 18, top: 32, bottom: 50 },
       color: routes.map((r) => routeColor[r]),
       legend: { top: 0, textStyle: { color: colors.secondary, fontSize: 11 } },
       tooltip: {
@@ -85,7 +86,8 @@ export function CampyRouteAreaChart({ days, infectionsByRoute, onReady }: CampyR
         data: days.map(String),
         name: "Day",
         nameLocation: "middle",
-        nameGap: 26,
+        nameGap: 30,
+        nameTextStyle: axisNameStyle(colors),
         boundaryGap: false,
         ...ax,
       },
@@ -93,6 +95,11 @@ export function CampyRouteAreaChart({ days, infectionsByRoute, onReady }: CampyR
         type: "value",
         min: 0,
         max: 100,
+        name: "Share of infections (%)",
+        nameLocation: "middle",
+        nameRotate: 90,
+        nameGap: 44,
+        nameTextStyle: axisNameStyle(colors),
         ...ax,
         axisLabel: { ...ax.axisLabel, formatter: (v: number) => `${v}%` },
       },

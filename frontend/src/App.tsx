@@ -32,14 +32,9 @@ function NavBar() {
     <nav className="border-b bg-card">
       <div className="mx-auto max-w-5xl px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <span className="flex items-center gap-2 font-semibold tracking-tight">
-            <span
-              aria-hidden
-              className="inline-block size-5 rounded-[6px] bg-gradient-to-br from-brand-blue to-brand-green"
-            />
-            <span>
-              <span className="text-brand-blue">SPRINGS</span> ABM
-            </span>
+          <span className="font-semibold tracking-tight">
+            <span className="text-brand-blue">SPRINGS</span>{" "}
+            <span className="text-brand-green">ABM</span>
           </span>
           <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
             Simulation

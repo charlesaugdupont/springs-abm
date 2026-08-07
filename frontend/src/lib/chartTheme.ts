@@ -97,10 +97,11 @@ export function baseGridAxisOption() {
     // screenshot taken right after setOption() would otherwise capture
     // that transient partially-drawn state instead of the real data.
     animation: false,
-    // bottom is generous (not the ~14 that containLabel alone reserves) so the
-    // x-axis `name` ("Day") drawn at nameGap below the tick labels doesn't clip
-    // against the canvas bottom edge.
-    grid: { left: 12, right: 20, top: 30, bottom: 40, containLabel: true },
+    // Fixed margins (NOT containLabel): containLabel reserves room for tick
+    // labels but NOT the axis `name`, so a rotated y-title clipped against the
+    // left edge (worst in a downloaded PNG). left/bottom are generous enough to
+    // hold tick labels + the rotated title + the "Day" title.
+    grid: { left: 66, right: 18, top: 32, bottom: 50 },
   }
 }
 
@@ -117,6 +118,13 @@ export function axisStyle(colors: ThemeColors) {
     axisLabel: { color: colors.muted, fontSize: 11 },
     splitLine: { lineStyle: { color: colors.gridline, width: 1, type: "solid" as const } },
   }
+}
+
+// Axis TITLE styling ("Day", the y-axis label) - deliberately larger/bolder than
+// the tick labels so a downloaded chart is self-explanatory. Spread into each
+// axis's `nameTextStyle`.
+export function axisNameStyle(colors: ThemeColors) {
+  return { color: colors.secondary, fontSize: 13, fontWeight: 600 as const }
 }
 
 // Shared axis-trigger tooltip formatter that prefixes the day ("Day 132")

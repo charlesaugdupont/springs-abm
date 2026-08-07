@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react"
 import type { EChartsOption } from "echarts"
 import { useECharts } from "@/hooks/useECharts"
-import { chartColors, baseGridAxisOption, axisStyle, dayAxisTooltip, PATHOGEN_COLOR } from "@/lib/chartTheme"
+import { chartColors, baseGridAxisOption, axisStyle, axisNameStyle, dayAxisTooltip, PATHOGEN_COLOR } from "@/lib/chartTheme"
 import type { EChartsLike } from "@/lib/download"
 
 const PATHOGEN_LABEL: Record<string, string> = { rota: "Rotavirus", campy: "Campylobacter" }
@@ -49,9 +49,22 @@ export function PrevalenceLineChart({ days, u5Prevalence, allAgesPrevalence, pat
         trigger: "axis",
         formatter: dayAxisTooltip((v) => `${(v * 100).toFixed(2)}%`),
       },
-      xAxis: { type: "category", data: days.map(String), name: "Day", nameLocation: "middle", nameGap: 26, ...ax },
+      xAxis: {
+        type: "category",
+        data: days.map(String),
+        name: "Day",
+        nameLocation: "middle",
+        nameGap: 30,
+        nameTextStyle: axisNameStyle(colors),
+        ...ax,
+      },
       yAxis: {
         type: "value",
+        name: "Prevalence (%)",
+        nameLocation: "middle",
+        nameRotate: 90,
+        nameGap: 44,
+        nameTextStyle: axisNameStyle(colors),
         ...ax,
         axisLabel: { ...ax.axisLabel, formatter: (v: number) => `${(v * 100).toFixed(0)}%` },
       },

@@ -10,7 +10,7 @@ import { CampyRouteAreaChart } from "@/components/charts/CampyRouteAreaChart"
 import { SpatialHeatmapChart } from "@/components/charts/SpatialHeatmapChart"
 import { useBasemap } from "@/hooks/useBasemap"
 import type { SimResultBundle } from "@/api/types"
-import { downloadCsv, downloadJson, downloadChartPng, downloadSpatialPng, type EChartsLike } from "@/lib/download"
+import { downloadCsv, downloadJson, downloadChartPng, type EChartsLike } from "@/lib/download"
 
 const PATHOGEN_LABEL: Record<string, string> = { rota: "Rotavirus", campy: "Campylobacter" }
 
@@ -63,9 +63,10 @@ export function ResultsPanel({ result }: { result: SimResultBundle }) {
       illness: make("illness"),
       campy: make("campy"),
       care: make("care"),
-      spatial: make("spatial"),
     }
   }, [])
+  // The spatial map isn't an ECharts chart; it exposes its own composite exporter.
+  const spatialExportRef = useRef<(() => void) | null>(null)
 
   // New parents seeking care each day = day-over-day change in the running
   // total. A parent increments the counter at most once per day, so the diff is
@@ -172,11 +173,7 @@ export function ResultsPanel({ result }: { result: SimResultBundle }) {
         <CardHeader>
           <CardTitle className="text-base">Spatial spread</CardTitle>
           <CardAction>
-            <ChartDownloadButton
-              onClick={() => {
-                void downloadSpatialPng(charts.current.spatial, "/static/img/akuse_basemap.png", "spatial-spread.png")
-              }}
-            />
+            <ChartDownloadButton onClick={() => spatialExportRef.current?.()} />
           </CardAction>
         </CardHeader>
         <CardContent>
@@ -186,7 +183,7 @@ export function ResultsPanel({ result }: { result: SimResultBundle }) {
               spatialDailyGrids={result.spatial_daily_grids}
               gridSize={result.spatial_grid_size}
               staticLayers={result.static_layers}
-              onReady={register.spatial}
+              exportRef={spatialExportRef}
             />
           ) : (
             <p className="text-sm text-muted-foreground">Loading basemap…</p>

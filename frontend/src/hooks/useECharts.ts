@@ -1,12 +1,11 @@
 import { useEffect, useRef } from "react"
 import * as echarts from "echarts/core"
 import { CanvasRenderer } from "echarts/renderers"
-import { LineChart, HeatmapChart, ScatterChart } from "echarts/charts"
+import { LineChart } from "echarts/charts"
 import {
   GridComponent,
   TooltipComponent,
   LegendComponent,
-  VisualMapComponent,
 } from "echarts/components"
 
 // Tree-shaken registration - only the modules this app actually uses, not
@@ -15,12 +14,9 @@ import {
 echarts.use([
   CanvasRenderer,
   LineChart,
-  HeatmapChart,
-  ScatterChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,
-  VisualMapComponent,
 ])
 
 /** Owns one ECharts instance's lifecycle (init/resize/dispose) for the

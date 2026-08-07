@@ -62,7 +62,7 @@ export function downloadChartPng(chart: EChartsLike | undefined, filename: strin
   downloadDataUrl(filename, chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#ffffff" }))
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.crossOrigin = "anonymous"
@@ -70,25 +70,4 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = reject
     img.src = src
   })
-}
-
-/** The spatial map is an ECharts canvas layered over a plain <img> basemap, so
- * a bare getDataURL misses the satellite layer. Composite basemap + overlay
- * (same-origin img, no CORS taint) onto one canvas before download. */
-export async function downloadSpatialPng(chart: EChartsLike | undefined, basemapSrc: string, filename: string) {
-  if (!chart) return
-  const overlayUrl = chart.getDataURL({ type: "png", pixelRatio: 2 }) // transparent bg keeps the basemap visible
-  const [overlay, base] = await Promise.all([loadImage(overlayUrl), loadImage(basemapSrc)])
-  const w = overlay.width
-  const h = overlay.height
-  const canvas = document.createElement("canvas")
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext("2d")
-  if (!ctx) return
-  ctx.drawImage(base, 0, 0, w, h)
-  ctx.drawImage(overlay, 0, 0, w, h)
-  canvas.toBlob((blob) => {
-    if (blob) downloadBlob(filename, blob)
-  }, "image/png")
 }

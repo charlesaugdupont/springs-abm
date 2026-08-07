@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react"
 import type { EChartsOption } from "echarts"
 import { useECharts } from "@/hooks/useECharts"
-import { chartColors, baseGridAxisOption, axisStyle, dayAxisTooltip, PATHOGEN_COLOR } from "@/lib/chartTheme"
+import { chartColors, baseGridAxisOption, axisStyle, axisNameStyle, dayAxisTooltip, PATHOGEN_COLOR } from "@/lib/chartTheme"
 import type { EChartsLike } from "@/lib/download"
 
 const PATHOGEN_LABEL: Record<string, string> = { rota: "Rotavirus", campy: "Campylobacter" }
@@ -38,11 +38,24 @@ export function IllnessDaysAreaChart({ days, cumulativeU5IllnessDays, pathogenNa
       color: [colors.rota, colors.campy],
       legend: { top: 0, textStyle: { color: colors.secondary, fontSize: 11 } },
       tooltip: { trigger: "axis", formatter: dayAxisTooltip((v) => v.toFixed(1)) },
-      // No y-axis `name` here: it duplicated the card title and, drawn
-      // horizontally at the top-left, was the label that clipped. The card
-      // title "Cumulative under-5 illness-days" already names the metric.
-      xAxis: { type: "category", data: days.map(String), name: "Day", nameLocation: "middle", nameGap: 26, ...ax },
-      yAxis: { type: "value", ...ax },
+      xAxis: {
+        type: "category",
+        data: days.map(String),
+        name: "Day",
+        nameLocation: "middle",
+        nameGap: 30,
+        nameTextStyle: axisNameStyle(colors),
+        ...ax,
+      },
+      yAxis: {
+        type: "value",
+        name: "Cumulative illness-days",
+        nameLocation: "middle",
+        nameRotate: 90,
+        nameGap: 44,
+        nameTextStyle: axisNameStyle(colors),
+        ...ax,
+      },
       series,
     }
   }, [days, cumulativeU5IllnessDays, pathogenNames])

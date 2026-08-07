@@ -49,11 +49,12 @@ function SectionHeading({
 }
 
 const CALLOUT_TONES = {
-  blue: "border-blue-200 bg-blue-50 dark:border-blue-900/70 dark:bg-blue-950/40",
-  orange: "border-orange-200 bg-orange-50 dark:border-orange-900/70 dark:bg-orange-950/30",
-  emerald: "border-emerald-200 bg-emerald-50 dark:border-emerald-900/70 dark:bg-emerald-950/30",
-  amber: "border-amber-200 bg-amber-50 dark:border-amber-900/70 dark:bg-amber-950/30",
-  neutral: "border-border bg-muted/40",
+  blue: "border-blue-300/60 bg-blue-50 dark:border-blue-900/70 dark:bg-blue-950/40",
+  orange: "border-orange-300/60 bg-orange-50 dark:border-orange-900/70 dark:bg-orange-950/30",
+  green: "border-[#3dd498]/50 bg-[#3dd498]/12 dark:border-[#3dd498]/30 dark:bg-[#3dd498]/10",
+  rose: "border-rose-300/60 bg-rose-50 dark:border-rose-900/70 dark:bg-rose-950/30",
+  slate: "border-slate-300/70 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40",
+  neutral: "border-border bg-muted/50",
 } as const
 
 function Callout({
@@ -68,7 +69,7 @@ function Callout({
   children: React.ReactNode
 }) {
   return (
-    <div className={cn("rounded-xl border p-4 text-sm leading-relaxed", CALLOUT_TONES[tone])}>
+    <div className={cn("rounded-xl border p-4 text-sm leading-relaxed shadow-sm", CALLOUT_TONES[tone])}>
       {title && (
         <p className="mb-1.5 flex items-center gap-2 font-semibold">
           {Icon && <Icon className="size-4" />}
@@ -94,7 +95,7 @@ function TechDetails({ children }: { children: React.ReactNode }) {
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className="my-4 rounded-xl border border-border bg-muted/30"
+      className="my-4 rounded-xl border border-border bg-muted/30 shadow-sm"
     >
       <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-muted/60 rounded-xl">
         <span className="flex items-center gap-2">
@@ -124,7 +125,7 @@ function ParameterEvidence() {
   const { data, isLoading } = useParameters()
   const [open, setOpen] = useState(false)
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="rounded-xl border border-border">
+    <Collapsible open={open} onOpenChange={setOpen} className="rounded-xl border border-border shadow-sm">
       <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-muted/60">
         <span>All parameters &amp; their evidence</span>
         <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
@@ -237,7 +238,7 @@ export default function AboutPage() {
           with a layer of animal density (poultry and livestock) that drives Campylobacter's zoonotic
           route.
         </p>
-        <Callout tone="amber" title="Children and adults are not the same" icon={HeartPulse}>
+        <Callout tone="slate" title="Children and adults are not the same" icon={HeartPulse}>
           <p>
             A key modelling choice: only <span className="font-medium text-foreground">children under 5</span>{" "}
             actually fall ill — they get an illness severity, a duration, and a health toll. Adults can
@@ -274,15 +275,15 @@ export default function AboutPage() {
           therefore where transmission can happen.
         </p>
         <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/70 dark:bg-amber-950/30">
+          <div className="rounded-xl border border-orange-300/60 bg-orange-50 p-4 shadow-sm dark:border-orange-900/70 dark:bg-orange-950/30">
             <p className="flex items-center gap-2 text-sm font-semibold"><Sun className="size-4" /> Morning</p>
             <p className="mt-1 text-sm text-foreground/90">Diseases progress: exposed people may become infectious, and the ill may recover.</p>
           </div>
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/70 dark:bg-blue-950/40">
+          <div className="rounded-xl border border-blue-300/60 bg-blue-50 p-4 shadow-sm dark:border-blue-900/70 dark:bg-blue-950/40">
             <p className="flex items-center gap-2 text-sm font-semibold"><Users className="size-4" /> Day phase</p>
             <p className="mt-1 text-sm text-foreground/90">People travel to school, water, worship and social places. Transmission happens between everyone at the same location.</p>
           </div>
-          <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900/70 dark:bg-indigo-950/40">
+          <div className="rounded-xl border border-indigo-300/60 bg-indigo-50 p-4 shadow-sm dark:border-indigo-900/70 dark:bg-indigo-950/40">
             <p className="flex items-center gap-2 text-sm font-semibold"><Moon className="size-4" /> Night phase</p>
             <p className="mt-1 text-sm text-foreground/90">Everyone returns home. Transmission happens within the household.</p>
           </div>
@@ -356,7 +357,7 @@ export default function AboutPage() {
           person becomes infectious, then a daily chance of recovering. For a sick child, the model also
           tracks how <em>severe</em> the illness is and how long it lasts.
         </p>
-        <Callout tone="emerald" title="Why the disease never fully dies out" icon={Sparkles}>
+        <Callout tone="green" title="Why the disease never fully dies out" icon={Sparkles}>
           <p>
             Immunity in the model is <span className="font-medium text-foreground">leaky</span>: each past
             infection makes the next one milder, but protection never becomes complete. Because the
@@ -395,10 +396,10 @@ export default function AboutPage() {
           losses more than they value equivalent gains.
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Callout tone="emerald" title="Seek care">
+          <Callout tone="green" title="Seek care">
             <p>Pay the cost of care. With some success probability the child fully recovers; otherwise the money is spent and the parent still carries the worry.</p>
           </Callout>
-          <Callout tone="amber" title="Wait">
+          <Callout tone="rose" title="Wait">
             <p>Spend nothing, but the illness may worsen — and the parent bears the stress of a still-sick child.</p>
           </Callout>
         </div>
@@ -437,22 +438,22 @@ export default function AboutPage() {
           are the patterns worth watching for when you run a scenario:
         </p>
         <ul className="space-y-3">
-          <li className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+          <li className="rounded-lg border border-border bg-muted/30 p-3 text-sm shadow-sm">
             <span className="font-medium text-foreground">One big wave, then a simmer.</span> A dominant
             epidemic wave peaks around day 30 and decays over the following ~150–200 days, settling into a low
             quasi-equilibrium as the pool of susceptible people is depleted.
           </li>
-          <li className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+          <li className="rounded-lg border border-border bg-muted/30 p-3 text-sm shadow-sm">
             <span className="font-medium text-foreground">Endemic persistence from leaky immunity.</span> With
             no births in the closed population, it is incomplete immunity — not new susceptibles — that keeps
             the disease alive.
           </li>
-          <li className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+          <li className="rounded-lg border border-border bg-muted/30 p-3 text-sm shadow-sm">
             <span className="font-medium text-foreground">Timing beats magnitude for shocks.</span> A water-
             contamination shock does far more damage depending on <em>when</em> it lands relative to the
             outbreak than on how big it is.
           </li>
-          <li className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+          <li className="rounded-lg border border-border bg-muted/30 p-3 text-sm shadow-sm">
             <span className="font-medium text-foreground">Vaccine rate and efficacy aren't interchangeable.</span>{" "}
             How well a vaccine works gates whether vaccinating more people helps at all.
           </li>
