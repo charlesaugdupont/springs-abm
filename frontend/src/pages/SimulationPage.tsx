@@ -126,7 +126,7 @@ export default function SimulationPage() {
 
       {data && (
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <CategoryAccordion categories={data.by_category} values={values} onChange={handleChange} />
           </CardContent>
         </Card>

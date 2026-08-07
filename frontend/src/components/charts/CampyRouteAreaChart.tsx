@@ -62,21 +62,15 @@ export function CampyRouteAreaChart({ days, infectionsByRoute }: CampyRouteAreaC
       lineStyle: { width: 2, color: colors.surface },
       itemStyle: { color: routeColor[r] },
       areaStyle: { color: routeColor[r], opacity: 0.9 },
-      // Direct end-label: identity carried on the mark (relief for the sub-3:1
-      // light-mode aqua/yellow), sitting at the top edge of each band.
-      endLabel: {
-        show: true,
-        formatter: CAMPY_ROUTE_LABEL[r],
-        color: routeColor[r],
-        fontSize: 11,
-        fontWeight: "bold",
-      },
-      emphasis: { focus: "series" },
+      // Keep the bands solid at all times - no hover-dimming of the other
+      // series (that "focus" emphasis caused the flicker the user reported).
+      // Identity comes from the legend + the axis tooltip on hover.
+      emphasis: { disabled: true },
     }))
 
     return {
       ...baseGridAxisOption(),
-      grid: { left: 12, right: 84, top: 30, bottom: 14, containLabel: true },
+      grid: { left: 12, right: 20, top: 30, bottom: 40, containLabel: true },
       color: routes.map((r) => routeColor[r]),
       legend: { top: 0, textStyle: { color: colors.secondary, fontSize: 11 } },
       tooltip: {

@@ -65,7 +65,7 @@ function SliderField({ meta, values, onChange }: ParamFieldProps) {
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <FieldLabel meta={meta} />
-        <span className="text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+        <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-foreground tabular-nums whitespace-nowrap">
           {formatNumber(value, meta.is_integer)}
           {meta.unit ? ` ${meta.unit}` : ""}
         </span>

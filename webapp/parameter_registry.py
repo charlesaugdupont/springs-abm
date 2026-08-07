@@ -245,6 +245,12 @@ REGISTRY: list[ParamMeta] = [
                   "efficacy interact in a non-obvious way in this model: efficacy gates whether a "
                   "faster rollout matters at all.",
     ),
+    ParamMeta(
+        path="illness_mechanics.base_severity_rota", label="Base rotavirus severity",
+        category="Rotavirus", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
+        rationale="Base illness severity (0-1 scale) before age/immunity adjustments. Anchored to "
+                  "cited literature in the paper's Methods.",
+    ),
 
     # ------------------------------------------------------------------
     # Campylobacter
@@ -345,22 +351,16 @@ REGISTRY: list[ParamMeta] = [
         rationale="Gaussian radius diffusing ruminant-related risk - wider than poultry, "
                   "reflecting grazing/tethered range. A qualitative, not quantitatively fit, assumption.",
     ),
+    ParamMeta(
+        path="illness_mechanics.base_severity_campy", label="Base campylobacter severity",
+        category="Campylobacter", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
+        rationale="Base illness severity (0-1 scale) before age/immunity adjustments. Anchored to "
+                  "cited literature in the paper's Methods.",
+    ),
 
     # ------------------------------------------------------------------
     # Illness Mechanics
     # ------------------------------------------------------------------
-    ParamMeta(
-        path="illness_mechanics.base_severity_rota", label="Base rotavirus severity",
-        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
-        rationale="Base illness severity (0-1 scale) before age/immunity adjustments. Anchored to "
-                  "cited literature in the paper's Methods.",
-    ),
-    ParamMeta(
-        path="illness_mechanics.base_severity_campy", label="Base campylobacter severity",
-        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
-        rationale="Base illness severity (0-1 scale) before age/immunity adjustments. Anchored to "
-                  "cited literature in the paper's Methods.",
-    ),
     ParamMeta(
         path="illness_mechanics.age_max_multiplier", label="Age severity multiplier (max)",
         category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=3.0,

@@ -164,10 +164,6 @@ export default function AboutPage() {
     <div className="mx-auto max-w-3xl px-4 py-10 space-y-12">
       {/* Hero */}
       <header className="space-y-4">
-        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
-          <Sparkles className="size-3.5" />
-          Model overview
-        </span>
         <h1 className="text-3xl font-semibold tracking-tight">About the model</h1>
         <p className="text-base leading-relaxed text-muted-foreground">
           <span className="font-semibold text-foreground">SPRINGS ABM</span> is an{" "}

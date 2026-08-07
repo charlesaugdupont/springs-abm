@@ -67,9 +67,15 @@ export const CAMPY_ROUTE_LABEL: Record<string, string> = {
 }
 
 export function campyRouteColors(): Record<string, string> {
+  // Light-mode teal/gold are deepened (#12946a / #bd7d00, vs the brighter
+  // #1baf7a / #eda100) so all three routes clear >=3:1 contrast on the light
+  // surface - the chart no longer carries direct end-labels, so it can't lean
+  // on them for the sub-3:1 relief. Validated via the dataviz validate_palette
+  // script; the residual orange<->teal CVD is covered by the 2px surface-gap
+  // separators between the stacked bands. Dark mode already passes as-is.
   return isDarkMode()
     ? { zoonotic: "#d95926", fecal_oral: "#199e70", food_borne: "#c98500" }
-    : { zoonotic: "#eb6834", fecal_oral: "#1baf7a", food_borne: "#eda100" }
+    : { zoonotic: "#eb6834", fecal_oral: "#12946a", food_borne: "#bd7d00" }
 }
 
 // Sequential single-hue (blue) ramp, light->dark, steps 100-700 - used for
@@ -91,7 +97,10 @@ export function baseGridAxisOption() {
     // screenshot taken right after setOption() would otherwise capture
     // that transient partially-drawn state instead of the real data.
     animation: false,
-    grid: { left: 12, right: 20, top: 30, bottom: 14, containLabel: true },
+    // bottom is generous (not the ~14 that containLabel alone reserves) so the
+    // x-axis `name` ("Day") drawn at nameGap below the tick labels doesn't clip
+    // against the canvas bottom edge.
+    grid: { left: 12, right: 20, top: 30, bottom: 40, containLabel: true },
   }
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import type { EChartsOption } from "echarts"
 import { useECharts } from "@/hooks/useECharts"
-import { chartColors, SEQUENTIAL_BLUE } from "@/lib/chartTheme"
+import { SEQUENTIAL_BLUE } from "@/lib/chartTheme"
 import { spatialAxes, type BasemapMeta } from "@/lib/spatialAxes"
 import { Slider } from "@/components/ui/slider"
 
@@ -38,7 +38,6 @@ export function SpatialHeatmapChart({ basemap, spatialDailyGrids, gridSize }: Sp
   }, [spatialDailyGrids])
 
   const initialOption = useMemo<EChartsOption>(() => {
-    const colors = chartColors()
     return {
       backgroundColor: "transparent",
       animation: false,
@@ -48,17 +47,15 @@ export function SpatialHeatmapChart({ basemap, spatialDailyGrids, gridSize }: Sp
       visualMap: {
         min: 0,
         max: zMax,
-        show: true,
-        orient: "vertical",
-        right: 4,
-        top: "middle",
-        text: ["more", "fewer"],
-        textStyle: { color: colors.secondary, fontSize: 10 },
+        // Hidden: the scale is drawn as a labelled HTML colorbar BELOW the map
+        // instead (was overlaid on the image with no numbers). The object stays
+        // so it still drives the cell color + opacity mapping.
+        show: false,
         // Low-value cells stay translucent so the satellite basemap shows
         // through; only the busiest cells approach opaque. This, plus dropping
         // zero cells entirely (gridToHeatmapData), stops the heatmap from
         // blanketing the whole image.
-        inRange: { color: SEQUENTIAL_BLUE, opacity: [0.45, 0.9] },
+        inRange: { color: SEQUENTIAL_BLUE, opacity: [0.3, 0.82] },
       },
       tooltip: {
         position: "top",
@@ -89,6 +86,8 @@ export function SpatialHeatmapChart({ basemap, spatialDailyGrids, gridSize }: Sp
     })
   }
 
+  const gradient = `linear-gradient(to right, ${SEQUENTIAL_BLUE.join(", ")})`
+
   return (
     <div className="space-y-3">
       <div className="relative w-full max-w-md mx-auto" style={{ aspectRatio }}>
@@ -96,8 +95,29 @@ export function SpatialHeatmapChart({ basemap, spatialDailyGrids, gridSize }: Sp
           src="/static/img/akuse_basemap.png"
           alt="Akuse basemap"
           className="absolute inset-0 h-full w-full object-fill rounded-md"
+          style={{ filter: "brightness(1.06) saturate(1.05)" }}
         />
         <div ref={containerRef} className="absolute inset-0 h-full w-full" />
+      </div>
+
+      {/* Labelled colorbar, below the map (previously overlaid on it with no
+          numbers). Hue encodes cumulative infections per cell. */}
+      <div className="max-w-md mx-auto space-y-1">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>Cumulative infections per cell</span>
+          <span className="tabular-nums">
+            0 – {Math.round(zMax).toLocaleString()}
+          </span>
+        </div>
+        <div
+          className="h-2.5 w-full rounded-full ring-1 ring-foreground/10"
+          style={{ background: gradient }}
+          aria-hidden
+        />
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground tabular-nums">
+          <span>fewer</span>
+          <span>more</span>
+        </div>
       </div>
       <div className="flex items-center gap-3 max-w-md mx-auto">
         <span className="text-xs text-muted-foreground whitespace-nowrap">Day {day}</span>
