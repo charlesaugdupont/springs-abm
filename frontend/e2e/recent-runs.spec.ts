@@ -1,9 +1,12 @@
 import { test, expect } from '@playwright/test'
-import { login } from './helpers'
+import { login, expandAllParamSections } from './helpers'
 
 test('recent runs: two submissions create history, params survive re-run, loading a past run repopulates the form, and /runs/:jobId survives a hard refresh', async ({ page }) => {
   await login(page)
   await expect(page.getByText('Population & Demographics')).toBeVisible()
+
+  // The Population size / seed fields live inside collapsed sections by default.
+  await expandAllParamSections(page)
 
   const populationSlider = page.getByRole('slider', { name: 'Population size' })
   const seedInput = page.getByRole('spinbutton', { name: 'Random seed' })

@@ -13,7 +13,7 @@ test.skip(!LIVE_URL || !LIVE_PASSWORD, 'SPRINGS_LIVE_URL/SPRINGS_LIVE_PASSWORD n
 
 test('live deployment loads and accepts login', async ({ page }) => {
   await page.goto(`${LIVE_URL}/login`)
-  await expect(page.getByText('SPRINGS-ABM')).toBeVisible()
+  await expect(page.getByText('SPRINGS ABM')).toBeVisible()
 
   await page.getByLabel('Password').fill(LIVE_PASSWORD!)
   await page.getByRole('button', { name: 'Log in' }).click()

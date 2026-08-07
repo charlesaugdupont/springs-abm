@@ -3,6 +3,7 @@ import { MetricGrid } from "@/components/MetricCard"
 import { PrevalenceLineChart } from "@/components/charts/PrevalenceLineChart"
 import { IllnessDaysAreaChart } from "@/components/charts/IllnessDaysAreaChart"
 import { SingleSeriesLineChart } from "@/components/charts/SingleSeriesLineChart"
+import { CampyRouteAreaChart } from "@/components/charts/CampyRouteAreaChart"
 import { SpatialHeatmapChart } from "@/components/charts/SpatialHeatmapChart"
 import { useBasemap } from "@/hooks/useBasemap"
 import type { SimResultBundle } from "@/api/types"
@@ -30,6 +31,18 @@ function buildMetrics(result: SimResultBundle): { label: string; value: string }
 
 export function ResultsPanel({ result }: { result: SimResultBundle }) {
   const basemap = useBasemap()
+
+  // New parents seeking care each day = day-over-day change in the running
+  // total. A parent increments the counter at most once per day, so the diff is
+  // exactly that day's number of care-seekers (day 0 = its own value).
+  const cumCare = result.cumulative_care_seeking_events
+  const dailyCareSeeking = cumCare.map((v, i) => (i === 0 ? v : v - cumCare[i - 1]))
+
+  const campyRoutes = result.campy_daily_infections_by_route
+  const showCampyRoutes =
+    result.pathogen_names.includes("campy") &&
+    !!campyRoutes &&
+    Object.values(campyRoutes).some((arr) => Array.isArray(arr) && arr.length > 0)
 
   return (
     <div className="space-y-6">
@@ -62,32 +75,29 @@ export function ResultsPanel({ result }: { result: SimResultBundle }) {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
+      {showCampyRoutes && (
+        <Card data-testid="chart-card-campy-routes">
           <CardHeader>
-            <CardTitle className="text-base">Household wealth</CardTitle>
+            <CardTitle className="text-base">Campylobacter infections by route</CardTitle>
           </CardHeader>
           <CardContent>
-            <SingleSeriesLineChart
-              days={result.days}
-              values={result.mean_household_wealth}
-              yAxisLabel="Fraction of max wealth"
-            />
+            <CampyRouteAreaChart days={result.days} infectionsByRoute={campyRoutes!} />
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Care-seeking events</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SingleSeriesLineChart
-              days={result.days}
-              values={result.cumulative_care_seeking_events}
-              yAxisLabel="Cumulative events"
-            />
-          </CardContent>
-        </Card>
-      </div>
+      )}
+
+      <Card data-testid="chart-card-care-seeking">
+        <CardHeader>
+          <CardTitle className="text-base">Parents seeking care per day</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SingleSeriesLineChart
+            days={result.days}
+            values={dailyCareSeeking}
+            yAxisLabel="Parents/day"
+          />
+        </CardContent>
+      </Card>
 
       <Card data-testid="chart-card-spatial">
         <CardHeader>

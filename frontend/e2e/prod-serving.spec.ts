@@ -12,7 +12,7 @@ import { E2E_PASSWORD } from './helpers'
 // serves frontend/src/ directly).
 test('single-origin production-style serving: SPA loads, login works, client-side route survives direct navigation', async ({ page }) => {
   await page.goto('http://localhost:8000/login')
-  await expect(page.getByText('SPRINGS-ABM')).toBeVisible()
+  await expect(page.getByText('SPRINGS ABM')).toBeVisible()
 
   await page.getByLabel('Password').fill(E2E_PASSWORD)
   await page.getByRole('button', { name: 'Log in' }).click()

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { expandAllParamSections } from './helpers'
 
 // A broader, slower pass against the real live deployment - several
 // distinct scenarios (not just the defaults), chart rendering, tooltip
@@ -40,6 +41,7 @@ test('scenario 2: rotavirus only', async ({ page }) => {
 
 test('scenario 3: small fast population, longer duration', async ({ page }) => {
   await login(page)
+  await expandAllParamSections(page)
   const popSlider = page.getByRole('slider', { name: 'Population size' })
   await popSlider.focus()
   for (let i = 0; i < 30; i++) await popSlider.press('ArrowLeft') // push toward the minimum

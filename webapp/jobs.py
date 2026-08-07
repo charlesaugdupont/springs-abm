@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
@@ -53,6 +53,12 @@ class SimResultBundle:
     proportion_infected_at_least_once: float
     n_u5: int
     runtime_seconds: float
+
+    # Per-day new Campylobacter infections split by route (keys: zoonotic,
+    # fecal_oral, food_borne); empty dict when campy is disabled. Has a default
+    # so runs serialized before this field was added still deserialize via
+    # SimResultBundle(**json.loads(...)) in _row_to_record.
+    campy_daily_infections_by_route: dict[str, list[float]] = field(default_factory=dict)
 
 
 # Fields of SimResultBundle cheap enough to duplicate into the `runs` table's

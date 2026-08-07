@@ -1,0 +1,111 @@
+import { useEffect, useMemo } from "react"
+import type { EChartsOption } from "echarts"
+import { useECharts } from "@/hooks/useECharts"
+import {
+  chartColors,
+  axisStyle,
+  baseGridAxisOption,
+  campyRouteColors,
+  CAMPY_ROUTE_ORDER,
+  CAMPY_ROUTE_LABEL,
+} from "@/lib/chartTheme"
+
+interface CampyRouteAreaChartProps {
+  days: number[]
+  /** Per-day NEW Campylobacter infections keyed by route (zoonotic /
+   * fecal_oral / food_borne). */
+  infectionsByRoute: Record<string, number[]>
+}
+
+/** 100%-stacked area of Campylobacter's three transmission routes over time.
+ * Plots the CUMULATIVE-to-date composition (each route's share of all campy
+ * infections so far), not raw daily shares: it's smooth, always defined after
+ * the first case (no 0/0), and converges to the run-level route fractions. */
+export function CampyRouteAreaChart({ days, infectionsByRoute }: CampyRouteAreaChartProps) {
+  const { containerRef, chartRef } = useECharts()
+
+  const option = useMemo<EChartsOption>(() => {
+    const colors = chartColors()
+    const ax = axisStyle(colors)
+    const routeColor = campyRouteColors()
+    const routes = CAMPY_ROUTE_ORDER.filter((r) => infectionsByRoute[r]?.length)
+    const n = days.length
+
+    // Cumulative infections-to-date per route, then normalise to a percentage
+    // of the running campy total each day.
+    const cum: Record<string, number[]> = {}
+    for (const r of routes) {
+      const daily = infectionsByRoute[r] ?? []
+      const acc: number[] = []
+      let running = 0
+      for (let i = 0; i < n; i++) {
+        running += daily[i] ?? 0
+        acc.push(running)
+      }
+      cum[r] = acc
+    }
+    const proportion: Record<string, number[]> = {}
+    for (const r of routes) proportion[r] = new Array(n).fill(0)
+    for (let i = 0; i < n; i++) {
+      let total = 0
+      for (const r of routes) total += cum[r][i]
+      if (total > 0) for (const r of routes) proportion[r][i] = (cum[r][i] / total) * 100
+    }
+
+    const series: EChartsOption["series"] = routes.map((r) => ({
+      name: CAMPY_ROUTE_LABEL[r],
+      type: "line",
+      stack: "routes",
+      data: proportion[r],
+      showSymbol: false,
+      // 2px surface-colored separator between stacked bands (mark spec).
+      lineStyle: { width: 2, color: colors.surface },
+      itemStyle: { color: routeColor[r] },
+      areaStyle: { color: routeColor[r], opacity: 0.9 },
+      // Direct end-label: identity carried on the mark (relief for the sub-3:1
+      // light-mode aqua/yellow), sitting at the top edge of each band.
+      endLabel: {
+        show: true,
+        formatter: CAMPY_ROUTE_LABEL[r],
+        color: routeColor[r],
+        fontSize: 11,
+        fontWeight: "bold",
+      },
+      emphasis: { focus: "series" },
+    }))
+
+    return {
+      ...baseGridAxisOption(),
+      grid: { left: 12, right: 84, top: 30, bottom: 14, containLabel: true },
+      color: routes.map((r) => routeColor[r]),
+      legend: { top: 0, textStyle: { color: colors.secondary, fontSize: 11 } },
+      tooltip: {
+        trigger: "axis",
+        valueFormatter: (v) => `${(v as number).toFixed(1)}%`,
+      },
+      xAxis: {
+        type: "category",
+        data: days.map(String),
+        name: "Day",
+        nameLocation: "middle",
+        nameGap: 26,
+        boundaryGap: false,
+        ...ax,
+      },
+      yAxis: {
+        type: "value",
+        min: 0,
+        max: 100,
+        ...ax,
+        axisLabel: { ...ax.axisLabel, formatter: (v: number) => `${v}%` },
+      },
+      series,
+    }
+  }, [days, infectionsByRoute])
+
+  useEffect(() => {
+    chartRef.current?.setOption(option, true)
+  }, [chartRef, option])
+
+  return <div ref={containerRef} className="h-80 w-full" />
+}

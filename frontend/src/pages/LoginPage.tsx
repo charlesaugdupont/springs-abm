@@ -28,7 +28,7 @@ export default function LoginPage() {
     <div className="min-h-svh flex items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>SPRINGS-ABM</CardTitle>
+          <CardTitle>SPRINGS ABM</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

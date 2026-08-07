@@ -63,6 +63,10 @@ export interface SimResultBundle {
   cumulative_care_seeking_events: number[]
   spatial_grid_size: number
   spatial_daily_grids: number[][][]
+  // Per-day new Campylobacter infections split by route (keys: zoonotic,
+  // fecal_oral, food_borne). Optional/empty when campy is disabled or for runs
+  // created before this field existed.
+  campy_daily_infections_by_route?: Record<string, number[]>
   summary_metrics: Record<string, unknown>
   proportion_infected_at_least_once: number
   n_u5: number

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Progress } from "@/components/ui/progress"
 import { CategoryAccordion } from "@/components/ParamForm/CategoryAccordion"
 import { PathogenToggle } from "@/components/ParamForm/PathogenToggle"
 import { RecentRunsPanel } from "@/components/RecentRunsPanel"
@@ -143,10 +144,26 @@ export default function SimulationPage() {
         <>
           {run.data.status !== "done" && run.data.status !== "error" && (
             <Card>
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">
-                  {run.data.status === "queued" ? "Queued…" : `Running - day ${run.data.progress_day} of ${run.data.progress_total}`}
-                </p>
+              <CardContent className="pt-6 space-y-3">
+                {run.data.status === "queued" ? (
+                  <p className="text-sm text-muted-foreground">Queued…</p>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium">Running simulation…</span>
+                      <span className="text-muted-foreground tabular-nums">
+                        Day {run.data.progress_day} of {run.data.progress_total}
+                      </span>
+                    </div>
+                    <Progress
+                      value={
+                        run.data.progress_total > 0
+                          ? (run.data.progress_day / run.data.progress_total) * 100
+                          : 0
+                      }
+                    />
+                  </>
+                )}
               </CardContent>
             </Card>
           )}

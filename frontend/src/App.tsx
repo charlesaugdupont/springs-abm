@@ -32,7 +32,7 @@ function NavBar() {
     <nav className="border-b">
       <div className="mx-auto max-w-5xl px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <span className="font-semibold">SPRINGS-ABM</span>
+          <span className="font-semibold">SPRINGS ABM</span>
           <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
             Simulation
           </Link>

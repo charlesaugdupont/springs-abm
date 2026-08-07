@@ -52,6 +52,26 @@ export const PATHOGEN_COLOR: Record<string, keyof Pick<ThemeColors, "rota" | "ca
   campy: "campy",
 }
 
+// Campylobacter's three transmission routes. Display/stacking order matters:
+// orange (campy's family hue), aqua, yellow - kept in this order so orange and
+// yellow never sit adjacent (aqua between them), the one pair that fails the
+// all-pairs floor. Validated via scripts/validate_palette.js in both modes
+// (worst adjacent CVD ΔE 9.1 light / 8.4 dark). Light-mode aqua/yellow are
+// sub-3:1 on the surface, so CampyRouteAreaChart adds direct end-labels (relief).
+export const CAMPY_ROUTE_ORDER = ["zoonotic", "fecal_oral", "food_borne"] as const
+
+export const CAMPY_ROUTE_LABEL: Record<string, string> = {
+  zoonotic: "Zoonotic",
+  fecal_oral: "Fecal-oral",
+  food_borne: "Food-borne",
+}
+
+export function campyRouteColors(): Record<string, string> {
+  return isDarkMode()
+    ? { zoonotic: "#d95926", fecal_oral: "#199e70", food_borne: "#c98500" }
+    : { zoonotic: "#eb6834", fecal_oral: "#1baf7a", food_borne: "#eda100" }
+}
+
 // Sequential single-hue (blue) ramp, light->dark, steps 100-700 - used for
 // the spatial heatmap's magnitude encoding (never a rainbow "Hot" scale).
 export const SEQUENTIAL_BLUE = [
@@ -59,10 +79,11 @@ export const SEQUENTIAL_BLUE = [
   "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b",
 ]
 
-// Shared ECharts option fragments matching the skill's mark specs: hairline
-// (1px) solid recessive gridlines, axis text in muted ink, 2px lines
-// (applied per-series by each chart component).
-export function baseGridAxisOption(colors: ThemeColors) {
+// Root-level ECharts option fragment shared by every chart: just the grid
+// box + animation flag. `containLabel: true` lets the grid auto-reserve room
+// for tick labels AND axis names (ECharts >=5.4 / 6.x), so axis names no
+// longer clip against the card edge the way a fixed `grid.left` did.
+export function baseGridAxisOption() {
   return {
     // Entrance animation ("lines grow in") is off by default across every
     // chart: a scientific tool showing a completed simulation's results
@@ -70,7 +91,19 @@ export function baseGridAxisOption(colors: ThemeColors) {
     // screenshot taken right after setOption() would otherwise capture
     // that transient partially-drawn state instead of the real data.
     animation: false,
-    grid: { left: 48, right: 16, top: 24, bottom: 32, containLabel: true },
+    grid: { left: 12, right: 20, top: 30, bottom: 14, containLabel: true },
+  }
+}
+
+// Per-axis style fragment matching the skill's mark specs: hairline (1px)
+// solid recessive gridlines, axis line + text in muted ink. This MUST be
+// spread inside each `xAxis`/`yAxis` object - ECharts ignores axisLine /
+// axisLabel / splitLine at the option root (the previous bug: they silently
+// no-op'd, so ticks/gridlines fell back to defaults and could vanish in
+// cramped cards). When an axis also needs a tick formatter, merge it:
+// `axisLabel: { ...axisStyle(colors).axisLabel, formatter }`.
+export function axisStyle(colors: ThemeColors) {
+  return {
     axisLine: { lineStyle: { color: colors.baseline } },
     axisLabel: { color: colors.muted, fontSize: 11 },
     splitLine: { lineStyle: { color: colors.gridline, width: 1, type: "solid" as const } },

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login } from './helpers'
+import { login, expandAllParamSections } from './helpers'
 
 test('scenario form renders all categories driven by the API, and a run completes', async ({ page, request }) => {
   await login(page)
@@ -26,6 +26,10 @@ test('scenario form renders all categories driven by the API, and a run complete
     // severity" the field), so a plain text match is ambiguous.
     await expect(page.getByRole('button', { name: new RegExp(`^${category}`) })).toBeVisible()
   }
+
+  // Sections start collapsed (their fields are unmounted), so expand them all
+  // before counting the sliders/inputs they contain.
+  await expandAllParamSections(page)
 
   // Every editable field renders a slider/input - count elements with
   // role="slider" or type=number inputs inside the accordion content.

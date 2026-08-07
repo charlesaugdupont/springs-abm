@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login } from './helpers'
+import { login, expandAllParamSections } from './helpers'
 
 // Named regression test for the specific bug the plan traced: the old
 // tooltip was clipped by an `overflow:hidden` ancestor and had zero
@@ -18,6 +18,9 @@ test('info tooltip on a right-column field stays fully inside the viewport', asy
   // network round trip) before querying for fields - otherwise this races
   // the initial fetch and finds nothing.
   await expect(page.getByText('Population & Demographics')).toBeVisible()
+
+  // Fields (and their info buttons) are inside collapsed sections by default.
+  await expandAllParamSections(page)
 
   const infoButtons = page.locator('button[aria-label^="More info about"]')
   const count = await infoButtons.count()

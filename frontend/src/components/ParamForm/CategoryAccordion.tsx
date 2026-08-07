@@ -11,7 +11,7 @@ interface CategoryAccordionProps {
 
 export function CategoryAccordion({ categories, values, onChange }: CategoryAccordionProps) {
   return (
-    <Accordion type="multiple" defaultValue={categories.map((c) => c.category)}>
+    <Accordion type="multiple" defaultValue={[]}>
       {categories.map((cat) => (
         <AccordionItem key={cat.category} value={cat.category}>
           <AccordionTrigger>

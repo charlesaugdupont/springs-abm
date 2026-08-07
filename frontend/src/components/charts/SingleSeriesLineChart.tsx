@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react"
 import type { EChartsOption } from "echarts"
 import { useECharts } from "@/hooks/useECharts"
-import { chartColors, baseGridAxisOption } from "@/lib/chartTheme"
+import { chartColors, baseGridAxisOption, axisStyle } from "@/lib/chartTheme"
 
 interface SingleSeriesLineChartProps {
   days: number[]
@@ -19,17 +19,27 @@ export function SingleSeriesLineChart({ days, values, yAxisLabel, valueFormatter
 
   const option = useMemo<EChartsOption>(() => {
     const colors = chartColors()
+    const ax = axisStyle(colors)
     return {
-      ...baseGridAxisOption(colors),
+      ...baseGridAxisOption(),
       tooltip: {
         trigger: "axis",
         valueFormatter: valueFormatter ? (v) => valueFormatter(v as number) : undefined,
       },
-      xAxis: { type: "category", data: days.map(String), name: "Day", nameLocation: "middle", nameGap: 24 },
+      xAxis: { type: "category", data: days.map(String), name: "Day", nameLocation: "middle", nameGap: 26, ...ax },
       yAxis: {
         type: "value",
+        // Short label rotated ALONG the axis (not the default horizontal
+        // top-left spot, which clipped) - containLabel reserves room for it.
         name: yAxisLabel,
-        axisLabel: valueFormatter ? { formatter: (v: number) => valueFormatter(v) } : undefined,
+        nameLocation: "middle",
+        nameRotate: 90,
+        nameGap: 40,
+        nameTextStyle: { color: colors.muted, fontSize: 11 },
+        ...ax,
+        axisLabel: valueFormatter
+          ? { ...ax.axisLabel, formatter: (v: number) => valueFormatter(v) }
+          : ax.axisLabel,
       },
       series: [
         {

@@ -69,6 +69,16 @@ def _capture_daily_snapshot(model: SVEIRModel, daily: dict[str, list]) -> None:
         status = g.ndata[AgentPropertyKeys.status(p.name)].cpu().numpy()
         daily[f"all_ages_prevalence_{p.name}"].append(float((status == Compartment.INFECTIOUS).mean()))
 
+        # Campylobacter attributes each new infection to exactly one of its three
+        # routes. Its per-day counters are reset at the start of each day and
+        # incremented during that day's transmission/progression, so right here
+        # (immediately after model.step()) they hold THIS day's new infections by
+        # route. Captured only when campy is enabled.
+        if p.name == "campy" and hasattr(p, "cases_zoonotic"):
+            daily["campy_cases_zoonotic"].append(float(p.cases_zoonotic))
+            daily["campy_cases_fecal_oral"].append(float(p.cases_fecal_oral))
+            daily["campy_cases_food_borne"].append(float(p.cases_food_borne))
+
     x = g.ndata[AgentPropertyKeys.X].cpu().numpy()
     y = g.ndata[AgentPropertyKeys.Y].cpu().numpy()
     household_id = g.ndata[AgentPropertyKeys.HOUSEHOLD_ID].cpu().numpy()
@@ -131,6 +141,16 @@ def run_simulation_for_ui(config: SVEIRConfig, job_id: str) -> SimResultBundle:
         **campy_route_fractions(model),
     }
 
+    # Per-day new-infection counts split by Campylobacter's three routes (empty
+    # when campy is disabled). Feeds the results page's 100%-stacked route plot.
+    campy_daily_infections_by_route: dict[str, list[float]] = {}
+    if "campy" in pathogen_names:
+        campy_daily_infections_by_route = {
+            "zoonotic": daily["campy_cases_zoonotic"],
+            "fecal_oral": daily["campy_cases_fecal_oral"],
+            "food_borne": daily["campy_cases_food_borne"],
+        }
+
     return SimResultBundle(
         config_snapshot=config.model_dump(),
         pathogen_names=pathogen_names,
@@ -142,6 +162,7 @@ def run_simulation_for_ui(config: SVEIRConfig, job_id: str) -> SimResultBundle:
         cumulative_care_seeking_events=daily["cumulative_care_seeking_events"],
         spatial_grid_size=SPATIAL_GRID_SIZE,
         spatial_daily_grids=daily["spatial_grid"],
+        campy_daily_infections_by_route=campy_daily_infections_by_route,
         summary_metrics=summary_metrics,
         proportion_infected_at_least_once=model.get_proportion_infected_at_least_once(),
         n_u5=n_u5,

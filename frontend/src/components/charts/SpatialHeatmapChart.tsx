@@ -52,8 +52,13 @@ export function SpatialHeatmapChart({ basemap, spatialDailyGrids, gridSize }: Sp
         orient: "vertical",
         right: 4,
         top: "middle",
+        text: ["more", "fewer"],
         textStyle: { color: colors.secondary, fontSize: 10 },
-        inRange: { color: SEQUENTIAL_BLUE },
+        // Low-value cells stay translucent so the satellite basemap shows
+        // through; only the busiest cells approach opaque. This, plus dropping
+        // zero cells entirely (gridToHeatmapData), stops the heatmap from
+        // blanketing the whole image.
+        inRange: { color: SEQUENTIAL_BLUE, opacity: [0.45, 0.9] },
       },
       tooltip: {
         position: "top",
@@ -66,8 +71,7 @@ export function SpatialHeatmapChart({ basemap, spatialDailyGrids, gridSize }: Sp
         {
           type: "heatmap",
           data: gridToHeatmapData(spatialDailyGrids[lastDay]),
-          itemStyle: { opacity: 0.7 },
-          emphasis: { itemStyle: { opacity: 0.9 } },
+          emphasis: { itemStyle: { opacity: 1 } },
         },
       ],
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,7 +118,10 @@ function gridToHeatmapData(grid: number[][]): [number, number, number][] {
   const out: [number, number, number][] = []
   for (let y = 0; y < grid.length; y++) {
     for (let x = 0; x < grid[y].length; x++) {
-      out.push([x, y, grid[y][x]])
+      // Skip empty cells entirely - painting every zero-value cell (at the
+      // lightest blue + a flat 0.7 opacity) is what blanketed the satellite
+      // basemap. Only occupied cells are drawn now.
+      if (grid[y][x] > 0) out.push([x, y, grid[y][x]])
     }
   }
   return out
