@@ -42,7 +42,7 @@ from experiments.gsa.param_space import (
     gsa_params, build_problem, problem_from_selected, combos_from_sample,
 )
 from experiments.gsa.gsa_metrics import (
-    gsa_metrics_fn, HEADLINE_METRICS, ALSO_REPORTED, ALL_GSA_METRICS,
+    gsa_metrics_fn, HEADLINE_METRICS, TIER_METRICS, ALSO_REPORTED, ALL_GSA_METRICS,
 )
 from experiments.gsa.indices import (
     align_mean_output, run_morris, run_sobol, noise_floor, DESIGN_ID_COL,
@@ -243,9 +243,14 @@ def export_importance(args):
     records = []
     for m in [q for q in REGISTRY if q.path in {p.path for p in _all_gsa_paths()}]:
         per_metric = sobol_st.get(m.path, {})
-        st_max = max(per_metric.values()) if per_metric else None
+        # Tier on the de-confounded metric subset (see gsa_metrics.TIER_METRICS);
+        # per_metric still reports ST for ALL headline metrics incl. the
+        # population-scaled cumulative burden ones.
+        tier_sts = [v for k, v in per_metric.items() if k in TIER_METRICS]
+        st_max = max(tier_sts) if tier_sts else None
         records.append({
             "path": m.path, "label": m.label, "category": m.category,
+            "evidence_tier": m.evidence_tier,   # cross sensitivity x trust in the UI
             "method": "sobol" if per_metric else "morris",
             "sensitivity_tier": _tier(st_max),
             "sobol_ST_max": st_max,
@@ -270,8 +275,8 @@ def export_importance(args):
     with open(os.path.join(GSA_OUTPUT_DIR, "importance.json"), "w") as f:
         json.dump({r["path"]: r for r in ordered}, f, indent=2)
     pd.DataFrame(ordered)[
-        ["sensitivity_rank", "sensitivity_tier", "path", "label", "category",
-         "method", "sobol_ST_max", "morris_screening_score"]
+        ["sensitivity_rank", "sensitivity_tier", "evidence_tier", "path", "label",
+         "category", "method", "sobol_ST_max", "morris_screening_score"]
     ].to_csv(os.path.join(GSA_OUTPUT_DIR, "importance_ranked.csv"), index=False)
 
     # Paste-ready ParamMeta snippets (static bake-in, like evidence_tier).
@@ -287,7 +292,8 @@ def export_importance(args):
         if r["sensitivity_tier"] == "low":
             continue
         st = f"{r['sobol_ST_max']:.3f}" if r["sobol_ST_max"] is not None else "  -  "
-        print(f"  {r['sensitivity_rank']:>2}. [{r['sensitivity_tier']:6}] ST={st}  {r['path']}")
+        print(f"  {r['sensitivity_rank']:>2}. [{r['sensitivity_tier']:6} x {r['evidence_tier']:11}] "
+              f"ST={st}  {r['path']}")
     print(f"\n-> {os.path.join(GSA_OUTPUT_DIR, 'importance.json')}")
     print(f"-> {os.path.join(GSA_OUTPUT_DIR, 'importance_ranked.csv')}")
 

@@ -46,6 +46,16 @@ HEADLINE_METRICS = [
     "could_not_afford_rate",
 ]
 
+# Metrics used to assign the importance TIER. This deliberately EXCLUDES the two
+# absolute *_cumulative_u5_days burden metrics: cumulative_u5_days = sum(daily u5
+# prevalence) * n_u5, so it is mechanically proportional to the number of under-5s
+# and any parameter that sets that count (child_probability, and partly
+# average_household_size) dominates it for a purely definitional/structural reason,
+# not because of interesting disease dynamics. Tiering on the de-confounded set
+# (fractions + per-child rates + care-seeking) measures dynamic influence. The
+# cumulative metrics are still analyzed and reported in per_metric_ST.
+TIER_METRICS = [m for m in HEADLINE_METRICS if not m.endswith("_cumulative_u5_days")]
+
 # Computed and reported, but not folded into the headline importance aggregate.
 ALSO_REPORTED = [
     "campy_zoonotic_fraction",
