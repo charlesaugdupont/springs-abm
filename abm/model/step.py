@@ -85,10 +85,14 @@ def sveir_step(
         new_cases_by_pathogen[p.name] = p.new_cases_this_step
 
         status = agent_state.ndata[f"status_{p.name}"]
-        compartment_counts[f"{p.name}_S"] = torch.sum(status == Compartment.SUSCEPTIBLE).item()
-        compartment_counts[f"{p.name}_E"] = torch.sum(status == Compartment.EXPOSED).item()
-        compartment_counts[f"{p.name}_I"] = torch.sum(status == Compartment.INFECTIOUS).item()
-        compartment_counts[f"{p.name}_R"] = torch.sum(status == Compartment.RECOVERED).item()
-        compartment_counts[f"{p.name}_V"] = torch.sum(status == Compartment.VACCINATED).item()
+        # One bincount pass (one CPU sync) instead of five torch.sum(...).item()
+        # scans. Compartment is an IntEnum, so its values index the result
+        # directly: S=0, V=1, E=2, I=3, R=4 (abm/constants.py).
+        counts = torch.bincount(status.long(), minlength=5).tolist()
+        compartment_counts[f"{p.name}_S"] = counts[Compartment.SUSCEPTIBLE]
+        compartment_counts[f"{p.name}_E"] = counts[Compartment.EXPOSED]
+        compartment_counts[f"{p.name}_I"] = counts[Compartment.INFECTIOUS]
+        compartment_counts[f"{p.name}_R"] = counts[Compartment.RECOVERED]
+        compartment_counts[f"{p.name}_V"] = counts[Compartment.VACCINATED]
 
     return new_cases_by_pathogen, compartment_counts
