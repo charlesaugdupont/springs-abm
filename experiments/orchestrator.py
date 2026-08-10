@@ -30,6 +30,7 @@ not a lambda or a closure defined inside another function.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import time
@@ -150,8 +151,10 @@ def _build_config(spec: SweepSpec, combo: Dict[str, Any], seed: int) -> SVEIRCon
     for path, value in spec.base_overrides.items():
         set_param(cfg, path, value)
     for path, value in combo.items():
-        if path.startswith("shock."):
-            continue  # schedule metadata, not a real SVEIRConfig path - consumed by step_callback via combo
+        if path.startswith("shock.") or path.startswith("gsa."):
+            continue  # metadata, not a real SVEIRConfig path - shock.* is consumed by
+            # step_callback via combo; gsa.* (e.g. gsa.design_id) is a GSA design tag
+            # carried into results.parquet for robust sample<->output alignment.
         set_param(cfg, path, value)
     return cfg
 
@@ -178,8 +181,15 @@ def _run_one(task) -> Optional[Dict[str, Any]]:
 
     try:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            # Hash the on-disk identifier: run_id concatenates every param in
+            # the combo, which overflows the OS filename limit once a design
+            # injects dozens of params (e.g. a GSA Morris screen over ~50
+            # params -> ~1.4k-char name -> OSError). The descriptive run_id
+            # still flows into the results.parquet `run_id` column below; only
+            # this throwaway scratch dir/file name is shortened.
+            short_id = hashlib.md5(run_id.encode()).hexdigest()[:12]
             model = SVEIRModel(
-                model_identifier=f"_{spec.name}_{run_id}",
+                model_identifier=f"_{spec.name}_{short_id}",
                 root_path=os.path.join(spec.output_dir, spec.name, "_tmp"),
             )
             model.set_model_parameters(**cfg.model_dump())
