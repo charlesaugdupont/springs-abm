@@ -71,6 +71,13 @@ class Campylobacter(Pathogen):
         # double-counting across the two transmission phases.
         self._newly_exposed_this_day: torch.Tensor | None = None
 
+        # Cache for the weighted animal-density field (see
+        # _combined_animal_density): the density layers are built once per run
+        # and the weights are config values, so this grid-sized tensor is
+        # constant within a run and need not be rebuilt on every call.
+        self._combined_density_cache: torch.Tensor | None = None
+        self._combined_density_key: tuple | None = None
+
     # ------------------------------------------------------------------
     # Pathogen interface
     # ------------------------------------------------------------------
@@ -170,6 +177,35 @@ class Campylobacter(Pathogen):
     # Private: zoonotic route
     # ------------------------------------------------------------------
 
+    def _combined_animal_density(self, grid: Any) -> "torch.Tensor | None":
+        """Weighted sum of the poultry + ruminant density layers, cached.
+
+        The density layers are built once per run (initialize_model.
+        _build_animal_density_layers) and the species weights are config values,
+        so this grid-sized tensor is constant within a run. Cache it keyed on
+        the current weights and recompute only if a weight changes (defensive
+        against mid-run mutation), instead of rebuilding it on every
+        (twice-daily) transmission call. Returns None when no density layers
+        exist. The summation order matches the previous inline construction, so
+        results are byte-for-byte identical.
+        """
+        poultry_density = grid.get_dynamic_layer("poultry_density")
+        ruminant_density = grid.get_dynamic_layer("ruminant_density")
+        if poultry_density is None and ruminant_density is None:
+            return None
+
+        key = (self.config.poultry_weight, self.config.ruminant_weight)
+        if self._combined_density_cache is None or self._combined_density_key != key:
+            grid_shape = grid.grid_shape
+            combined = torch.zeros(grid_shape[:2], device=self.device)
+            if poultry_density is not None:
+                combined = combined + poultry_density * self.config.poultry_weight
+            if ruminant_density is not None:
+                combined = combined + ruminant_density * self.config.ruminant_weight
+            self._combined_density_cache = combined
+            self._combined_density_key = key
+        return self._combined_density_cache
+
     def _zoonotic_transmission(self, agent_state: AgentState, grid: Any):
         """
         Beta-Poisson dose-response infection from household-ownership-derived
@@ -188,20 +224,13 @@ class Campylobacter(Pathogen):
         if grid is None or self._newly_exposed_this_day is None:
             return
 
-        poultry_density = grid.get_dynamic_layer("poultry_density")
-        ruminant_density = grid.get_dynamic_layer("ruminant_density")
-        if poultry_density is None and ruminant_density is None:
+        combined_density = self._combined_animal_density(grid)
+        if combined_density is None:
             return
 
         grid_shape = grid.grid_shape
         x = agent_state.ndata[AgentPropertyKeys.X].long().clamp(0, grid_shape[1] - 1)
         y = agent_state.ndata[AgentPropertyKeys.Y].long().clamp(0, grid_shape[0] - 1)
-
-        combined_density = torch.zeros(grid_shape[:2], device=self.device)
-        if poultry_density is not None:
-            combined_density = combined_density + poultry_density * self.config.poultry_weight
-        if ruminant_density is not None:
-            combined_density = combined_density + ruminant_density * self.config.ruminant_weight
 
         local_density = combined_density[y, x]
         dose = local_density * self.config.human_animal_interaction_rate
