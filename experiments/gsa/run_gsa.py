@@ -198,15 +198,31 @@ def analyze_sobol(name, args):
 # Export importance
 # ---------------------------------------------------------------------------
 
+# Tier thresholds on Sobol ST (max across headline metrics): the fraction of a
+# headline output's variance a parameter accounts for (incl. interactions).
+TIER_HIGH = 0.30      # dominates at least one headline output
+TIER_MEDIUM = 0.10    # a moderate driver
+# below TIER_MEDIUM, or never analyzed by Sobol (screened out by Morris) -> "low"
+
+
+def _tier(st_max):
+    if st_max is None:
+        return "low"          # screened out by Morris -> low-sensitivity by construction
+    if st_max >= TIER_HIGH:
+        return "high"
+    if st_max >= TIER_MEDIUM:
+        return "medium"
+    return "low"
+
+
 def export_importance(args):
     import pandas as pd
     from webapp.parameter_registry import REGISTRY
 
     sobol_dir = os.path.join(GSA_OUTPUT_DIR, _spec_name("sobol", args.pilot))
     morris_dir = os.path.join(GSA_OUTPUT_DIR, _spec_name("morris", args.pilot))
-    meta = {m.path: m for m in REGISTRY}
 
-    # Sobol ST per headline metric for survivors.
+    # Sobol ST per headline metric for the analyzed (survivor) params.
     sobol_st = {}   # path -> {metric: ST}
     for metric in HEADLINE_METRICS:
         p = os.path.join(sobol_dir, f"sobol_{metric}.csv")
@@ -221,44 +237,57 @@ def export_importance(args):
     if os.path.exists(sel_path):
         screening = json.load(open(sel_path)).get("screening_scores", {})
 
+    # One record per GSA param. Tier is assigned from Sobol ST (survivors);
+    # screened-out params are low by construction. ST and Morris score are kept
+    # as SEPARATE columns - they are different scales and must not be conflated.
     records = []
-    for path, m in [(m.path, m) for m in REGISTRY if m.path in {q.path for q in _all_gsa_paths()}]:
-        per_metric = sobol_st.get(path, {})
-        is_survivor = bool(per_metric)
-        overall = max(per_metric.values()) if per_metric else float(screening.get(path, 0.0))
+    for m in [q for q in REGISTRY if q.path in {p.path for p in _all_gsa_paths()}]:
+        per_metric = sobol_st.get(m.path, {})
+        st_max = max(per_metric.values()) if per_metric else None
         records.append({
-            "path": path, "label": m.label, "category": m.category,
-            "method": "sobol" if is_survivor else "morris",
-            "overall_importance": overall,
+            "path": m.path, "label": m.label, "category": m.category,
+            "method": "sobol" if per_metric else "morris",
+            "sensitivity_tier": _tier(st_max),
+            "sobol_ST_max": st_max,
             "per_metric_ST": per_metric,
-            "morris_screening_score": float(screening.get(path, 0.0)),
+            "morris_screening_score": float(screening.get(m.path, 0.0)),
         })
 
-    # Rank: survivors (by Sobol ST) first, then screened-out (by Morris score).
-    survivors = sorted([r for r in records if r["method"] == "sobol"],
-                       key=lambda r: r["overall_importance"], reverse=True)
-    others = sorted([r for r in records if r["method"] == "morris"],
-                    key=lambda r: r["morris_screening_score"], reverse=True)
-    ordered = survivors + others
+    # Order: tier (high>medium>low); within a tier, Sobol-analyzed params first
+    # by ST desc, then screened-out params by Morris score desc. (Intra-"low"
+    # order is cosmetic - the whole tier is "de-emphasize".)
+    tier_order = {"high": 0, "medium": 1, "low": 2}
+    ordered = sorted(records, key=lambda r: (
+        tier_order[r["sensitivity_tier"]],
+        0 if r["method"] == "sobol" else 1,
+        -(r["sobol_ST_max"] if r["sobol_ST_max"] is not None else -1.0),
+        -r["morris_screening_score"],
+    ))
     for rank, r in enumerate(ordered, 1):
         r["sensitivity_rank"] = rank
 
     os.makedirs(GSA_OUTPUT_DIR, exist_ok=True)
-    importance = {r["path"]: r for r in ordered}
     with open(os.path.join(GSA_OUTPUT_DIR, "importance.json"), "w") as f:
-        json.dump(importance, f, indent=2)
+        json.dump({r["path"]: r for r in ordered}, f, indent=2)
     pd.DataFrame(ordered)[
-        ["sensitivity_rank", "path", "label", "category", "method", "overall_importance"]
+        ["sensitivity_rank", "sensitivity_tier", "path", "label", "category",
+         "method", "sobol_ST_max", "morris_screening_score"]
     ].to_csv(os.path.join(GSA_OUTPUT_DIR, "importance_ranked.csv"), index=False)
 
     # Paste-ready ParamMeta snippets (static bake-in, like evidence_tier).
-    with open(os.path.join(GSA_OUTPUT_DIR, "sensitivity_rank_snippets.txt"), "w") as f:
+    with open(os.path.join(GSA_OUTPUT_DIR, "sensitivity_snippets.txt"), "w") as f:
         for r in ordered:
-            f.write(f'{r["path"]}: sensitivity_rank={r["sensitivity_rank"]}\n')
+            f.write(f'{r["path"]}: sensitivity_tier="{r["sensitivity_tier"]}", '
+                    f'sensitivity_rank={r["sensitivity_rank"]}\n')
 
-    print(f"\nImportance ranking ({len(ordered)} params):")
-    for r in ordered[:20]:
-        print(f"  {r['sensitivity_rank']:>2}. [{r['method']:6}] {r['path']:<50} {r['overall_importance']:.3f}")
+    counts = {t: sum(1 for r in ordered if r["sensitivity_tier"] == t) for t in ("high", "medium", "low")}
+    print(f"\nImportance tiers: HIGH={counts['high']}  MEDIUM={counts['medium']}  LOW={counts['low']}")
+    print("Ranked (High + Medium tiers):")
+    for r in ordered:
+        if r["sensitivity_tier"] == "low":
+            continue
+        st = f"{r['sobol_ST_max']:.3f}" if r["sobol_ST_max"] is not None else "  -  "
+        print(f"  {r['sensitivity_rank']:>2}. [{r['sensitivity_tier']:6}] ST={st}  {r['path']}")
     print(f"\n-> {os.path.join(GSA_OUTPUT_DIR, 'importance.json')}")
     print(f"-> {os.path.join(GSA_OUTPUT_DIR, 'importance_ranked.csv')}")
 
