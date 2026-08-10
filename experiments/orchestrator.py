@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 import pandas as pd
+import torch
 
 from config import SVEIRCONFIG, SVEIRConfig
 from abm.constants import AgentPropertyKeys
@@ -153,6 +154,19 @@ def _build_config(spec: SweepSpec, combo: Dict[str, Any], seed: int) -> SVEIRCon
             continue  # schedule metadata, not a real SVEIRConfig path - consumed by step_callback via combo
         set_param(cfg, path, value)
     return cfg
+
+
+def _worker_init() -> None:
+    """Pool worker initializer: pin torch to a single thread per process.
+
+    Each sweep run is small (a few thousand agents) and the sweep already
+    parallelizes across runs via the process Pool, so letting torch spawn its
+    own intra-op threads inside every worker just oversubscribes the cores
+    (n_workers x torch_threads) and thrashes. One thread per worker is both
+    faster for this embarrassingly-parallel workload and makes each run
+    single-threaded-deterministic. See experiments/perf/regression_check.py.
+    """
+    torch.set_num_threads(1)
 
 
 def _run_one(task) -> Optional[Dict[str, Any]]:
@@ -268,7 +282,7 @@ def run_sweep(spec: SweepSpec, combos: Optional[List[Dict[str, Any]]] = None) ->
     t0 = time.time()
     records, timeseries_rows = [], []
 
-    with Pool(processes=n_cores) as pool:
+    with Pool(processes=n_cores, initializer=_worker_init) as pool:
         for i, result in enumerate(pool.imap(_run_one, tasks), 1):
             if result is not None:
                 records.append(result["record"])

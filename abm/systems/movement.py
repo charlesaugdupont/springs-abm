@@ -80,12 +80,27 @@ class MovementSystem(System):
         radius = params.social_interaction_radius
         neighbor_lists = tree.query_ball_point(visitor_coords, r=radius)
 
+        # Pick a host per visitor, preserving the exact per-agent
+        # np.random.randint call sequence (so the RNG stream is unchanged),
+        # then apply all the moves in one batched scatter instead of a
+        # per-agent tensor read/write. Visitors are distinct agents and are
+        # never also hosts (SOCIAL vs HOME activity), so batching is
+        # byte-for-byte identical to the per-element writes.
+        chosen_visitor_slots = []
+        chosen_hosts = []
         for local_i, neighbors in enumerate(neighbor_lists):
             if not neighbors:
                 continue  # no one home within radius -> agent stays home
             chosen = neighbors[np.random.randint(len(neighbors))]
-            host_idx = host_indices[chosen]
-            target_loc = agent_state.ndata[AgentPropertyKeys.HOME_LOCATION][host_idx]
-            v = visiting_indices[local_i]
-            agent_state.ndata[AgentPropertyKeys.Y][v] = target_loc[0]
-            agent_state.ndata[AgentPropertyKeys.X][v] = target_loc[1]
+            chosen_visitor_slots.append(local_i)
+            chosen_hosts.append(chosen)
+
+        if not chosen_visitor_slots:
+            return
+
+        device = agent_state.device
+        v_idx = visiting_indices[torch.tensor(chosen_visitor_slots, dtype=torch.long, device=device)]
+        h_idx = host_indices[torch.tensor(chosen_hosts, dtype=torch.long, device=device)]
+        target_locs = agent_state.ndata[AgentPropertyKeys.HOME_LOCATION][h_idx]
+        agent_state.ndata[AgentPropertyKeys.Y][v_idx] = target_locs[:, 0]
+        agent_state.ndata[AgentPropertyKeys.X][v_idx] = target_locs[:, 1]

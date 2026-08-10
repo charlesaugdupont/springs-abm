@@ -9,10 +9,23 @@ from abm.pathogens.pathogen import Pathogen
 from abm.systems.system import System
 
 def _get_location_groups(agent_state: AgentState) -> Tuple[torch.Tensor, int]:
-    """Returns group indices for agents based on co-location."""
-    coords = torch.stack([agent_state.ndata[AgentPropertyKeys.X], agent_state.ndata[AgentPropertyKeys.Y]], dim=1)
-    _, inverse_indices = torch.unique(coords, dim=0, return_inverse=True)
-    num_locations = inverse_indices.max().item() + 1
+    """Returns group indices for agents based on co-location.
+
+    Each (x, y) cell is encoded as a single integer key (y * width + x) and a
+    1-D torch.unique is taken. This is much faster than a lexicographic 2-D
+    torch.unique(dim=0) and yields the *same* co-location partition. The
+    absolute group-label values differ from the 2-D version, but that is
+    irrelevant: callers only use these as grouping keys for a scatter/gather
+    (index_add_ in Pathogen._apply_new_infections), which is invariant to a
+    relabeling. Grid coordinates are integer cell indices, so the .long() cast
+    is exact and preserves the partition byte-for-byte.
+    """
+    x = agent_state.ndata[AgentPropertyKeys.X].long()
+    y = agent_state.ndata[AgentPropertyKeys.Y].long()
+    width = int(x.max().item()) + 1
+    keys = y * width + x
+    _, inverse_indices = torch.unique(keys, return_inverse=True)
+    num_locations = int(inverse_indices.max().item()) + 1
     return inverse_indices, num_locations
 
 def sveir_step(
@@ -72,10 +85,14 @@ def sveir_step(
         new_cases_by_pathogen[p.name] = p.new_cases_this_step
 
         status = agent_state.ndata[f"status_{p.name}"]
-        compartment_counts[f"{p.name}_S"] = torch.sum(status == Compartment.SUSCEPTIBLE).item()
-        compartment_counts[f"{p.name}_E"] = torch.sum(status == Compartment.EXPOSED).item()
-        compartment_counts[f"{p.name}_I"] = torch.sum(status == Compartment.INFECTIOUS).item()
-        compartment_counts[f"{p.name}_R"] = torch.sum(status == Compartment.RECOVERED).item()
-        compartment_counts[f"{p.name}_V"] = torch.sum(status == Compartment.VACCINATED).item()
+        # One bincount pass (one CPU sync) instead of five torch.sum(...).item()
+        # scans. Compartment is an IntEnum, so its values index the result
+        # directly: S=0, V=1, E=2, I=3, R=4 (abm/constants.py).
+        counts = torch.bincount(status.long(), minlength=5).tolist()
+        compartment_counts[f"{p.name}_S"] = counts[Compartment.SUSCEPTIBLE]
+        compartment_counts[f"{p.name}_E"] = counts[Compartment.EXPOSED]
+        compartment_counts[f"{p.name}_I"] = counts[Compartment.INFECTIOUS]
+        compartment_counts[f"{p.name}_R"] = counts[Compartment.RECOVERED]
+        compartment_counts[f"{p.name}_V"] = counts[Compartment.VACCINATED]
 
     return new_cases_by_pathogen, compartment_counts
