@@ -75,6 +75,7 @@ class AgentFactory:
             agent_properties[AgentPropertyKeys.num_infections(p_name)] = torch.zeros(num_agents, dtype=torch.int)
             agent_properties[AgentPropertyKeys.symptom_severity(p_name)] = torch.zeros(num_agents, dtype=torch.float)
             agent_properties[AgentPropertyKeys.illness_duration(p_name)] = torch.zeros(num_agents, dtype=torch.int)
+            agent_properties[AgentPropertyKeys.ever_vaccinated(p_name)] = torch.zeros(num_agents, dtype=torch.bool)
 
         # --- Location and Activity ---
         agent_properties[AgentPropertyKeys.TIME_USE] = self._initialize_time_use(num_agents, agent_state.ndata[AgentPropertyKeys.IS_CHILD])
