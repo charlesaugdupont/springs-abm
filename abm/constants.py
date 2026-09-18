@@ -96,3 +96,10 @@ class AgentPropertyKeys:
     @staticmethod
     def illness_duration(pathogen_name: str) -> str:
         return f"illness_duration_{pathogen_name}"
+
+    @staticmethod
+    def ever_vaccinated(pathogen_name: str) -> str:
+        """Persistent vaccination history. Unlike the V compartment, this
+        survives V -> E -> I -> R, so it is still readable when a vaccinated
+        child falls ill (see ChildIllnessSystem._initialize_illness)."""
+        return f"ever_vaccinated_{pathogen_name}"

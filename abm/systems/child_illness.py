@@ -146,12 +146,16 @@ class ChildIllnessSystem(System):
         the caller) to only include children who don't currently have an
         active episode of this specific pathogen.
         """
+        # Vaccination history, not the current compartment. Every child in
+        # `mask` is INFECTIOUS right now, so a check for status == VACCINATED
+        # was always False (a vaccinated child moves V -> E -> I before any
+        # episode starts) and immunity_factor_vaccine never applied. The
+        # ever-vaccinated flag is set at S -> V and never cleared, so the
+        # vaccine's severity reduction applies to every later episode.
         vaccine_status_tensor = None
-        if pathogen_name == "rota":
-            status_key = AgentPropertyKeys.status("rota")
-            vaccine_status_tensor = (
-                agent_state.ndata[status_key][mask] == Compartment.VACCINATED
-            )
+        vacc_key = AgentPropertyKeys.ever_vaccinated(pathogen_name)
+        if vacc_key in agent_state.ndata:
+            vaccine_status_tensor = agent_state.ndata[vacc_key][mask].bool()
 
         new_severity = calculate_illness_severity(
             pathogen_name  = pathogen_name,

@@ -67,6 +67,13 @@ class Rotavirus(Pathogen):
         vaccinated_mask = chance < self.config.vaccination_rate
         agents_to_vaccinate = sus_mask.nonzero(as_tuple=True)[0][vaccinated_mask]
         agent_state.ndata[status_key][agents_to_vaccinate] = Compartment.VACCINATED
+        # Keep a record that outlives the V compartment: a breakthrough
+        # infection moves the child V -> E -> I, and illness severity (which
+        # is set once the child is INFECTIOUS) needs to know they were
+        # vaccinated.
+        vacc_key = AgentPropertyKeys.ever_vaccinated(self.name)
+        if vacc_key in agent_state.ndata:
+            agent_state.ndata[vacc_key][agents_to_vaccinate] = True
 
     def _susceptible_to_exposed_h2h(self, agent_state: AgentState, location_ids: torch.Tensor, num_locations: int):
         status_key = AgentPropertyKeys.status(self.name)
