@@ -769,6 +769,7 @@ table.ref td.num{color:var(--ink-soft);}
         </div>
       </div>
       <p style="font-size:13.4px">An episode ends — severity and remaining duration both drop to zero — either when the countdown naturally reaches zero, or immediately, for both concurrent episodes at once, if the parent successfully seeks care (§09). This second pathway is what links the behavioral-economic layer directly back into epidemic dynamics: a successful clinic visit doesn't just make a child feel better, it also converts that child from Infectious to Recovered.</p>
+      <p style="font-size:13.4px">Each infection causes <b>at most one episode</b>. The illness countdown runs on its own clock, separate from the infectious period, so a child whose symptoms have ended can still be Infectious — shedding the pathogen without symptoms — until they recover. They do not fall ill again from that same infection; a new episode needs a new infection.</p>
 
       <div class="note assump">Passive recovery applies to any agent not currently experiencing an active illness episode — in practice this means it operates continuously for adults (who never develop clinical episodes) and for children in between bouts of sickness.</div>
     </section>
@@ -935,7 +936,7 @@ table.ref td.num{color:var(--ink-soft);}
         <div class="stage-head"><span>4 · Daily systems — illness, behavior &amp; economy</span><span class="pill" style="background:rgba(255,255,255,.18); color:#fff; border:none">fixed order, once per day</span></div>
         <div class="stage-body">
           <ul class="steplist">
-            <li><span class="pill pill-behavior">Illness update</span> — new episodes begin for newly-infectious children, today's severity-driven health toll is applied, remaining duration counts down, and agents with no active illness recover passively.</li>
+            <li><span class="pill pill-behavior">Illness update</span> — new episodes begin for children who have just become infectious (at most one per infection), today's severity-driven health toll is applied, remaining duration counts down, and agents with no active illness recover passively.</li>
             <li><span class="pill pill-behavior">Care-seeking</span> — parents of noticed sick children weigh seeking care against waiting, using CPT (§09).</li>
             <li><span class="pill pill-rota">Household water carry-over</span> — households whose water-collector visited a contaminated source today are exposed at home.</li>
             <li><span class="pill pill-systems">Environmental dynamics</span> — contaminated water sources may recover; with a small daily chance, every clean source is contaminated at once (a shock event).</li>

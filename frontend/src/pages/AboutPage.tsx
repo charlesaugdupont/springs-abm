@@ -370,14 +370,16 @@ export default function AboutPage() {
           <p>
             The latent period is <span className="font-mono">exposure_period</span> days (3 for both pathogens);
             recovery is a daily Bernoulli trial at <span className="font-mono">recovery_rate</span> (≈ 7-day
-            illness). Both are literature-grounded and held out of calibration.
+            infectious period). Both are literature-grounded and held out of calibration.
           </p>
           <p>A child's illness severity is fixed at onset from age, base severity, and an immunity multiplier</p>
           <Equation>{"clamp( 1 − vaccine_effect − N_inf × per_infection_reduction , min = 0.1 )"}</Equation>
           <p>
             The floor at <span className="font-mono">0.1</span> is exactly why immunity is never perfect — and
             the mechanistic reason the model sustains endemic transmission indefinitely. Severity is then held
-            for the whole episode and duration simply counts down.
+            for the whole episode and duration simply counts down. Each infection produces at most one
+            episode: the illness countdown is separate from the infectious period, so a child can stay
+            infectious for a while after symptoms end without falling ill again from the same infection.
           </p>
         </TechDetails>
       </Section>

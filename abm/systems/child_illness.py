@@ -15,6 +15,11 @@ class ChildIllnessSystem(System):
     concurrently ill with more than one pathogen at once. Each pathogen's
     episode has its own onset, decay, and resolution. The daily health toll
     sums the contribution of every currently active episode.
+
+    Each infection produces at most one episode. The episode's duration is
+    set from its severity and is independent of the infectious period, so a
+    child may remain infectious (shedding without symptoms) after the
+    episode ends; they are not given a second episode for that infection.
     
     Per-episode data collection
     ---------------------------
@@ -54,11 +59,12 @@ class ChildIllnessSystem(System):
         is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
 
         # ------------------------------------------------------------------
-        # 1. Initialise illness for children who just became infectious with
-        #    a pathogen for which they do NOT already have an active
-        #    episode. Each pathogen is evaluated independently, so a child
-        #    with an ongoing episode of pathogen A can still start a fresh
-        #    episode of pathogen B.
+        # 1. Initialise illness for children who are infectious with a
+        #    pathogen for which they do NOT already have an active episode
+        #    AND whose current infection has not yet produced one. Each
+        #    pathogen is evaluated independently, so a child with an ongoing
+        #    episode of pathogen A can still start a fresh episode of
+        #    pathogen B.
         # ------------------------------------------------------------------
         for p_config in self.config.pathogens:
             pathogen_name = p_config.name
@@ -68,9 +74,28 @@ class ChildIllnessSystem(System):
             already_sick_this_pathogen = agent_state.ndata[duration_key] > 0
             is_infectious = agent_state.ndata[status_key] == Compartment.INFECTIOUS
 
-            newly_symptomatic = is_child & is_infectious & ~already_sick_this_pathogen
+            # One episode per infection. Illness runs on its own clock (a
+            # duration set from severity), independent of the infectious
+            # period, so a child can still be INFECTIOUS when their episode
+            # ends. Without this check a fresh episode (new severity, new
+            # duration, new log entry) started the next day for the SAME
+            # infection, inflating episode counts, health losses and
+            # care-seeking decisions. num_infections increases at every new
+            # exposure, so it identifies the current infection.
+            infection_count = agent_state.ndata[AgentPropertyKeys.num_infections(pathogen_name)]
+            last_key = AgentPropertyKeys.last_episode_infection(pathogen_name)
+            if last_key in agent_state.ndata:
+                new_infection = infection_count > agent_state.ndata[last_key]
+            else:
+                new_infection = torch.ones_like(is_infectious)
+
+            newly_symptomatic = (
+                is_child & is_infectious & ~already_sick_this_pathogen & new_infection
+            )
             if torch.any(newly_symptomatic):
                 self._initialize_illness(agent_state, newly_symptomatic, pathogen_name, illness_cfg)
+                if last_key in agent_state.ndata:
+                    agent_state.ndata[last_key][newly_symptomatic] = infection_count[newly_symptomatic]
 
         # ------------------------------------------------------------------
         # 2. Progress every active episode and apply the combined daily

@@ -76,6 +76,9 @@ class AgentFactory:
             agent_properties[AgentPropertyKeys.symptom_severity(p_name)] = torch.zeros(num_agents, dtype=torch.float)
             agent_properties[AgentPropertyKeys.illness_duration(p_name)] = torch.zeros(num_agents, dtype=torch.int)
             agent_properties[AgentPropertyKeys.ever_vaccinated(p_name)] = torch.zeros(num_agents, dtype=torch.bool)
+            # -1, not 0: agents seeded as Exposed at t=0 have num_infections == 0,
+            # so their first episode must still count as a new infection.
+            agent_properties[AgentPropertyKeys.last_episode_infection(p_name)] = torch.full((num_agents,), -1, dtype=torch.int)
 
         # --- Location and Activity ---
         agent_properties[AgentPropertyKeys.TIME_USE] = self._initialize_time_use(num_agents, agent_state.ndata[AgentPropertyKeys.IS_CHILD])

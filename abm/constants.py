@@ -103,3 +103,10 @@ class AgentPropertyKeys:
         survives V -> E -> I -> R, so it is still readable when a vaccinated
         child falls ill (see ChildIllnessSystem._initialize_illness)."""
         return f"ever_vaccinated_{pathogen_name}"
+
+    @staticmethod
+    def last_episode_infection(pathogen_name: str) -> str:
+        """num_infections at the start of the child's most recent illness
+        episode for this pathogen (-1 = no episode yet). Lets
+        ChildIllnessSystem start at most one episode per infection."""
+        return f"last_episode_infection_{pathogen_name}"
