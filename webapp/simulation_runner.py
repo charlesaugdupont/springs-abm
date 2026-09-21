@@ -76,7 +76,6 @@ def _static_layers(
     model: SVEIRModel,
     config: SVEIRConfig,
     pathogen_names: list[str],
-    home_snapshot: np.ndarray | None = None,
 ) -> dict[str, list[list[float]]]:
     """Static/reference spatial layers for the results-map overlays (households, animal density,
     schools/worship/water points, water bodies), all downsampled to the same SPATIAL_GRID_SIZE
@@ -85,15 +84,12 @@ def _static_layers(
     layers: dict[str, list[list[float]]] = {}
     g = model.graph
 
-    # Household locations: dedup by household and bin each household's ASSIGNED HOME cell, taken
-    # from a snapshot captured at init. We CANNOT read HOME_LOCATION at the end of the run: the
-    # movement system's reset_to_home aliases ndata[Y]/[X] to HOME_LOCATION's columns as torch
-    # views, so subsequent in-place movement writes corrupt HOME_LOCATION over the run (it drifts
-    # to activity locations). Placement itself is uniform over the eligible residence mask, so the
-    # init-time homes spread across the whole map.
+    # Household locations: dedup by household and bin each household's assigned home cell.
+    # HOME_LOCATION is fixed for the whole run (movement.reset_to_home clones it into Y/X rather
+    # than aliasing it), so reading it at the end of the run gives the init-time homes.
     try:
         household_id = g.ndata[AgentPropertyKeys.HOUSEHOLD_ID].cpu().numpy()
-        home = home_snapshot if home_snapshot is not None else g.ndata[AgentPropertyKeys.HOME_LOCATION].cpu().numpy()
+        home = g.ndata[AgentPropertyKeys.HOME_LOCATION].cpu().numpy()
         _, first_idx = np.unique(household_id, return_index=True)
         hy = np.clip(home[first_idx, 0].astype(int), 0, GRID_SIZE - 1)
         hx = np.clip(home[first_idx, 1].astype(int), 0, GRID_SIZE - 1)
@@ -181,11 +177,6 @@ def run_simulation_for_ui(config: SVEIRConfig, job_id: str) -> SimResultBundle:
     model.set_model_parameters(**config.model_dump())
     model.initialize_model(verbose=False)
 
-    # Snapshot assigned home cells NOW, before the day loop - HOME_LOCATION gets corrupted during
-    # the run by view-aliasing in movement.reset_to_home (see _static_layers). .copy() detaches
-    # from the tensor's storage so it can't be mutated later.
-    home_snapshot = _as_numpy(model.graph.ndata[AgentPropertyKeys.HOME_LOCATION]).copy()
-
     # Manual day-by-day driver, replicating model.run()'s own setup exactly (the same
     # established pattern as experiments/orchestrator.py::_run_one's step_callback branch) so
     # u5_prevalence_history is populated identically to model.run(), while also letting us
@@ -241,7 +232,7 @@ def run_simulation_for_ui(config: SVEIRConfig, job_id: str) -> SimResultBundle:
         cumulative_care_seeking_events=daily["cumulative_care_seeking_events"],
         spatial_grid_size=SPATIAL_GRID_SIZE,
         spatial_daily_grids=daily["spatial_grid"],
-        static_layers=_static_layers(model, config, pathogen_names, home_snapshot),
+        static_layers=_static_layers(model, config, pathogen_names),
         campy_daily_infections_by_route=campy_daily_infections_by_route,
         summary_metrics=summary_metrics,
         proportion_infected_at_least_once=model.get_proportion_infected_at_least_once(),
