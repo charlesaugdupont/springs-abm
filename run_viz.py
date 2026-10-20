@@ -136,10 +136,16 @@ def plot(model: SVEIRModel, steps: int,
 
     minx, miny, maxx, maxy = _grid_bounds()
 
-    heat       = _build_infection_grid(model)
-    rota_prev  = np.array(model.u5_prevalence_history.get("rota",  []))
-    campy_prev = np.array(model.u5_prevalence_history.get("campy", []))
-    days       = np.arange(len(rota_prev))
+    heat = _build_infection_grid(model)
+    # Every pathogen this run actually had, in config order, rather than a
+    # hardcoded pair.
+    prevalence = {
+        name: np.array(series)
+        for name, series in model.u5_prevalence_history.items()
+        if len(series) > 0
+    }
+    n_days = max((len(v) for v in prevalence.values()), default=0)
+    days = np.arange(n_days)
 
     # ── figure ───────────────────────────────────────────────────────────────
     fig, axes = plt.subplots(1, 2, figsize=(17, 7))
@@ -192,22 +198,21 @@ def plot(model: SVEIRModel, steps: int,
     # ── Panel 2: Under-5 epidemic curves ─────────────────────────────────────
     ax2 = axes[1]
 
-    ROTA_COL  = "#42a5f5"
-    CAMPY_COL = "#ef5350"
+    PATHOGEN_STYLE = {
+        "rota":   ("#42a5f5", "Rotavirus"),
+        "campy":  ("#ef5350", "Campylobacter"),
+        "crypto": ("#66bb6a", "Cryptosporidium"),
+    }
 
-    if len(rota_prev) > 0:
-        ax2.plot(days, rota_prev * 100,
-                 color=ROTA_COL, linewidth=2.2, label="Rotavirus", zorder=3)
-        ax2.fill_between(days, 0, rota_prev * 100, color=ROTA_COL, alpha=0.15)
+    for name, prev in prevalence.items():
+        color, label = PATHOGEN_STYLE.get(name, ("#bdbdbd", name))
+        ax2.plot(np.arange(len(prev)), prev * 100,
+                 color=color, linewidth=2.2, label=label, zorder=3)
+        ax2.fill_between(np.arange(len(prev)), 0, prev * 100, color=color, alpha=0.15)
 
-    if len(campy_prev) > 0:
-        ax2.plot(days, campy_prev * 100,
-                 color=CAMPY_COL, linewidth=2.2, label="Campylobacter", zorder=3)
-        ax2.fill_between(days, 0, campy_prev * 100, color=CAMPY_COL, alpha=0.15)
-
-    if len(rota_prev) > 0 and len(campy_prev) > 0:
-        min_len  = min(len(rota_prev), len(campy_prev))
-        combined = rota_prev[:min_len] + campy_prev[:min_len]
+    if len(prevalence) > 1:
+        min_len = min(len(v) for v in prevalence.values())
+        combined = sum(v[:min_len] for v in prevalence.values())
         ax2.plot(np.arange(min_len), combined * 100,
                  color="white", linewidth=1.2, linestyle="--",
                  alpha=0.5, label="Combined", zorder=2)
@@ -218,7 +223,7 @@ def plot(model: SVEIRModel, steps: int,
     ax2.tick_params(colors="white")
     ax2.tick_params(axis="both", labelsize=14)
     ax2.set_ylim(bottom=0)
-    ax2.set_xlim(0, max(len(rota_prev), len(campy_prev), 1) - 1)
+    ax2.set_xlim(0, max(n_days, 1) - 1)
     ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.1f}%"))
     ax2.legend(fontsize=10, facecolor="#2d2d44",
                edgecolor="white", labelcolor="white")

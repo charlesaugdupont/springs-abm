@@ -15,6 +15,26 @@ class Activity(IntEnum):
     WATER = 3
     SOCIAL = 4
 
+class Phase(IntEnum):
+    """Which of the two within-day transmission phases is currently executing.
+
+    abm/model/step.py runs transmission twice per simulated day: once after
+    agents have moved to their chosen daytime activity location (DAY) and once
+    after MovementSystem.reset_to_home has returned everyone to their household
+    (NIGHT). The phase is passed explicitly to Pathogen.step_transmission so a
+    pathogen with a once-per-day, household-scoped route can identify the right
+    call without inferring it from agent positions.
+
+    This replaces Campylobacter._is_night_phase, which inferred the phase by
+    checking whether *every* agent happened to be standing on their home cell.
+    That test is only probabilistically false during the day phase (it would
+    return True on any day where every agent independently drew the HOME
+    activity), and it had to be duplicated by every pathogen that needed the
+    distinction.
+    """
+    DAY = 0
+    NIGHT = 1
+
 class WaterStatus(IntEnum):
     """
     Represents the contamination status of a water source cell.
@@ -51,7 +71,19 @@ class AgentPropertyKeys:
     HOUSEHOLD_ID = "household_id"
     IS_CHILD = "is_child"
     IS_PARENT = "is_parent"
-    AGE = "age"
+    AGE = "age"   # months
+    # Day (timestep) on which the agent slot's current occupant was born
+    # inside the simulation; -1 for agents present at t=0. See
+    # abm/systems/demography.py: a child reaching the upper age limit leaves
+    # the modelled population and the slot is reused for a newborn.
+    BIRTH_DAY = "birth_day"
+    # Whether this child slot attends school/early-childhood education once
+    # old enough (drawn once per slot; see DemographyConfig).
+    ATTENDS_SCHOOL = "attends_school"
+    # Household-level multiplier (mean 1) on infection risk via environmental
+    # routes, shared by every member and pathogen - see
+    # SteeringParamsSVEIR.household_exposure_sdlog.
+    EXPOSURE_FRAILTY = "exposure_frailty"
 
     # Behavior / CPT
     PERSONA_ID = "persona_id"
@@ -63,6 +95,9 @@ class AgentPropertyKeys:
     X = "x"
     Y = "y"
     TIME_USE = "time_use"
+    # Time-use weights as originally drawn, before age-based eligibility
+    # (e.g. no school below the entry age) is applied to give TIME_USE.
+    TIME_USE_BASE = "time_use_base"
     ACTIVITY_CHOICE = "activity_choice"
     HOME_LOCATION = "home_location"
     SCHOOL_LOCATION = "school_location"
@@ -103,6 +138,13 @@ class AgentPropertyKeys:
         survives V -> E -> I -> R, so it is still readable when a vaccinated
         child falls ill (see ChildIllnessSystem._initialize_illness)."""
         return f"ever_vaccinated_{pathogen_name}"
+
+    @staticmethod
+    def first_infection_day(pathogen_name: str) -> str:
+        """Timestep of the slot occupant's first infection with this pathogen
+        (-1 = none yet). Only meaningful for children born in the simulation
+        (BIRTH_DAY >= 0); used for age-at-first-infection metrics."""
+        return f"first_infection_day_{pathogen_name}"
 
     @staticmethod
     def last_episode_infection(pathogen_name: str) -> str:

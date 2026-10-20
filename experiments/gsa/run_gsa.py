@@ -347,7 +347,9 @@ def main():
     else:  # sobol
         args.samples = args.samples if args.samples is not None else (16 if args.pilot else 256)
         args.reps = args.reps if args.reps is not None else (2 if args.pilot else 5)
-    args.steps = args.steps if args.steps is not None else (60 if args.pilot else 250)
+    # 1460 = the 730-day burn-in the headline metrics exclude + 2 years measured
+    # (experiments.metrics.DEFAULT_BURN_IN_DAYS; see gsa_metrics.py).
+    args.steps = args.steps if args.steps is not None else (60 if args.pilot else 1460)
     args.agents = args.agents if args.agents is not None else (800 if args.pilot else 4000)
 
     if args.pilot:

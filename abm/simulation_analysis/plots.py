@@ -58,6 +58,21 @@ def _load_and_aggregate_results(experiment_name: str) -> Dict | None:
 # Plot 1: Epidemic curves
 # ---------------------------------------------------------------------------
 
+#: Display names and plot colours per pathogen, in one place so the several
+#: figures in this module cannot disagree with each other (and so adding a
+#: pathogen means adding one entry, not editing every plotting function).
+PATHOGEN_LABELS = {
+    "rota": "Rotavirus",
+    "campy": "Campylobacter",
+    "crypto": "Cryptosporidium",
+}
+PATHOGEN_COLORS = {
+    "rota": "#2196F3",
+    "campy": "#FF5722",
+    "crypto": "#43A047",
+}
+
+
 def plot_epidemic_curves(experiment_name: str):
     """Plots epidemic prevalence curve for first repeition of given experiment."""
     print(f"Generating epidemic curves for {experiment_name}...")
@@ -69,11 +84,13 @@ def plot_epidemic_curves(experiment_name: str):
     plt.style.use('seaborn-v0_8-whitegrid')
     fig, ax = plt.subplots(figsize=(12, 7))
 
-    rota = aggregated_results['u5_prevalence'][0]["rota"]
-    campy = aggregated_results['u5_prevalence'][0]["campy"]
-
-    line1, = ax.plot(np.arange(len(rota)), rota, label=f"Rotavirus", lw=2, color="dodgerblue")
-    line2, = ax.plot(np.arange(len(campy)), campy, label=f"Campylobacter", lw=2, color="crimson")
+    # Plot whichever pathogens this run actually had, rather than assuming a
+    # fixed two - a run may have any subset of the configured pathogens.
+    series = aggregated_results['u5_prevalence'][0]
+    for name, prev in series.items():
+        ax.plot(np.arange(len(prev)), prev,
+                label=PATHOGEN_LABELS.get(name, name),
+                lw=2, color=PATHOGEN_COLORS.get(name, None))
 
     ax.set_title("Epidemic Progression (<5 Prevalence)", fontsize=16, pad=15)
     ax.set_xlabel("Time (Days)", fontsize=12)
@@ -224,7 +241,7 @@ def plot_child_illness_analysis(experiment_name: str):
         df['severity_category'], categories=['Mild', 'Moderate', 'Severe'], ordered=True
     )
 
-    pathogen_palette = {'rota': '#2196F3', 'campy': '#FF5722'}
+    pathogen_palette = dict(PATHOGEN_COLORS)
     pathogens_present = sorted(df['pathogen'].unique())
 
     sns.set_theme(style="whitegrid")

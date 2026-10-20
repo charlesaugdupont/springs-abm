@@ -4,7 +4,7 @@ import torch
 
 from abm.state import AgentState
 from config import SVEIRConfig
-from abm.constants import Compartment, AgentPropertyKeys
+from abm.constants import Compartment, AgentPropertyKeys, Phase
 from abm.pathogens.pathogen import Pathogen
 from abm.systems.system import System
 
@@ -55,7 +55,7 @@ def sveir_step(
 
     # c. TRANSMISSION (Daytime)
     for pathogen in pathogens:
-        pathogen.step_transmission(agent_state, location_ids, num_locations, grid)
+        pathogen.step_transmission(agent_state, location_ids, num_locations, grid, Phase.DAY)
 
     # --- 2. PHASE 2: NIGHTTIME (Home) ---
 
@@ -67,14 +67,14 @@ def sveir_step(
 
     # c. TRANSMISSION (Nighttime)
     for pathogen in pathogens:
-        pathogen.step_transmission(agent_state, location_ids, num_locations, grid)
+        pathogen.step_transmission(agent_state, location_ids, num_locations, grid, Phase.NIGHT)
 
     # --- 3. DAILY SYSTEMS ---
     # Order must match self.systems in initialize_model.py
     systems[1].update(agent_state, timestep=timestep) # ChildIllnessSystem
     systems[2].update(agent_state) # CareSeekingSystem
     systems[3].update(agent_state, grid=grid, pathogens=pathogens) # HouseholdSystem
-    systems[4].update(agent_state, grid=grid, timestep=timestep) # EnvironmentSystem
+    systems[4].update(agent_state, grid=grid, timestep=timestep, pathogens=pathogens) # EnvironmentSystem
     systems[5].update(agent_state) # EconomicSystem
 
     # --- 4. GATHER STATISTICS ---

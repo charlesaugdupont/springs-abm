@@ -31,7 +31,8 @@ from typing import Literal
 from pydantic import BaseModel
 
 from config import (
-    SVEIRConfig, RotavirusConfig, CampylobacterConfig,
+    PATHOGEN_CONFIG_TYPES,
+    SVEIRConfig, RotavirusConfig, CampylobacterConfig, CryptosporidiumConfig,
     GridCreationParams, IllnessMechanicsConfig, SteeringParamsSVEIR,
 )
 
@@ -65,6 +66,7 @@ CATEGORY_ORDER = [
     "Population & Demographics",
     "Rotavirus",
     "Campylobacter",
+    "Cryptosporidium",
     "Illness Mechanics",
     "Care-Seeking & Behavioral Economics",
     "Household Economics",
@@ -112,6 +114,40 @@ REGISTRY: list[ParamMeta] = [
         rationale="Number of simulated days. The model shows one large initial epidemic wave "
                   "(peaking around day 30) before settling into a lower quasi-equilibrium by "
                   "roughly day 150-200 - short runs may only capture the initial wave.",
+    ),
+    ParamMeta(
+        path="demography.ageing", label="Ageing and under-5 turnover", category="internal",
+        evidence_tier="structural",
+        rationale="Children age daily; one reaching five years leaves the modelled population and "
+                  "its slot is reused for a newborn. Without this the population is closed and "
+                  "incidence declines indefinitely as immunity accumulates.",
+    ),
+    ParamMeta(
+        path="demography.child_max_age_months", label="Upper age of modelled children",
+        category="internal", evidence_tier="structural",
+        rationale="The modelled children are the under-5s (60 months).",
+    ),
+    ParamMeta(
+        path="demography.school_entry_age_months", label="School entry age",
+        category="Population & Demographics", evidence_tier="literature", editable=True,
+        ui_min=0.0, ui_max=60.0, unit="months",
+        rationale="Youngest age at which a child attends nursery/kindergarten. Ghana has two years "
+                  "of compulsory kindergarten from age 4 and common nursery attendance from age 3. "
+                  "Younger children stay home rather than spending ~30% of days at school.",
+    ),
+    ParamMeta(
+        path="demography.school_attendance_prob", label="School attendance (age-eligible)",
+        category="Population & Demographics", evidence_tier="assumption", editable=True,
+        ui_min=0.0, ui_max=1.0,
+        rationale="Probability an age-eligible child attends. 0.7 is a placeholder pending the "
+                  "Ghana MICS early-childhood-education attendance indicator (36-59 months).",
+    ),
+    ParamMeta(
+        path="demography.initial_prior_infections", label="Initial infection history",
+        category="internal", evidence_tier="literature",
+        rationale="'maled': children start with prior infection counts drawn around MAL-ED's "
+                  "cumulative age-specific incidence, so a 4-year-old is not naive at t=0. Shortens "
+                  "the burn-in; not a target.",
     ),
     ParamMeta(
         path="average_household_size", label="Average household size", category="Population & Demographics",
@@ -220,10 +256,12 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="pathogens[rota].infection_prob_mean", label="Infection probability (mean)",
         category="Rotavirus", evidence_tier="calibrated", editable=True,
-        ui_min=0.0, ui_max=0.025,
-        rationale="Mean per-exposure infection probability. LHS-calibrated to hit literature "
-                  "target ranges for episodes/child-year and peak prevalence - not independently "
-                  "measured for Akuse. Changing this moves the model away from that calibrated fit.",
+        ui_min=0.0, ui_max=0.06,
+        rationale="Mean per-exposure person-to-person infection probability. History-matched "
+                  "jointly with the other transmission parameters against MAL-ED incidence, "
+                  "prior-infection rate ratios and route fractions (experiments/calibration/"
+                  "history_matching.py) - not measured for Akuse. Trades off against the water "
+                  "dose: change one and the other must move to keep the fit.",
     ),
     ParamMeta(
         path="pathogens[rota].infection_prob_std", label="Infection probability (spread)",
@@ -296,22 +334,24 @@ REGISTRY: list[ParamMeta] = [
         category="Campylobacter", evidence_tier="calibrated", editable=True,
         ui_min=0.0, ui_max=0.02,
         rationale="Daily probability of zoonotic-route exposure for an animal-owning household. "
-                  "LHS-calibrated to hit literature target ranges - not measured directly for Akuse.",
+                  "History-matched jointly with the other transmission parameters (MAL-ED incidence "
+                  "and a 50-80% zoonotic share) - not measured directly for Akuse.",
     ),
     ParamMeta(
         path="pathogens[campy].fecal_oral_prob", label="Fecal-oral transmission probability",
         category="Campylobacter", evidence_tier="calibrated", editable=True,
         ui_min=0.0, ui_max=0.03,
         rationale="Per-contact fecal-oral transmission probability within an infected household. "
-                  "LHS-calibrated, same fit as the other campylobacter transmission parameters.",
+                  "History-matched with the other transmission parameters; weakly identified, as "
+                  "this route carries little campylobacter transmission.",
     ),
     ParamMeta(
         path="pathogens[campy].food_borne_prob", label="Food-borne background risk",
         category="Campylobacter", evidence_tier="calibrated", editable=True,
         ui_min=0.0, ui_max=0.005,
         rationale="Daily background infection probability via food-borne exposure, independent of "
-                  "household animal contact. LHS-calibrated, same fit as the other campylobacter "
-                  "transmission parameters.",
+                  "household animal contact. History-matched with the other transmission "
+                  "parameters.",
     ),
     ParamMeta(
         path="pathogens[campy].poultry_ownership_prob", label="Poultry ownership rate",
@@ -359,6 +399,304 @@ REGISTRY: list[ParamMeta] = [
     ),
 
     # ------------------------------------------------------------------
+    # Shared per-pathogen illness coupling (rotavirus / campylobacter)
+    # ------------------------------------------------------------------
+    # These fields live on the PathogenConfig base class, so every pathogen
+    # has them. symptomatic_fraction is now a MAL-ED literature value for all
+    # three pathogens (abm/evidence/maled.py) and is editable like crypto's. The
+    # age profile, duration_scale and immunity override stay internal: the
+    # profile is a list (no slider fits it), and duration_scale/immunity_decay
+    # are exact no-ops for these two pathogens at their defaults.
+    ParamMeta(
+        path="pathogens[rota].symptomatic_fraction", label="Symptomatic fraction", category="Rotavirus",
+        evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
+        rationale="Fraction of infections in children 0-24 months that cause diarrhoea attributable "
+                  "to rotavirus: 472 of 734 infections (0.64) in the MAL-ED birth cohort (Amin et "
+                  "al. 2026, unvaccinated sites). Subclinical infections still shed and transmit.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].symptomatic_fraction_age_profile", label="Symptomatic fraction age profile",
+        category="internal", evidence_tier="literature",
+        rationale="MAL-ED 6-month-band values (0.58, 0.72, 0.67, 0.50 to 24 months) as multipliers "
+                  "on the symptomatic fraction; held flat beyond 24 months.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].treatment_clears_infection_prob", label="Treatment clears infection",
+        category="internal", evidence_tier="literature",
+        rationale="0: there is no antiviral for rotavirus, and ORS/zinc do not shorten shedding, so "
+                  "care-seeking ends symptoms but not the infection.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].duration_scale", label="Illness-duration scale", category="internal",
+        evidence_tier="structural",
+        rationale="Per-pathogen multiplier on the shared illness-duration window. 1.0: MAL-ED found "
+                  "rotavirus diarrhoea durations (median 2-3 days) fit the shared window directly.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].immunity_decay_per_infection", label="Immunity decay override",
+        category="internal", evidence_tier="literature",
+        rationale="Per-prior-infection decay of susceptibility, exp(-0.45 N): 74% protection after "
+                  "three infections, as measured by Velazquez et al. 1996 (Mexico) and MAL-ED "
+                  "(Mohan et al. 2017). Internal for the same reason as Cryptosporidium's override.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].symptomatic_fraction", label="Symptomatic fraction", category="Campylobacter",
+        evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
+        rationale="Fraction of infections in children 0-24 months that cause diarrhoea attributable "
+                  "to Campylobacter: 502 of 2938 infections (0.17) in the MAL-ED birth cohort (Amin "
+                  "et al. 2026). Most childhood Campylobacter infection is subclinical.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].symptomatic_fraction_age_profile", label="Symptomatic fraction age profile",
+        category="internal", evidence_tier="literature",
+        rationale="MAL-ED 6-month-band values (0.22, 0.20, 0.15, 0.11 to 24 months) as multipliers "
+                  "on the symptomatic fraction; held flat beyond 24 months.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].treatment_clears_infection_prob", label="Treatment clears infection",
+        category="internal", evidence_tier="assumption",
+        rationale="1.0 keeps the original model's behaviour: every successful visit is assumed to "
+                  "include an effective antibiotic that ends the infection. An upper bound pending "
+                  "local prescribing data.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].duration_scale", label="Illness-duration scale", category="internal",
+        evidence_tier="structural",
+        rationale="Per-pathogen multiplier on the shared illness-duration window. 1.0: MAL-ED found "
+                  "campylobacter diarrhoea durations (median 2-3 days) fit the shared window.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].immunity_decay_per_infection", label="Immunity decay override",
+        category="internal", evidence_tier="structural",
+        rationale="Optional per-pathogen override of the shared acquired-immunity decay. Unset for "
+                  "campylobacter, which uses the shared steering parameter.",
+    ),
+
+    ParamMeta(
+        path="pathogens[rota].immunity_floor", label="Immunity plateau / adult susceptibility",
+        category="Rotavirus", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
+        rationale="Lowest relative susceptibility repeated infection can produce (0.26 = 74% protection, the most measured after three infections; Velazquez et al. 1996, Mohan et al. 2017), and the susceptibility of every adult.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].infant_susceptibility_at_birth", label="Newborn relative susceptibility",
+        category="Rotavirus", evidence_tier="calibrated", editable=True, ui_min=0.0, ui_max=1.0,
+        rationale="Infection risk of a newborn relative to an older child - maternal antibody, breastfeeding and limited mobility. 0.44: MAL-ED's 0-3 month rotavirus incidence is 0.55x its 6-9 month peak.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].infant_susceptibility_ramp_months", label="Infant protection ramp",
+        category="Rotavirus", evidence_tier="calibrated", editable=True, ui_min=0.0, ui_max=24.0,
+        unit="months",
+        rationale="Age by which an infant's susceptibility has risen linearly to that of an older "
+                  "child. First-pass value read off the MAL-ED age-incidence curve.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].immunity_floor", label="Immunity plateau / adult susceptibility",
+        category="Campylobacter", evidence_tier="assumption", editable=True, ui_min=0.0, ui_max=1.0,
+        rationale="Lowest relative susceptibility repeated infection can produce, and the susceptibility of every adult. An assumption (0.30), set comparable to the other two pathogens: no direct estimate exists.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].infant_susceptibility_at_birth", label="Newborn relative susceptibility",
+        category="Campylobacter", evidence_tier="calibrated", editable=True, ui_min=0.0, ui_max=1.0,
+        rationale="Infection risk of a newborn relative to an older child. 0.18: MAL-ED's 0-3 month Campylobacter incidence is 0.30x its 9-12 month peak.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].infant_susceptibility_ramp_months", label="Infant protection ramp",
+        category="Campylobacter", evidence_tier="calibrated", editable=True, ui_min=0.0, ui_max=24.0,
+        unit="months",
+        rationale="Age by which an infant's susceptibility has risen linearly to that of an older "
+                  "child. First-pass value read off the MAL-ED age-incidence curve.",
+    ),
+    # ------------------------------------------------------------------
+    # Cryptosporidium
+    # ------------------------------------------------------------------
+    ParamMeta(
+        path="pathogens[crypto].name", label="Pathogen ID", category="internal",
+        evidence_tier="structural",
+        rationale="Internal pathogen identifier, not a scientific parameter.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].initial_exposed_proportion", label="Initial exposed fraction",
+        category="Cryptosporidium", evidence_tier="assumption", editable=True,
+        ui_min=0.0, ui_max=0.2,
+        rationale="Fraction of agents seeded as exposed to Cryptosporidium at the very start of "
+                  "the run. A seeding choice, not an epidemiological estimate - the model runs to "
+                  "its own quasi-equilibrium regardless.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].exposure_period", label="Latent period", category="Cryptosporidium",
+        evidence_tier="literature", editable=True, ui_min=1, ui_max=14, unit="days",
+        ui_step=1, is_integer=True,
+        rationale="Days between infection and becoming infectious. Cryptosporidiosis has an "
+                  "incubation period averaging about 7 days (range 2-10), notably longer than "
+                  "rotavirus or campylobacter - which delays and flattens its epidemic response.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].recovery_rate", label="Recovery rate", category="Cryptosporidium",
+        evidence_tier="literature", editable=True, ui_min=0.02, ui_max=0.2,
+        rationale="Daily probability of clearing infection. The default 0.0476 is a ~21-day mean "
+                  "shedding period: Korpe et al. 2022 measured 16-19 day means across infants, "
+                  "older children and adults, and an Ethiopian case series a 31-day median from "
+                  "diarrhoea onset. Shedding lasts far longer than for the other two pathogens, "
+                  "and much of it is symptom-free.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].symptomatic_fraction", label="Symptomatic fraction",
+        category="Cryptosporidium", evidence_tier="literature", editable=True,
+        ui_min=0.0, ui_max=1.0,
+        rationale="Fraction of childhood infections that cause diarrhoea attributable to "
+                  "Cryptosporidium: 245 of 1364 infections (0.18) in children 0-24 months in the "
+                  "MAL-ED birth cohort (Amin et al. 2026). The large subclinical majority still "
+                  "shed and still infect others - the 'silent reservoir' that sustains "
+                  "transmission. Lowering this reduces measured disease without reducing "
+                  "transmission.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].symptomatic_fraction_age_profile", label="Symptomatic fraction age profile",
+        category="internal", evidence_tier="literature",
+        rationale="MAL-ED 6-month-band values (0.22, 0.20, 0.17, 0.17 to 24 months) as multipliers "
+                  "on the symptomatic fraction; held flat beyond 24 months.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].treatment_clears_infection_prob", label="Treatment clears infection",
+        category="internal", evidence_tier="literature",
+        rationale="0: standard care (ORS + zinc) does not shorten oocyst shedding, and nitazoxanide "
+                  "is not part of IMCI diarrhoea management. Care-seeking ends symptoms, not the "
+                  "infection.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].duration_scale", label="Illness-duration scale",
+        category="Cryptosporidium", evidence_tier="literature", editable=True,
+        ui_min=0.5, ui_max=3.0,
+        rationale="Stretches the shared illness-duration window for this pathogen. 1.0: MAL-ED found "
+                  "Cryptosporidium-attributable diarrhoea in children under two lasted no longer "
+                  "than rotavirus or campylobacter diarrhoea (median 2-3 days).",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].immunity_decay_per_infection", label="Immunity decay override",
+        category="internal", evidence_tier="literature",
+        rationale="Per-prior-infection immunity decay, overriding the shared value. Set to 0.29 "
+                  "from Kattula et al. 2016, who found only 69% protection against infection even "
+                  "after four prior infections. Kept out of the UI because it is one of two "
+                  "controls on the same quantity and exposing both would let them silently "
+                  "contradict each other.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].immunity_floor", label="Immunity plateau / adult susceptibility",
+        category="Cryptosporidium", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
+        rationale="Lowest relative susceptibility repeated infection can produce (0.31 = 69% protection after four infections; Kattula et al. 2016), and the susceptibility of every adult.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].infant_susceptibility_at_birth", label="Newborn relative susceptibility",
+        category="Cryptosporidium", evidence_tier="calibrated", editable=True, ui_min=0.0, ui_max=1.0,
+        rationale="Infection risk of a newborn relative to an older child. 0: MAL-ED's 0-3 month Cryptosporidium incidence is only 0.08x its 15-18 month peak - the strongest early-life protection of the three.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].infant_susceptibility_ramp_months", label="Infant protection ramp",
+        category="Cryptosporidium", evidence_tier="calibrated", editable=True, ui_min=0.0, ui_max=24.0,
+        unit="months",
+        rationale="Age by which an infant's susceptibility has risen linearly to that of an older "
+                  "child. First-pass value read off the MAL-ED age-incidence curve.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].household_transmission_prob", label="Household transmission probability",
+        category="Cryptosporidium", evidence_tier="calibrated", editable=True,
+        ui_min=0.0, ui_max=0.08,
+        rationale="Daily chance a susceptible household member is infected when someone in their "
+                  "household is infectious. A main route for this pathogen. Anchored on measured "
+                  "household secondary attack rates (Korpe et al. 2018: 35.8% urban, 7.8% rural "
+                  "over 8 weeks) and history-matched against MAL-ED incidence and a 30-60% "
+                  "household share of infections.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].community_infection_prob", label="Community transmission probability",
+        category="Cryptosporidium", evidence_tier="calibrated", editable=True,
+        ui_min=0.0, ui_max=0.005,
+        rationale="Per-contact chance of infection from each co-located infectious person outside "
+                  "the household - schools, worship, water points, social visits. Carries the "
+                  "neighbouring-children transmission signal found in rural sub-Saharan Africa "
+                  "(Krumkamp et al. 2020). History-matched with the other transmission parameters.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].dose_response_r", label="Dose-response rate (r)",
+        category="Cryptosporidium", evidence_tier="literature", editable=True,
+        ui_min=0.005, ui_max=0.07,
+        rationale="Exponential dose-response parameter: a larger r means fewer oocysts are needed "
+                  "to infect. The range spans human-challenge infectious doses, which vary widely "
+                  "by isolate (ID50 from 9 to 1042 oocysts; 10-83 for the C. hominis strain most "
+                  "relevant to Ghana). The default 0.018 corresponds to an ID50 of about 39.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].oocyst_decay_rate", label="Oocyst die-off rate",
+        category="Cryptosporidium", evidence_tier="literature", editable=True,
+        ui_min=0.02, ui_max=0.5,
+        rationale="Daily die-off of oocysts in a water source. The default 0.15 means a 10-fold "
+                  "decline takes about 15 days, from measurements at tropical water temperatures "
+                  "(King et al. 2005; Li et al. 2009). Oocysts persist far longer than rotavirus "
+                  "in water, which is why contaminated sources stay risky for weeks. The often-"
+                  "quoted 'survives for months' figure applies to cold water, not to Akuse.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].oocyst_shedding_rate", label="Oocyst shedding rate",
+        category="internal", evidence_tier="structural",
+        rationale="Load added to a water source per infectious person present per day. Fixed at "
+                  "1.0 by definition: it sets the reservoir's unit (person-days of shedding) so "
+                  "that the dose scale below carries all the real scaling. Changing it would just "
+                  "rescale that other parameter.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].water_dose_scale", label="Waterborne dose scale",
+        category="Cryptosporidium", evidence_tier="calibrated", editable=True,
+        ui_min=0.0, ui_max=5.0,
+        rationale="Converts the contamination of a household's drinking-water source into the "
+                  "dose its members receive each day. Absorbs oocysts shed per person, the "
+                  "fraction carried by runoff, dilution, how much water is drunk and any treatment "
+                  "- none of which are measured for Akuse - so it is the calibrated knob for the "
+                  "waterborne route. History-matched, but WEAKLY identified: values from ~0.02 to "
+                  "~2.7 fit the targets equally, giving very different waterborne shares (~10% at "
+                  "the default). Vary it in any water-shock scenario.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].shock_oocyst_load", label="Shock oocyst load",
+        category="internal", evidence_tier="assumption",
+
+        rationale="LEGACY water model only (WaterConfig.model='legacy'). How heavily every water source is loaded when a contamination shock (flood, "
+                  "infrastructure failure) occurs - the equivalent for this pathogen of 'all "
+                  "sources become contaminated'. A documented assumption to be explored by "
+                  "sensitivity analysis, like the shock frequency itself, not a measured value.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].zoonotic_interaction_rate", label="Animal-contact exposure rate",
+        category="Cryptosporidium", evidence_tier="calibrated", editable=True,
+        ui_min=0.0, ui_max=0.1,
+        rationale="Scales local ruminant density into infection risk. Expected to stay SMALL: "
+                  "contact-network studies in rural sub-Saharan Africa, including Ghana, find no "
+                  "elevated risk from animal contacts and conclude human-to-human spread "
+                  "dominates. The control exists so livestock-focused scenarios can be explored, "
+                  "not because it drives the epidemiology here. History-matched against a 2-15% "
+                  "zoonotic share.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].ruminant_weight", label="Ruminant risk weight",
+        category="Cryptosporidium", evidence_tier="assumption", editable=True,
+        ui_min=0.0, ui_max=2.0,
+        rationale="Relative weight on ruminants within this pathogen's zoonotic route. Poultry "
+                  "are excluded entirely - birds do not carry the Cryptosporidium species that "
+                  "infect people - so this is effectively a units choice folded into the exposure "
+                  "rate above.",
+    ),
+    ParamMeta(
+        path="illness_mechanics.base_severity_crypto", label="Base cryptosporidiosis severity",
+        category="Cryptosporidium", evidence_tier="literature", editable=True,
+        ui_min=0.0, ui_max=1.0,
+        rationale="Base illness severity (0-1 scale) before age and immunity adjustments. Set "
+                  "between campylobacter (0.3) and rotavirus (0.4): Cryptosporidium diarrhoea in "
+                  "young children is more often dehydrating and more often fatal than the average "
+                  "cause (GEMS), but rotavirus remains the archetypal severe dehydrating "
+                  "infection, and much of this pathogen's burden comes from how LONG episodes "
+                  "last rather than how intense they are.",
+    ),
+
+    # ------------------------------------------------------------------
     # Illness Mechanics
     # ------------------------------------------------------------------
     ParamMeta(
@@ -389,19 +727,28 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="illness_mechanics.duration_min_days", label="Illness duration (minimum)",
         category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.5, ui_max=5.0, unit="days",
-        rationale="Expected illness duration at severity = 0. Anchored to cited illness-duration "
-                  "literature, consistent with each pathogen's recovery_rate.",
+        rationale="Expected illness duration at severity = 0 (and the minimum). Set with the "
+                  "maximum and spread so that median durations match MAL-ED's 2-3 days (IQR within "
+                  "1-7) for all three pathogens in children under two.",
     ),
     ParamMeta(
         path="illness_mechanics.duration_max_days", label="Illness duration (maximum)",
-        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=5.0, ui_max=25.0, unit="days",
-        rationale="Expected illness duration at severity = 1. Same literature basis as the minimum duration.",
+        category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=3.0, ui_max=25.0, unit="days",
+        rationale="Expected illness duration at severity = 1 (and the maximum). Same MAL-ED basis "
+                  "as the minimum duration.",
     ),
     ParamMeta(
         path="illness_mechanics.duration_noise_std", label="Illness duration (spread)",
         category="Illness Mechanics", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=4.0, unit="days",
-        rationale="Stochastic spread around the expected illness duration. Same literature basis "
-                  "as the min/max duration.",
+        rationale="Stochastic spread around the expected illness duration. Same MAL-ED basis as "
+                  "the min/max duration.",
+    ),
+    ParamMeta(
+        path="illness_mechanics.duration_cap_days", label="Illness duration (ceiling)",
+        category="internal", evidence_tier="literature",
+        rationale="Hard ceiling on one episode's duration, separate from the expected maximum so "
+                  "high-severity episodes do not pile up at it. 14 days is the WHO boundary "
+                  "between acute and persistent diarrhoea.",
     ),
 
     # ------------------------------------------------------------------
@@ -411,17 +758,46 @@ REGISTRY: list[ParamMeta] = [
         path="steering_parameters.cost_of_care", label="Cost of seeking care",
         category="Care-Seeking & Behavioral Economics", evidence_tier="calibrated", editable=True,
         ui_min=0.0, ui_max=0.3, unit="fraction of wealth",
-        rationale="Cost of seeking medical care, as a fraction of max household wealth. Calibrated "
-                  "jointly with the household income rate against the Ghana DHS childhood-diarrhea "
-                  "care-seeking rate (69.2%, 95% CI 65.6-72.8%, n=621). Changing this without also "
-                  "adjusting income may pull the model away from that validated figure.",
+        rationale="Cost of seeking medical care, as a fraction of max household wealth. History-"
+                  "matched against the Ghana DHS childhood-diarrhoea care-seeking rate (69.2%, 95% "
+                  "CI 65.6-72.8%, n=621). The care-seeking rate responds strongly to this and "
+                  "hardly to income.",
     ),
     ParamMeta(
         path="steering_parameters.treatment_success_prob", label="Treatment success probability",
         category="Care-Seeking & Behavioral Economics", evidence_tier="assumption", editable=True,
         ui_min=0.3, ui_max=1.0,
-        rationale="Probability that sought medical care successfully cures the illness. A plausible "
-                  "modeling default, not independently measured for Akuse.",
+        rationale="Probability that a care-seeking visit delivers effective treatment (correct "
+                  "rehydration and zinc, taken). What effective treatment does is set by the "
+                  "treatment parameters below. A plausible modeling default, not independently "
+                  "measured for Akuse.",
+    ),
+    ParamMeta(
+        path="steering_parameters.treatment_effect_model", label="Treatment effect model", category="internal",
+        evidence_tier="structural",
+        rationale="'supportive' (default): treatment reduces the episode's harm and shortens it modestly (ORS, zinc, antibiotics - see the treatment_* parameters). 'cure': treatment ends every active episode immediately (original model).",
+    ),
+    ParamMeta(
+        path="steering_parameters.treatment_harm_reduction", label="Treatment: harm averted (ORS)",
+        category="Care-Seeking & Behavioral Economics", evidence_tier="literature", editable=True,
+        ui_min=0.0, ui_max=1.0,
+        rationale="Fraction of an episode's severity (its daily health toll, and how sick the child appears) removed by effective treatment. 0.93: ORS may prevent 93% of diarrhoea deaths (Munos, Fischer Walker & Black 2010, Int J Epidemiol 39:i75-87) - dehydration, not diarrhoea itself, is what ORS treats.",
+    ),
+    ParamMeta(
+        path="steering_parameters.treatment_duration_reduction_days", label="Treatment: days shortened (zinc)",
+        category="Care-Seeking & Behavioral Economics", evidence_tier="literature", editable=True,
+        ui_min=0.0, ui_max=3.0, unit="days",
+        rationale="Days by which effective treatment shortens an episode in children aged at least treatment_duration_min_age_months (applied by stochastic rounding). Zinc: mean difference -11.46 h (95% CI -19.72 to -3.19) in children over 6 months; no effect under 6 months (Lazzerini & Wanzira 2016, Cochrane CD005436).",
+    ),
+    ParamMeta(
+        path="steering_parameters.treatment_duration_min_age_months", label="Treatment: minimum age for zinc effect",
+        category="internal", evidence_tier="literature",
+        rationale="Youngest age (months) at which treatment shortens episodes (zinc: no effect under 6 months).",
+    ),
+    ParamMeta(
+        path="steering_parameters.antibiotic_duration_reduction_days", label="Treatment: days shortened (antibiotic)",
+        category="internal", evidence_tier="literature",
+        rationale="Additional shortening of an episode of a pathogen whose infection the treatment clears (treatment_clears_infection_prob; campylobacter). Antibiotics reduce the duration of Campylobacter intestinal symptoms by 1.32 days (95% CI 0.64-1.99; Ternhag et al. 2007, Clin Infect Dis 44:696-700).",
     ),
     ParamMeta(
         path="steering_parameters.natural_worsening_prob", label="Untreated worsening probability",
@@ -491,11 +867,12 @@ REGISTRY: list[ParamMeta] = [
     # ------------------------------------------------------------------
     ParamMeta(
         path="steering_parameters.daily_income_rate", label="Daily household income rate",
-        category="Household Economics", evidence_tier="calibrated", editable=True,
+        category="Household Economics", evidence_tier="assumption", editable=True,
         ui_min=0.0, ui_max=0.15, unit="fraction of wealth",
-        rationale="Daily household income, as a fraction of max wealth. Calibrated jointly with "
-                  "the cost of care against the Ghana DHS care-seeking rate - see that field's note. "
-                  "Changing this alone may pull the model away from the validated DHS-matched fit.",
+        rationale="Daily household income, as a fraction of max wealth. Kept from the first-"
+                  "generation calibration: the current care-seeking target does not identify it "
+                  "(one decision per episode, so affordability rarely binds), so the household "
+                  "wealth outputs it drives are not calibrated.",
     ),
     ParamMeta(
         path="steering_parameters.daily_cost_of_living", label="Daily cost of living",
@@ -534,25 +911,25 @@ REGISTRY: list[ParamMeta] = [
     ),
     ParamMeta(
         path="steering_parameters.water_recovery_prob", label="Water recovery probability",
-        category="Environment, Water & Shocks", evidence_tier="assumption", editable=True,
-        ui_min=0.0, ui_max=1.0, unit="probability/day",
-        rationale="Daily probability a contaminated water source naturally reverts to clean. "
+        category="internal", evidence_tier="assumption",
+
+        rationale="LEGACY water model only (WaterConfig.model='legacy'). Daily probability a contaminated water source naturally reverts to clean. "
                   "Stated in the paper as an assumption pending real-world calibration, alongside "
                   "the shock frequency.",
     ),
     ParamMeta(
         path="steering_parameters.human_to_water_infection_prob", label="Human-to-water contamination rate",
-        category="Environment, Water & Shocks", evidence_tier="assumption", editable=True,
-        ui_min=0.0, ui_max=0.001,
-        rationale="Daily probability an infectious agent contaminates its local water source. A "
+        category="internal", evidence_tier="assumption",
+
+        rationale="LEGACY water model only (WaterConfig.model='legacy'). Daily probability an infectious agent contaminates its local water source. A "
                   "plausible modeling default completing the water-transmission feedback loop, not "
                   "independently calibrated.",
     ),
     ParamMeta(
         path="steering_parameters.water_to_human_infection_prob", label="Water-to-human infection rate",
-        category="Environment, Water & Shocks", evidence_tier="calibrated", editable=True,
-        ui_min=0.0, ui_max=0.03,
-        rationale="Daily probability a susceptible agent is infected via contaminated water. "
+        category="internal", evidence_tier="calibrated",
+
+        rationale="LEGACY water model only (WaterConfig.model='legacy'). Daily probability a susceptible agent is infected via contaminated water. "
                   "LHS-calibrated tuning knob (alongside rotavirus's other transmission "
                   "parameters), not independently measured for Akuse.",
     ),
@@ -564,12 +941,202 @@ REGISTRY: list[ParamMeta] = [
                   "A plausible modeling default, not independently measured.",
     ),
     ParamMeta(
+        path="water.model", label="Water model", category="internal",
+        evidence_tier="structural",
+        rationale="'catchment' (default) or 'legacy' (original point-source model).",
+    ),
+    ParamMeta(
+        path="water.share_piped", label="Piped drinking water (share)", category="Environment, Water & Shocks",
+        evidence_tier="literature", editable=True, ui_min=0, ui_max=1,
+        rationale="Share of households whose primary drinking water is piped (DHS/MICS within 30 km of Akuse).",
+    ),
+    ParamMeta(
+        path="water.share_surface", label="Surface drinking water (share)", category="Environment, Water & Shocks",
+        evidence_tier="literature", editable=True, ui_min=0, ui_max=1,
+        rationale="Share drinking surface water (canal, river) - same survey basis.",
+    ),
+    ParamMeta(
+        path="water.share_ground", label="Groundwater drinking water (share)", category="Environment, Water & Shocks",
+        evidence_tier="literature", editable=True, ui_min=0, ui_max=1,
+        rationale="Share drinking groundwater (well, borehole) - same survey basis.",
+    ),
+    ParamMeta(
+        path="water.share_packaged", label="Sachet/packaged drinking water (share)", category="Environment, Water & Shocks",
+        evidence_tier="literature", editable=True, ui_min=0, ui_max=1,
+        rationale="Share drinking packaged (sachet/bottled) or other improved non-local water - same survey basis.",
+    ),
+    ParamMeta(
+        path="water.source_choice_length_m", label="Source-choice distance scale", category="internal",
+        evidence_tier="assumption",
+        rationale="Households nearer a surface (or ground) source are more likely to use it: the required number of users of each type is drawn with weight exp(-distance / this). An assumption; the survey gives shares, not their spatial pattern.",
+    ),
+    ParamMeta(
+        path="water.share_improved_onsite", label="Improved onsite sanitation (share)", category="Environment, Water & Shocks",
+        evidence_tier="literature", editable=True, ui_min=0, ui_max=1,
+        rationale="Share with improved non-sewered sanitation (pit with slab, VIP, septic) - same survey basis.",
+    ),
+    ParamMeta(
+        path="water.share_sewer", label="Sewer sanitation (share)", category="Environment, Water & Shocks",
+        evidence_tier="literature", editable=True, ui_min=0, ui_max=1,
+        rationale="Share with a sewer connection - same survey basis.",
+    ),
+    ParamMeta(
+        path="water.share_unimproved", label="Unimproved sanitation (share)", category="Environment, Water & Shocks",
+        evidence_tier="literature", editable=True, ui_min=0, ui_max=1,
+        rationale="Share with unimproved sanitation - same survey basis.",
+    ),
+    ParamMeta(
+        path="water.share_open_defecation", label="Open defecation (share)", category="Environment, Water & Shocks",
+        evidence_tier="literature", editable=True, ui_min=0, ui_max=1,
+        rationale="Share practising open defecation - same survey basis.",
+    ),
+    ParamMeta(
+        path="water.surface_release_open_defecation", label="Surface release: open defecation", category="internal",
+        evidence_tier="literature",
+        rationale="Relative surface-water release, open defecation (reference).",
+    ),
+    ParamMeta(
+        path="water.surface_release_unimproved", label="Surface release: unimproved", category="internal",
+        evidence_tier="assumption",
+        rationale="Relative surface-water release, unimproved sanitation (assumption).",
+    ),
+    ParamMeta(
+        path="water.surface_release_improved_onsite", label="Surface release: improved onsite", category="internal",
+        evidence_tier="literature",
+        rationale="Relative surface-water release, improved onsite sanitation (GloWPa: non-source).",
+    ),
+    ParamMeta(
+        path="water.surface_release_sewer", label="Surface release: sewer", category="internal",
+        evidence_tier="assumption",
+        rationale="Relative surface-water release, sewer (assumption: ~99% contained/treated).",
+    ),
+    ParamMeta(
+        path="water.ground_release_open_defecation", label="Groundwater release: open defecation", category="internal",
+        evidence_tier="assumption",
+        rationale="Relative groundwater release, open defecation (assumption).",
+    ),
+    ParamMeta(
+        path="water.ground_release_unimproved", label="Groundwater release: unimproved", category="internal",
+        evidence_tier="assumption",
+        rationale="Relative groundwater release, unimproved pit (assumption).",
+    ),
+    ParamMeta(
+        path="water.ground_release_improved_onsite", label="Groundwater release: improved onsite", category="internal",
+        evidence_tier="assumption",
+        rationale="Relative groundwater release, improved pit/septic (assumption).",
+    ),
+    ParamMeta(
+        path="water.ground_release_sewer", label="Groundwater release: sewer", category="internal",
+        evidence_tier="assumption",
+        rationale="Relative groundwater release, sewer (assumption).",
+    ),
+    ParamMeta(
+        path="water.child_stool_unsafe_frac", label="Unsafe child-stool disposal", category="Environment, Water & Shocks",
+        evidence_tier="assumption", editable=True, ui_min=0, ui_max=1,
+        rationale="Fraction of an infectious child's stools disposed of unsafely (released as if by open defecation) whatever the household's sanitation. ASSUMPTION pending the DHS 'safe disposal of child's stools' indicator; children are the main shedders, so this matters more than household sanitation.",
+    ),
+    ParamMeta(
+        path="water.runoff_length_m", label="Runoff distance scale", category="Environment, Water & Shocks",
+        evidence_tier="assumption", editable=True, ui_min=10, ui_max=1000, unit="m",
+        rationale="Distance attenuation of faecal runoff to surface water: the fraction of a household's released load reaching water falls as exp(-d / this), d = distance to the nearest water cell. An assumption to be explored in sensitivity analysis.",
+    ),
+    ParamMeta(
+        path="water.groundwater_length_m", label="Groundwater seepage distance scale", category="internal",
+        evidence_tier="assumption",
+        rationale="Distance attenuation of pit/faecal contamination to a well, exp(-d / this). Of the order of the 15-30 m latrine-well setback distances in WHO guidance.",
+    ),
+    ParamMeta(
+        path="water.borehole_protection", label="Borehole protection", category="internal",
+        evidence_tier="assumption",
+        rationale="Load reaching a (deep, sealed) borehole relative to a shallow well. Assumption.",
+    ),
+    ParamMeta(
+        path="water.river_dilution", label="River dilution", category="internal",
+        evidence_tier="assumption",
+        rationale="Concentration in a Volta river reach relative to an irrigation-canal reach receiving the same load - the river's discharge is orders of magnitude larger. Assumption.",
+    ),
+    ParamMeta(
+        path="water.reach_block_cells", label="Reach size", category="internal",
+        evidence_tier="structural",
+        rationale="Surface water is split into reaches by tiling the grid into blocks of this many cells (8 cells ~ 450 m); each block's canal cells and river cells form one reach each.",
+    ),
+    ParamMeta(
+        path="water.river_min_width_cells", label="River width threshold", category="internal",
+        evidence_tier="structural",
+        rationale="Natural-water cells that survive a morphological opening with a square of this many cells are classed as river; the rest (thin features) as canal.",
+    ),
+    ParamMeta(
+        path="water.shock_magnitude", label="Shock magnitude", category="Environment, Water & Shocks",
+        evidence_tier="assumption", editable=True, ui_min=0, ui_max=50,
+        rationale="A shock adds to every source this many days' worth of the current mean daily surface-water loading (times the source type's vulnerability). An assumption, like shock_daily_prob itself.",
+    ),
+    ParamMeta(
+        path="water.shock_vulnerability_ground", label="Shock vulnerability: groundwater", category="internal",
+        evidence_tier="assumption",
+        rationale="Shock pulse reaching wells/boreholes relative to surface water (assumption).",
+    ),
+    ParamMeta(
+        path="water.shock_vulnerability_piped", label="Shock vulnerability: piped", category="internal",
+        evidence_tier="assumption",
+        rationale="Shock pulse reaching the piped network relative to surface water (assumption: pipe breaks, intermittent-supply intrusion).",
+    ),
+    ParamMeta(
+        path="water.piped_flush_rate", label="Piped network flushing", category="internal",
+        evidence_tier="assumption",
+        rationale="Extra daily removal of contamination from the piped network (flushing and residual chlorine), on top of the pathogen's own die-off. Assumption.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].water_dose_scale", label="Waterborne dose scale", category="Rotavirus",
+        evidence_tier="calibrated", editable=True, ui_min=0.0, ui_max=2.0,
+        rationale="Converts the contamination of a household's drinking-water source into a daily "
+                  "infection probability (catchment water model). History-matched jointly with the "
+                  "other transmission parameters; ~7% of rotavirus infections are waterborne at "
+                  "the default. Calibrated for 4000 agents - does not transfer to other sizes.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].water_decay_rate", label="Die-off rate in water", category="Rotavirus",
+        evidence_tier="literature", editable=True, ui_min=0.02, ui_max=1.0, unit="per day",
+        rationale="Daily first-order die-off of rotavirus in water (0.25: T90 ~ 9 days). Enteric "
+                  "viruses persist for weeks in surface water; tropical temperatures put Akuse at "
+                  "the faster end.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].importation_rate", label="Imported infection rate", category="Rotavirus",
+        evidence_tier="calibrated", editable=True, ui_min=0.0, ui_max=0.003, unit="per person per day",
+        rationale="Daily per-person probability of a rotavirus infection acquired outside Akuse. "
+                  "Without it a town of a few thousand people cannot sustain rotavirus at MAL-ED-level "
+                  "incidence: it fades out, or runs as outbreaks that cluster infections unrealistically. "
+                  "History-matched with the share of imported infections held below 15% (~10% at the "
+                  "default). This share bounds what any intervention inside Akuse can achieve.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].importation_rate", label="Imported infection rate", category="internal",
+        evidence_tier="assumption",
+        rationale="Daily per-person probability of infection acquired outside Akuse. As for rotavirus.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].importation_rate", label="Imported infection rate", category="internal",
+        evidence_tier="structural",
+        rationale="0: campylobacter's food-borne background route already plays this role.",
+    ),
+    ParamMeta(
+        path="steering_parameters.household_exposure_sdlog", label="Household environmental-exposure heterogeneity",
+        category="Environment, Water & Shocks", evidence_tier="calibrated", editable=True,
+        ui_min=0.0, ui_max=1.5,
+        rationale="Spread (log-scale SD) of a household-level multiplier on infection risk via "
+                  "water, animals and food, shared by all members and pathogens. Identified by "
+                  "MAL-ED's finding that children already infected with Campylobacter go on to be "
+                  "infected 1.5-3.7x as often as naive children - the signature of some households "
+                  "being far more exposed than others. 0 = every household equally exposed.",
+    ),
+    ParamMeta(
         path="steering_parameters.prior_infection_immunity_factor", label="Cross-episode immunity factor",
         category="Environment, Water & Shocks", evidence_tier="assumption", editable=True,
         ui_min=0.0, ui_max=0.5,
-        rationale="Additional immunity factor applied per prior infection, shared across "
-                  "pathogens. Related to why the model sustains endemic transmission indefinitely "
-                  "in a closed population - immunity here is always partial, never complete.",
+        rationale="Per-prior-infection decay of susceptibility, exp(-kappa N), for any pathogen "
+                  "without its own value. Only campylobacter uses it now: rotavirus (0.45) and "
+                  "Cryptosporidium (0.29) have cohort-based overrides. No LMIC estimate exists for "
+                  "campylobacter, so 0.15 remains an assumption.",
     ),
 ]
 
@@ -588,7 +1155,11 @@ def iter_config_paths() -> list[str]:
         for name, model_field in model_cls.model_fields.items():
             path = f"{prefix}{name}"
             if name == "pathogens":
-                for label, pathogen_cls in (("rota", RotavirusConfig), ("campy", CampylobacterConfig)):
+                # Driven by config.PATHOGEN_CONFIG_TYPES rather than a hardcoded
+                # tuple, so adding a pathogen automatically makes this
+                # completeness check demand registry entries for its fields
+                # instead of silently ignoring them.
+                for label, pathogen_cls in PATHOGEN_CONFIG_TYPES.items():
                     for pname in pathogen_cls.model_fields:
                         paths.append(f"pathogens[{label}].{pname}")
                 continue

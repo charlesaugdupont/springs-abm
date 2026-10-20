@@ -55,7 +55,6 @@ torch.set_num_threads(1)
 from config import SVEIRCONFIG
 from abm.constants import AgentPropertyKeys
 from abm.model.initialize_model import SVEIRModel
-from abm.pathogens.campylobacter import Campylobacter
 from abm.systems.care_seeking import CareSeekingSystem
 from abm.utils.rng import set_global_seed
 
@@ -67,18 +66,45 @@ GOLDEN_PATH = os.path.join("experiments", "outputs", "perf", "golden.pt")
 _TMP_ROOT = os.path.join("experiments", "outputs", "perf", "_tmp")
 
 
+from experiments.legacy import LEGACY_V1_OVERRIDES  # noqa: E402  (see experiments/legacy.py)
+
+
 # ---------------------------------------------------------------------------
 # Running + fingerprinting
 # ---------------------------------------------------------------------------
 
-def run_model(seed: int, agents: int, steps: int, grid_id: str) -> SVEIRModel:
-    """Builds and runs one model exactly the way the orchestrator does."""
+def run_model(seed: int, agents: int, steps: int, grid_id: str,
+              pathogens: list[str] | None = None,
+              overrides: dict | None = None) -> SVEIRModel:
+    """Builds and runs one model exactly the way the orchestrator does.
+
+    `pathogens` restricts the run to a subset of the configured pathogens. Its
+    purpose is to let a golden fingerprint captured BEFORE a pathogen was added
+    still be reproduced afterwards: the Cryptosporidium work had to prove that
+    its framework refactors (per-pathogen water reservoirs, generic route
+    accounting, explicit day/night phase, per-pathogen illness parameters) left
+    rotavirus and campylobacter byte-for-byte unchanged, which is only
+    checkable with crypto excluded. Default (None) = whatever the config has.
+    """
     set_global_seed(seed)
     cfg = SVEIRCONFIG.model_copy(deep=True)
     cfg.number_agents = agents
     cfg.step_target = steps
     cfg.seed = seed
     cfg.spatial_creation_args.grid_id = grid_id
+    if pathogens is not None:
+        selected = [p for p in cfg.pathogens if p.name in set(pathogens)]
+        missing = set(pathogens) - {p.name for p in selected}
+        if missing:
+            raise ValueError(f"Unknown pathogen name(s) for --pathogens: {sorted(missing)}")
+        cfg.pathogens = selected
+    if overrides:
+        from experiments.orchestrator import set_param
+        names = {p.name for p in cfg.pathogens}
+        for path, value in overrides.items():
+            if path.startswith("pathogens[") and path[len("pathogens["):path.index("]")] not in names:
+                continue   # pathogen excluded by --pathogens
+            set_param(cfg, path, value)
 
     model = SVEIRModel(model_identifier=f"_perfcheck_{seed}", root_path=_TMP_ROOT)
     model.set_model_parameters(**cfg.model_dump())
@@ -121,18 +147,22 @@ def fingerprint(model: SVEIRModel) -> dict:
             fp["cs_total_episodes"] = s.total_episodes
             fp["cs_episodes_with_care_sought"] = s.episodes_with_care_sought
 
-    # Campylobacter lifetime route counters
+    # Per-pathogen lifetime route counters. Written out under the historical
+    # "campy_total_<route>" names so a golden captured before the route
+    # accounting was generalised still compares, and generically for every
+    # other multi-route pathogen (e.g. Cryptosporidium).
     for p in model.pathogens:
-        if isinstance(p, Campylobacter):
-            fp["campy_total_zoonotic"] = p.total_zoonotic
-            fp["campy_total_fecal_oral"] = p.total_fecal_oral
-            fp["campy_total_food_borne"] = p.total_food_borne
+        for route, total in p.total_by_route.items():
+            fp[f"{p.name}_total_{route}"] = total
 
     return fp
 
 
-def build_fingerprints(seeds, agents, steps, grid_id) -> dict:
-    return {seed: fingerprint(run_model(seed, agents, steps, grid_id)) for seed in seeds}
+def build_fingerprints(seeds, agents, steps, grid_id, pathogens=None, overrides=None) -> dict:
+    return {
+        seed: fingerprint(run_model(seed, agents, steps, grid_id, pathogens, overrides))
+        for seed in seeds
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -173,13 +203,29 @@ def _exact_equal(a, b, path: str, mismatches: list):
             mismatches.append(f"{path}: {a!r} != {b!r}")
 
 
-def compare(golden: dict, current: dict) -> list:
+def compare(golden: dict, current: dict, allow_new_keys: bool = False) -> list:
+    """Compares two fingerprint sets, returning a list of mismatch descriptions.
+
+    With allow_new_keys=True, entries present only in `current` are ignored
+    rather than reported. This is for the case where the code under test has
+    added new OBSERVABLES without changing behaviour - e.g. generalising route
+    accounting gave rotavirus per-route counters it never used to expose, so a
+    golden captured beforehand simply has no such key. Every key the golden
+    DOES have must still match exactly, so this cannot mask a behaviour change;
+    it only tolerates additions. Missing keys are always reported.
+    """
     mismatches: list = []
     if golden.keys() != current.keys():
         mismatches.append(f"seed sets differ: {sorted(golden)} != {sorted(current)}")
         return mismatches
     for seed in golden:
-        _exact_equal(golden[seed], current[seed], f"seed{seed}", mismatches)
+        g, c = golden[seed], current[seed]
+        if allow_new_keys and isinstance(g, dict) and isinstance(c, dict):
+            added = sorted(set(c) - set(g))
+            if added:
+                print(f"  (ignoring {len(added)} new key(s) for seed{seed}: {added})")
+            c = {k: v for k, v in c.items() if k in g}
+        _exact_equal(g, c, f"seed{seed}", mismatches)
     return mismatches
 
 
@@ -200,15 +246,27 @@ def main():
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS)
     parser.add_argument("--seeds", type=int, nargs="+", default=DEFAULT_SEEDS)
     parser.add_argument("--grid-id", default=DEFAULT_GRID_ID)
+    parser.add_argument("--allow-new-keys", action="store_true",
+                        help="Tolerate fingerprint keys that exist only in the current run (new "
+                             "observables), while still requiring every key the golden has to "
+                             "match exactly. See compare().")
+    parser.add_argument("--pathogens", nargs="+", default=None,
+                        help="Restrict the run to these pathogen names (e.g. --pathogens rota "
+                             "campy). Use this to compare against a golden captured before a "
+                             "pathogen was added to the default config.")
+    parser.add_argument("--legacy-v1", action="store_true",
+                        help="Apply LEGACY_V1_OVERRIDES (disease-scale and demography features off) "
+                             "to reproduce a golden captured from the first-generation model.")
     args = parser.parse_args()
+    overrides = LEGACY_V1_OVERRIDES if args.legacy_v1 else None
 
     print(f"Config: {len(args.seeds)} seeds {args.seeds}, {args.agents} agents, "
           f"{args.steps} days, grid {args.grid_id}, torch_threads={torch.get_num_threads()}")
 
     if args.determinism:
         print("\n--- Determinism check (each seed run twice) ---")
-        a = build_fingerprints(args.seeds, args.agents, args.steps, args.grid_id)
-        b = build_fingerprints(args.seeds, args.agents, args.steps, args.grid_id)
+        a = build_fingerprints(args.seeds, args.agents, args.steps, args.grid_id, args.pathogens, overrides)
+        b = build_fingerprints(args.seeds, args.agents, args.steps, args.grid_id, args.pathogens, overrides)
         mismatches = compare(a, b)
         if mismatches:
             print(f"NON-DETERMINISTIC: {len(mismatches)} mismatch(es):")
@@ -220,7 +278,7 @@ def main():
 
     if args.save_golden:
         os.makedirs(os.path.dirname(args.golden), exist_ok=True)
-        golden = build_fingerprints(args.seeds, args.agents, args.steps, args.grid_id)
+        golden = build_fingerprints(args.seeds, args.agents, args.steps, args.grid_id, args.pathogens, overrides)
         torch.save({"meta": vars(args), "fingerprints": golden}, args.golden)
         print(f"\nGolden saved -> {args.golden}")
         return
@@ -232,8 +290,8 @@ def main():
         sys.exit(2)
     saved = torch.load(args.golden, weights_only=False)
     golden = saved["fingerprints"]
-    current = build_fingerprints(args.seeds, args.agents, args.steps, args.grid_id)
-    mismatches = compare(golden, current)
+    current = build_fingerprints(args.seeds, args.agents, args.steps, args.grid_id, args.pathogens, overrides)
+    mismatches = compare(golden, current, allow_new_keys=args.allow_new_keys)
     if mismatches:
         print(f"\nMISMATCH vs golden: {len(mismatches)} difference(s):")
         for m in mismatches[:30]:

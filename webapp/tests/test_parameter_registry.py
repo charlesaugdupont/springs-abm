@@ -63,3 +63,20 @@ def test_editable_numeric_fields_have_ui_bounds():
         and (m.ui_min is None or m.ui_max is None)
     ]
     assert not missing_bounds, f"Editable numeric fields missing ui_min/ui_max: {missing_bounds}"
+
+
+def test_editable_numeric_defaults_lie_within_their_ui_bounds():
+    """A calibrated default outside its slider range would make the UI unable
+    to reproduce the model's own baseline - and the GSA, which samples the UI
+    ranges (experiments/gsa/param_space.py), would never visit it."""
+    from config import SVEIRCONFIG
+    from experiments.orchestrator import get_param
+
+    outside = []
+    for m in REGISTRY:
+        if not m.editable or m.ui_min is None or m.ui_max is None:
+            continue
+        value = get_param(SVEIRCONFIG, m.path)
+        if isinstance(value, (int, float)) and not (m.ui_min <= value <= m.ui_max):
+            outside.append((m.path, value, m.ui_min, m.ui_max))
+    assert not outside, f"defaults outside their UI ranges: {outside}"

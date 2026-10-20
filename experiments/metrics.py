@@ -59,23 +59,53 @@ def epidemic_metrics(model, pathogen_names=None) -> dict:
         out[f"{pname}_attack_rate_u5"] = (
             float((num_inf[is_child] > 0).mean()) if n_u5 else 0.0
         )
+
+        # Symptomatic (disease) prevalence, as distinct from the infectious
+        # (carriage) prevalence above. Identical in practice for rotavirus and
+        # campylobacter; several-fold lower for Cryptosporidium, most of whose
+        # childhood infections are subclinical. See
+        # SVEIRModel.u5_symptomatic_prevalence_history.
+        sym = np.array(getattr(model, "u5_symptomatic_prevalence_history", {}).get(pname, []))
+        out[f"{pname}_peak_u5_symptomatic_prevalence"] = float(sym.max()) if sym.size else 0.0
+        out[f"{pname}_mean_u5_symptomatic_prevalence"] = float(sym.mean()) if sym.size else 0.0
+    return out
+
+
+def route_fractions(model, pathogen_names=None) -> dict:
+    """Per-route attribution fractions, for every multi-route pathogen.
+
+    Emits "{pathogen}_{route}_fraction" from the generic lifetime route
+    counters the Pathogen base class maintains (total_by_route). Replaces the
+    hand-written campylobacter-only version; campy_route_fractions() is kept
+    below as a thin alias so existing experiment scripts and saved-result
+    column names are unaffected.
+
+    A pathogen whose routes recorded no infections at all yields explicit 0.0s
+    rather than being omitted, so a results frame has a stable set of columns
+    whether or not a route happened to fire.
+    """
+    out = {}
+    for p in model.pathogens:
+        if not p.total_by_route:
+            continue
+        if pathogen_names is not None and p.name not in pathogen_names:
+            continue
+        total = sum(p.total_by_route.values())
+        for route, n in p.total_by_route.items():
+            out[f"{p.name}_{route}_fraction"] = (n / total) if total else 0.0
     return out
 
 
 def campy_route_fractions(model) -> dict:
-    """Zoonotic / fecal-oral / food-borne attribution fractions for Campylobacter."""
+    """Zoonotic / fecal-oral / food-borne attribution fractions for Campylobacter.
+
+    Thin alias over route_fractions() - kept so existing callers and result
+    column names (campy_zoonotic_fraction, ...) stay valid.
+    """
     campy = next((p for p in model.pathogens if isinstance(p, Campylobacter)), None)
     if campy is None:
         return {}
-    total = campy.total_zoonotic + campy.total_fecal_oral + campy.total_food_borne
-    if total == 0:
-        return {"campy_zoonotic_fraction": 0.0, "campy_fecal_oral_fraction": 0.0,
-                "campy_food_borne_fraction": 0.0}
-    return {
-        "campy_zoonotic_fraction": campy.total_zoonotic / total,
-        "campy_fecal_oral_fraction": campy.total_fecal_oral / total,
-        "campy_food_borne_fraction": campy.total_food_borne / total,
-    }
+    return route_fractions(model, pathogen_names={"campy"})
 
 
 def care_seeking_metrics(model) -> dict:
@@ -132,7 +162,204 @@ def wellbeing_metrics(model) -> dict:
     }
 
 
-def calibration_metrics(model) -> dict:
+#: Default number of initial simulated days excluded from the burn-in-aware
+#: metrics below. Every run starts from a fully naive population with a seeded
+#: 1% of agents exposed per pathogen, which produces a large initial epidemic
+#: wave that is an artefact of the initial condition, not of endemic
+#: transmission. With ageing, under-5 turnover and MAL-ED-based initial
+#: infection histories (abm/systems/demography.py) the seeded wave is gone,
+#: but children's immunity profile still relaxes from that initial guess to
+#: the model's own equilibrium: in 5-year runs (4000 agents, 4 seeds)
+#: Campylobacter incidence drifted from ~1.8 to ~1.55 infections per
+#: child-year over the first ~2.5 years and was flat thereafter. 730 days
+#: also guarantees that every child aged 0-24 months in the measurement
+#: window was born in the run - required by the prior-infection metrics,
+#: whose "prior" must mean "since birth", as in MAL-ED. Use runs of at least
+#: ~5 years (1826 days) so that 3 years are measured.
+DEFAULT_BURN_IN_DAYS = 730
+
+#: Age windows (months, [lo, hi)) for which burn-in-aware rates are emitted.
+#: "0_24m" matches the MAL-ED cohort (abm/evidence/maled.py); "0_60m" is all
+#: under-5s.
+AGE_WINDOWS_MONTHS: dict[str, tuple[int, int]] = {"0_24m": (0, 24), "0_60m": (0, 60)}
+
+
+def age_window_rates(model, burn_in_days: int = DEFAULT_BURN_IN_DAYS,
+                     age_windows: dict[str, tuple[int, int]] | None = None) -> dict:
+    """Burn-in-aware, age-specific infection and symptomatic-episode rates.
+
+    For each pathogen p and age window w = [lo, hi) months, over simulated days
+    d >= burn_in_days only:
+
+      p_infections_per_child_year_<w>
+          new infections among children aged in w / child-years aged in w
+      p_symptomatic_episodes_per_child_year_<w>
+          new illness episodes (ChildIllnessSystem log, by age at onset) /
+          the same child-years
+      p_symptomatic_fraction_<w>
+          episodes / infections in w (the model counterpart of MAL-ED
+          Supplementary Table 5)
+
+    The person-time denominator and the infection numerator both come from
+    SVEIRModel._record_age_structured_incidence, which bins by completed month
+    of age at the end of each day, so numerator and denominator always refer
+    to the same children and days. An infection seeded at t=0 is never
+    counted (it is not an S/R -> E transition the model made).
+
+    Also emits, over the same post-burn-in days, the mean infectious (carriage)
+    and symptomatic prevalence among all under-5s, and
+    p_median_realized_duration / p_q75_realized_duration in days over closed
+    episodes with onset in the window 0-24 months (MAL-ED Supplementary
+    Table 11 reports medians and IQRs for that age range).
+
+    Returns NaN for a window with no person-time after burn-in (e.g. a run
+    shorter than the burn-in), rather than a misleading 0.
+    """
+    if age_windows is None:
+        age_windows = AGE_WINDOWS_MONTHS
+    out: dict[str, float] = {}
+    child_days = np.asarray(getattr(model, "child_days_by_age_month", []))
+    n_days = child_days.shape[0] if child_days.ndim == 2 else 0
+    b = int(burn_in_days)
+
+    episodes = model.get_child_episode_log()
+    for p in model.pathogens:
+        pname = p.name
+        inf = np.asarray(model.new_infections_by_age_month.get(pname, []))
+        for wname, (lo, hi) in age_windows.items():
+            if n_days <= b:
+                py = 0.0
+            else:
+                py = float(child_days[b:, lo:hi].sum()) / 365.0
+            n_inf = float(inf[b:, lo:hi].sum()) if n_days > b else 0.0
+            n_epi = sum(
+                1 for e in episodes
+                if e["pathogen"] == pname and e["timestep"] >= b
+                and lo <= e.get("age_months", -1.0) < hi
+            )
+            out[f"{pname}_infections_per_child_year_{wname}"] = n_inf / py if py > 0 else float("nan")
+            out[f"{pname}_symptomatic_episodes_per_child_year_{wname}"] = (
+                n_epi / py if py > 0 else float("nan")
+            )
+            out[f"{pname}_symptomatic_fraction_{wname}"] = (
+                n_epi / n_inf if n_inf > 0 else float("nan")
+            )
+
+        durations = [
+            e["realized_duration"] for e in episodes
+            if e["pathogen"] == pname and e["timestep"] >= b
+            and e.get("realized_duration") is not None and e.get("age_months", 99.0) < 24
+        ]
+        out[f"{pname}_median_realized_duration"] = (
+            float(np.median(durations)) if durations else float("nan")
+        )
+        out[f"{pname}_q75_realized_duration"] = (
+            float(np.percentile(durations, 75)) if durations else float("nan")
+        )
+
+        prev = np.asarray(model.u5_prevalence_history.get(pname, []))
+        sym = np.asarray(getattr(model, "u5_symptomatic_prevalence_history", {}).get(pname, []))
+        out[f"{pname}_mean_u5_prevalence_post_burnin"] = (
+            float(prev[b:].mean()) if prev.size > b else float("nan")
+        )
+        out[f"{pname}_mean_u5_symptomatic_prevalence_post_burnin"] = (
+            float(sym[b:].mean()) if sym.size > b else float("nan")
+        )
+    return out
+
+
+#: 3-month bands to 24 months, matching MAL-ED Supplementary Table 2.
+MALED_3MO_BANDS: tuple[tuple[int, int], ...] = (
+    (0, 3), (3, 6), (6, 9), (9, 12), (12, 15), (15, 18), (18, 21), (21, 24),
+)
+
+
+def age_curve_rates(model, burn_in_days: int = DEFAULT_BURN_IN_DAYS) -> dict:
+    """Infections per child-year in each 3-month band to 24 months, post
+    burn-in: "{p}_infections_per_child_year_{lo}_{hi}m". The model counterpart
+    of MAL-ED's age-specific incidence curve (abm/evidence/maled.py,
+    INFECTION_RATE_BY_AGE_PER_100CM, x 0.12 for per child-year)."""
+    return age_window_rates(
+        model, burn_in_days=burn_in_days,
+        age_windows={f"{lo}_{hi}m": (lo, hi) for lo, hi in MALED_3MO_BANDS},
+    )
+
+
+def prior_infection_rate_ratios(model, burn_in_days: int = DEFAULT_BURN_IN_DAYS) -> dict:
+    """Incidence among children with >=1 prior infection / among naive
+    children, post burn-in, for 6-month bands from 6 to 24 months and pooled
+    over 12-24 months: "{p}_prior_infection_rate_ratio_{lo}_{hi}m". The model counterpart of
+    MAL-ED Supplementary Table 3 (abm/evidence/maled.py,
+    prior_infection_rate_ratio), which is what identifies between-household
+    exposure heterogeneity (steering_parameters.household_exposure_sdlog).
+
+    "Prior" counts every infection the slot's current child has had,
+    including the Poisson-initialised ones of children present at t=0; with a
+    burn-in of a couple of years the 0-24 month window holds only children
+    born in the run, as in MAL-ED. NaN when either stratum has no infections.
+    """
+    out: dict[str, float] = {}
+    b = int(burn_in_days)
+    days = np.asarray(getattr(model, "child_days_by_age_month", []))
+    if days.ndim != 2 or days.shape[0] <= b:
+        return out
+    for p in model.pathogens:
+        inf = np.asarray(model.new_infections_by_age_month[p.name])[b:]
+        inf0 = np.asarray(model.new_infections_naive_by_age_month[p.name])[b:]
+        d0 = np.asarray(model.child_days_naive_by_age_month[p.name])[b:]
+        d = days[b:]
+        for lo, hi in ((6, 12), (12, 18), (18, 24), (12, 24)):
+            n0, m0 = inf0[:, lo:hi].sum(), d0[:, lo:hi].sum()
+            n1, m1 = inf[:, lo:hi].sum() - n0, d[:, lo:hi].sum() - m0
+            ok = n0 > 0 and n1 > 0 and m0 > 0 and m1 > 0
+            out[f"{p.name}_prior_infection_rate_ratio_{lo}_{hi}m"] = (
+                float((n1 / m1) / (n0 / m0)) if ok else float("nan")
+            )
+    return out
+
+
+def first_infection_metrics(model, follow_up_days: int = 730, min_cohort: int = 10) -> dict:
+    """Age at first infection among children born in the simulation.
+
+    Uses only children followed for at least `follow_up_days` after birth
+    (born at least that long before the last simulated day), so that the
+    statistics are not censored. For each pathogen:
+
+      p_frac_infected_by_24m          fraction with a first infection within
+                                      follow_up_days of birth
+      p_median_age_first_infection_days
+                                      median age (days) at first infection
+                                      among those infected within it
+
+    MAL-ED Supplementary Table 4 reports the latter (abm/evidence/maled.py,
+    AGE_AT_FIRST_INFECTION_DAYS). NaN when fewer than `min_cohort` children
+    qualify - typically because the run is too short (it needs several years
+    of turnover, as only children born in the run are eligible).
+    """
+    out: dict[str, float] = {}
+    if not hasattr(model, "get_birth_cohorts"):
+        return out
+    last_day = model.step_count - 1
+    cohorts = [c for c in model.get_birth_cohorts() if c["birth_day"] <= last_day - follow_up_days]
+    for p in model.pathogens:
+        if len(cohorts) < min_cohort:
+            out[f"{p.name}_frac_infected_by_24m"] = float("nan")
+            out[f"{p.name}_median_age_first_infection_days"] = float("nan")
+            continue
+        ages = [
+            c["first_infection_day"][p.name] - c["birth_day"] for c in cohorts
+            if c["first_infection_day"][p.name] >= 0
+            and c["first_infection_day"][p.name] - c["birth_day"] <= follow_up_days
+        ]
+        out[f"{p.name}_frac_infected_by_24m"] = len(ages) / len(cohorts)
+        out[f"{p.name}_median_age_first_infection_days"] = (
+            float(np.median(ages)) if ages else float("nan")
+        )
+    out["n_birth_cohort_followed_24m"] = len(cohorts)
+    return out
+
+
+def calibration_metrics(model, burn_in_days: int = DEFAULT_BURN_IN_DAYS) -> dict:
     """
     Mirrors sensitivity.py's OAT metrics: episodes per child-year and peak
     under-5 prevalence per pathogen, plus the Campylobacter zoonotic-route
@@ -145,16 +372,70 @@ def calibration_metrics(model) -> dict:
     n_u5 = int(is_child.sum())
     sim_years = model.config.step_target / 365.0
 
+    episode_counts: dict[str, int] = {}
+    for entry in model.get_child_episode_log():
+        episode_counts[entry["pathogen"]] = episode_counts.get(entry["pathogen"], 0) + 1
+
     for p in model.pathogens:
         pname = p.name
         num_inf_u5 = model.graph.ndata[AgentPropertyKeys.num_infections(pname)].cpu().numpy()[is_child]
-        out[f"{pname}_episodes_per_child_year"] = (
-            float(num_inf_u5.mean()) / sim_years if n_u5 > 0 and sim_years > 0 else 0.0
+        rate = float(num_inf_u5.mean()) / sim_years if n_u5 > 0 and sim_years > 0 else 0.0
+        # NOTE on the name: this counts INFECTIONS, not symptomatic episodes.
+        # The two coincide for rotavirus and campylobacter (every infection in
+        # a child starts an episode), which is why the original name was
+        # unambiguous; they do NOT coincide for Cryptosporidium, where
+        # symptomatic_fraction ~ 1/3. The legacy key is kept so existing
+        # targets, GSA outputs and saved results stay valid, and the
+        # unambiguous alias is emitted alongside it.
+        out[f"{pname}_episodes_per_child_year"] = rate
+        out[f"{pname}_infections_per_child_year"] = rate
+
+        # Symptomatic episodes per child-year, from the ChildIllnessSystem
+        # episode log - the quantity comparable to a surveillance "episodes of
+        # diarrhoea attributed to X per child-year" figure.
+        out[f"{pname}_symptomatic_episodes_per_child_year"] = (
+            episode_counts.get(pname, 0) / (n_u5 * sim_years)
+            if n_u5 > 0 and sim_years > 0 else 0.0
         )
+
         prev = np.array(model.u5_prevalence_history.get(pname, []))
         out[f"{pname}_peak_u5_prevalence"] = float(prev.max()) if prev.size else 0.0
+        out[f"{pname}_mean_u5_prevalence"] = float(prev.mean()) if prev.size else 0.0
 
-    out.update(campy_route_fractions(model))
+        sym = np.array(getattr(model, "u5_symptomatic_prevalence_history", {}).get(pname, []))
+        out[f"{pname}_peak_u5_symptomatic_prevalence"] = float(sym.max()) if sym.size else 0.0
+
+    out.update(route_fractions(model))
+    # Burn-in-aware, age-windowed rates (the keys the MAL-ED targets use).
+    # The legacy keys above are deliberately left as whole-run, all-under-5
+    # quantities so that previously saved results stay comparable.
+    out.update(age_window_rates(model, burn_in_days=burn_in_days))
+    out.update(age_curve_rates(model, burn_in_days=burn_in_days))
+    out.update(first_infection_metrics(model))
+    out.update(prior_infection_rate_ratios(model, burn_in_days=burn_in_days))
+    out.update(route_fractions_post_burnin(model, burn_in_days=burn_in_days))
+    return out
+
+
+def route_fractions_post_burnin(model, burn_in_days: int = DEFAULT_BURN_IN_DAYS) -> dict:
+    """Route fractions over simulated days >= burn_in_days.
+
+    Emits "{p}_{route}_fraction_post_burnin" from each multi-route pathogen's
+    per-day route history (Pathogen.daily_by_route). Unlike route_fractions(),
+    which reads lifetime totals, this excludes the seeded initial wave, whose
+    route mix need not match endemic transmission. NaN if no infection was
+    attributed to any route after burn-in.
+    """
+    out = {}
+    b = int(burn_in_days)
+    for p in model.pathogens:
+        hist = getattr(p, "daily_by_route", None)
+        if not hist:
+            continue
+        totals = {r: float(np.sum(v[b:])) for r, v in hist.items()}
+        total = sum(totals.values())
+        for r, n in totals.items():
+            out[f"{p.name}_{r}_fraction_post_burnin"] = n / total if total else float("nan")
     return out
 
 

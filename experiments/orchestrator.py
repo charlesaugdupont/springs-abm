@@ -141,6 +141,30 @@ class SweepSpec:
 # Worker
 # ---------------------------------------------------------------------------
 
+#: Reserved key usable in SweepSpec.base_overrides or in a combo to restrict
+#: the run to a subset of the configured pathogens, by name. It is not a real
+#: config dot-path (the pathogen list is a list of objects, not a scalar
+#: field), so it is handled explicitly rather than through set_param. Added for
+#: the Cryptosporidium drift measurement, which needs an otherwise-identical
+#: pair of runs differing only in whether a third pathogen is present; any
+#: experiment comparing pathogen sets can use it.
+PATHOGEN_SUBSET_KEY = "__pathogen_subset__"
+
+
+def _apply_pathogen_subset(cfg: SVEIRConfig, names) -> None:
+    requested = list(names)
+    selected = [p for p in cfg.pathogens if p.name in set(requested)]
+    missing = set(requested) - {p.name for p in selected}
+    if missing:
+        raise ValueError(
+            f"{PATHOGEN_SUBSET_KEY}: no configured pathogen named {sorted(missing)}. "
+            f"Configured: {[p.name for p in cfg.pathogens]}"
+        )
+    if not selected:
+        raise ValueError(f"{PATHOGEN_SUBSET_KEY} selected no pathogens.")
+    cfg.pathogens = selected
+
+
 def _build_config(spec: SweepSpec, combo: Dict[str, Any], seed: int) -> SVEIRConfig:
     cfg: SVEIRConfig = SVEIRCONFIG.model_copy(deep=True)
     cfg.step_target = spec.steps
@@ -148,9 +172,20 @@ def _build_config(spec: SweepSpec, combo: Dict[str, Any], seed: int) -> SVEIRCon
     cfg.seed = seed
     cfg.spatial_creation_args.grid_id = spec.grid_id
 
+    # The pathogen subset must be applied BEFORE any pathogens[...] override,
+    # so that an override naming a pathogen excluded by the subset fails loudly
+    # in set_param rather than being silently applied to a dropped object.
+    for source in (spec.base_overrides, combo):
+        if PATHOGEN_SUBSET_KEY in source:
+            _apply_pathogen_subset(cfg, source[PATHOGEN_SUBSET_KEY])
+
     for path, value in spec.base_overrides.items():
+        if path == PATHOGEN_SUBSET_KEY:
+            continue
         set_param(cfg, path, value)
     for path, value in combo.items():
+        if path == PATHOGEN_SUBSET_KEY:
+            continue
         if path.startswith("shock.") or path.startswith("gsa."):
             continue  # metadata, not a real SVEIRConfig path - shock.* is consumed by
             # step_callback via combo; gsa.* (e.g. gsa.design_id) is a GSA design tag
@@ -202,6 +237,7 @@ def _run_one(task) -> Optional[Dict[str, Any]]:
                 # u5_prevalence_history is populated identically to model.run().
                 model.infection_incidence.clear()
                 model.u5_prevalence_history = {p.name: [] for p in model.pathogens}
+                model.u5_symptomatic_prevalence_history = {p.name: [] for p in model.pathogens}
                 child_mask = model.graph.ndata[AgentPropertyKeys.IS_CHILD]
                 for day in range(spec.steps):
                     spec.step_callback(model, day, combo)

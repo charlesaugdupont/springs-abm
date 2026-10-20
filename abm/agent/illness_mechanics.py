@@ -75,6 +75,7 @@ def calculate_illness_severity(
     base_severity_map = {
         "rota": cfg.base_severity_rota,
         "campy": cfg.base_severity_campy,
+        "crypto": cfg.base_severity_crypto,
     }
     base = base_severity_map.get(pathogen_name, 0.3)
 
@@ -88,6 +89,7 @@ def calculate_illness_severity(
 def calculate_illness_duration(
     severity: torch.Tensor,
     cfg: IllnessMechanicsConfig,
+    duration_scale: float = 1.0,
 ) -> torch.Tensor:
     """
     Calculates the initial illness duration in days based on severity.
@@ -96,12 +98,29 @@ def calculate_illness_duration(
     severity = 0) to ``duration_max_days`` (at severity = 1). Gaussian
     noise with std ``duration_noise_std`` is added to capture the
     substantial individual variation in illness length that is independent
-    of severity. The result is clamped to a minimum of 1 day.
+    of severity. The result is clamped to [duration_min_days,
+    duration_cap_days] (the cap falls back to duration_max_days when None).
+
+    ``duration_scale`` (PathogenConfig.duration_scale) stretches the whole
+    window - expectation, noise and both clamp bounds - for a pathogen whose
+    episodes do not fit the shared 2-12 day range. It is 1.0 for rotavirus and
+    campylobacter, which were parameterised against that window, and >1 for
+    Cryptosporidium, whose episodes average ~10 days and commonly run past the
+    shared 12-day ceiling. Scaling the noise and the clamp alongside the mean
+    (rather than the mean alone) keeps the coefficient of variation and the
+    relative headroom above the mean unchanged, so a stretched pathogen is not
+    silently given a tighter or more truncated distribution than the others.
     """
-    mean_duration = (
+    mean_duration = duration_scale * (
         cfg.duration_min_days
         + severity * (cfg.duration_max_days - cfg.duration_min_days)
     )
-    noise = torch.randn_like(mean_duration) * cfg.duration_noise_std
+    noise = torch.randn_like(mean_duration) * (cfg.duration_noise_std * duration_scale)
     duration = torch.round(mean_duration + noise).int()
-    return torch.clamp(duration, min=cfg.duration_min_days, max=cfg.duration_max_days).int()
+    cap = getattr(cfg, "duration_cap_days", None)
+    ceiling = cfg.duration_max_days if cap is None else cap
+    return torch.clamp(
+        duration,
+        min=cfg.duration_min_days * duration_scale,
+        max=ceiling * duration_scale,
+    ).int()

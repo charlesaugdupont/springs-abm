@@ -43,6 +43,46 @@ import torch
 import torch.nn.functional as F
 
 
+#: Pathogens whose transmission reads the household-derived animal density
+#: layers. Campylobacter reads both species layers (poultry dominates its
+#: source attribution); Cryptosporidium reads the ruminant layer only, since
+#: birds are not hosts of C. parvum / C. hominis.
+ANIMAL_DENSITY_CONSUMERS = ("campy", "crypto")
+
+
+def resolve_ownership_params(pathogen_configs):
+    """Returns the household animal-ownership parameters for this run.
+
+    Animal ownership is a HOUSEHOLD property, not a pathogen property: the same
+    households own the same animals whichever pathogen is looking at them, and
+    both campylobacter and Cryptosporidium must read one consistent livestock
+    landscape. The parameters nevertheless still live on CampylobacterConfig,
+    where they were first introduced (poultry_ownership_prob,
+    ruminant_ownership_prob, poultry_roam_sigma, ruminant_roam_sigma) - moving
+    them to a shared config section would rename config dot-paths and webapp
+    form fields, which is deliberately not done here.
+
+    So: take them from the campylobacter config when it is present (the normal
+    case), and otherwise fall back to CampylobacterConfig's own defaults, which
+    are the empirical Ghana DHS/MICS-style figures and are not campylobacter-
+    specific in any way. Returns None when no configured pathogen needs the
+    density layers at all.
+    """
+    from config import CampylobacterConfig
+
+    consumers = [p for p in pathogen_configs if p.name in ANIMAL_DENSITY_CONSUMERS]
+    if not consumers:
+        return None
+
+    source = next((p for p in consumers if p.name == "campy"), None) or CampylobacterConfig()
+    return {
+        "poultry_ownership_prob": source.poultry_ownership_prob,
+        "ruminant_ownership_prob": source.ruminant_ownership_prob,
+        "poultry_roam_sigma": source.poultry_roam_sigma,
+        "ruminant_roam_sigma": source.ruminant_roam_sigma,
+    }
+
+
 def _unnormalized_gaussian_1d(sigma: float, device) -> torch.Tensor:
     """1D Gaussian kernel with peak value 1.0 at its center (not sum-normalized)."""
     if sigma <= 0:

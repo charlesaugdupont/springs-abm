@@ -51,7 +51,12 @@ from scipy.stats import qmc
 from config import SVEIRCONFIG
 from experiments.orchestrator import SweepSpec, run_sweep, load_results, get_param
 from experiments.metrics import calibration_metrics, calibration_loss
-from experiments.calibration.targets import TARGETS
+# Superseded: the current targets (MAL-ED, burn-in-aware) are calibrated by
+# experiments/calibration/history_matching.py. This script reproduces the
+# FIRST-GENERATION calibration, so it scores against the legacy targets and
+# runs the legacy model configuration.
+from experiments.calibration.targets import LEGACY_TARGETS as TARGETS
+from experiments.legacy import LEGACY_V1_OVERRIDES
 
 SPEC_NAME = "calibration"
 DEFAULT_GRID_ID = "7d9ce7c720a6"
@@ -158,7 +163,7 @@ CALIB_BOUNDS = {
 
 # Calibrate the BASELINE: vaccination off, matching the pre/peri-vaccine
 # empirical targets. (campy has no vaccination mechanism; only rota needs it.)
-BASE_OVERRIDES = {"pathogens[rota].vaccination_rate": 0.0}
+BASE_OVERRIDES = {**LEGACY_V1_OVERRIDES, "pathogens[rota].vaccination_rate": 0.0}
 
 
 # ---------------------------------------------------------------------------

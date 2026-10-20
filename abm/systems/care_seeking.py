@@ -17,8 +17,15 @@ child appears overall. The parent evaluates two prospects:
 
   Seek care
     Cost c is paid immediately (certain wealth loss).
-    With probability p_success the child recovers (illness duration shortened,
-    child health restored, and the child transitions INFECTIOUS → RECOVERED).
+    With probability p_success treatment is effective. What that does depends
+    on steering_parameters.treatment_effect_model:
+      "supportive" (default) - the episode's harm is cut by
+        treatment_harm_reduction (ORS), it is shortened by about half a day in
+        children over 6 months (zinc), and for a pathogen an antibiotic treats
+        (treatment_clears_infection_prob) the infection is cleared and the
+        episode shortened further. The episode otherwise runs its course, and
+        the child faces no further decisions until it ends.
+      "cure" (original model) - every active episode ends at once.
     With probability (1 - p_success) the cost is paid but the child's
     illness continues and the parent suffers a stress health hit.
 
@@ -65,12 +72,19 @@ Transmission link
 -----------------
 When treatment succeeds, ALL of the child's currently active pathogen
 episodes are resolved together — duration and severity reset to zero for
-every pathogen with an active episode, and any INFECTIOUS compartment
-transitions immediately to RECOVERED. This treats a single care-seeking
+every pathogen with an active episode. This treats a single care-seeking
 event (e.g. a clinic visit) as addressing the child's diarrheal illness
-holistically rather than one pathogen at a time, and closes the loop
-between care-seeking and epidemic dynamics: higher care-seeking rates
-reduce prevalence, not just illness duration.
+holistically rather than one pathogen at a time.
+
+Whether treatment ALSO ends the infection (INFECTIOUS -> RECOVERED, i.e.
+stops shedding) is per pathogen: PathogenConfig.treatment_clears_infection_prob.
+Originally every pathogen was cleared, so care-seeking reduced transmission
+as well as illness. That is only defensible where the treatment given is
+pathogen-specific and effective (antibiotics for campylobacter). Standard
+care for watery diarrhoea - ORS and zinc - does not shorten rotavirus or
+Cryptosporidium shedding, so for those the loop between care-seeking and
+transmission is closed only through illness duration, not through
+prevalence.
 
 If the parent instead chooses to wait and the child's condition worsens,
 the severity bump is applied to whichever pathogen is currently the
@@ -156,6 +170,10 @@ class CareSeekingSystem(System):
         self.episodes_with_care_sought: int = 0
         self._was_sick_prev: torch.Tensor | None = None
         self._care_sought_this_episode: torch.Tensor | None = None
+        # Children whose current illness spell has been successfully treated
+        # (treatment_effect_model == "supportive"): they face no further
+        # decisions until the spell ends.
+        self._treated_this_episode: torch.Tensor | None = None
 
     def reset_counters(self):
         """Reset all counters — call between independent simulation runs."""
@@ -166,6 +184,7 @@ class CareSeekingSystem(System):
         self.episodes_with_care_sought = 0
         self._was_sick_prev = None
         self._care_sought_this_episode = None
+        self._treated_this_episode = None
 
     @property
     def conditional_care_rate(self) -> float:
@@ -198,6 +217,11 @@ class CareSeekingSystem(System):
             (child_severity > 0.0)
             & agent_state.ndata[AgentPropertyKeys.IS_CHILD]
         )
+        if self.config.steering_parameters.treatment_effect_model == "supportive":
+            # One successful visit per illness spell: a treated child is under
+            # treatment until the spell ends (under "cure" the spell has
+            # already ended, so this is only needed here).
+            candidate_mask = candidate_mask & ~self._treated_this_episode
         if not torch.any(candidate_mask):
             return
 
@@ -252,12 +276,14 @@ class CareSeekingSystem(System):
         if self._was_sick_prev is None:
             self._was_sick_prev = torch.zeros_like(currently_sick)
             self._care_sought_this_episode = torch.zeros_like(currently_sick)
+            self._treated_this_episode = torch.zeros_like(currently_sick)
 
         onset_mask = currently_sick & ~self._was_sick_prev
         resolved_mask = self._was_sick_prev & ~currently_sick
 
         self.total_episodes += int(onset_mask.sum().item())
         self._care_sought_this_episode[onset_mask] = False
+        self._treated_this_episode[onset_mask] = False
         self.episodes_with_care_sought += int(
             (resolved_mask & self._care_sought_this_episode).sum().item()
         )
@@ -370,7 +396,7 @@ class CareSeekingSystem(System):
         chw = params.child_health_weight
         ref_u = _utility(w, _h_eff(h_p, h_c, chw), alpha)
 
-        u_s1 = _utility(w2, _h_eff(h_p, 1.0, chw), alpha)
+        u_s1 = _utility(w2, _h_eff(h_p, _treated_child_health(h_c, params), chw), alpha)
         u_s2 = _utility(w2, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c, chw), alpha)
 
         h_c_worsened = max(0.0, h_c - params.untreated_severity_penalty)
@@ -422,7 +448,7 @@ class CareSeekingSystem(System):
         w2 = w - params.cost_of_care
         chw = params.child_health_weight
 
-        u_s1 = _utility(w2, _h_eff(h_p, 1.0, chw), alpha)
+        u_s1 = _utility(w2, _h_eff(h_p, _treated_child_health(h_c, params), chw), alpha)
         u_s2 = _utility(w2, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c, chw), alpha)
 
         h_c_worsened = max(0.0, h_c - params.untreated_severity_penalty)
@@ -450,9 +476,13 @@ class CareSeekingSystem(System):
         Deduct cost from the household's pooled wealth, log the visit, and
         stochastically apply treatment.
 
-        On success: EVERY pathogen for which the child currently has an
-        active episode is resolved together — severity and duration reset,
-        and any INFECTIOUS compartment transitions to RECOVERED.
+        On success, under treatment_effect_model == "supportive" (default):
+        see _apply_supportive_treatment. Under "cure" (original model): EVERY
+        pathogen for which the child currently has an active episode is
+        resolved together — severity and duration reset — and each
+        pathogen's INFECTIOUS compartment additionally transitions to
+        RECOVERED with that pathogen's treatment_clears_infection_prob (1.0
+        reproduces the original behaviour; 0 means the child keeps shedding).
         """
         params = self.config.steering_parameters
 
@@ -461,6 +491,9 @@ class CareSeekingSystem(System):
         self._care_sought_this_episode[child_idx] = True
 
         if torch.rand(1).item() < params.treatment_success_prob:
+            if params.treatment_effect_model == "supportive":
+                self._apply_supportive_treatment(agent_state, child_idx)
+                return
             for p_config in self.config.pathogens:
                 status_key = AgentPropertyKeys.status(p_config.name)
                 severity_key = AgentPropertyKeys.symptom_severity(p_config.name)
@@ -470,13 +503,67 @@ class CareSeekingSystem(System):
                     agent_state.ndata[severity_key][child_idx] = 0.0
                     agent_state.ndata[duration_key][child_idx] = 0
 
+                # Whether the visit also ends the INFECTION (not just the
+                # symptoms) is pathogen-specific: supportive care (ORS + zinc)
+                # does not shorten shedding. See
+                # PathogenConfig.treatment_clears_infection_prob. The draw is
+                # skipped for the deterministic 0/1 cases so they consume no RNG.
                 if agent_state.ndata[status_key][child_idx].item() == Compartment.INFECTIOUS:
-                    agent_state.ndata[status_key][child_idx] = Compartment.RECOVERED
+                    p_clear = float(getattr(p_config, "treatment_clears_infection_prob", 1.0))
+                    if p_clear >= 1.0 or (p_clear > 0.0 and torch.rand(1).item() < p_clear):
+                        agent_state.ndata[status_key][child_idx] = Compartment.RECOVERED
         else:
             current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx].item()
             agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx] = max(
                 0.0, current_health - params.parent_stress_health_impact
             )
+
+    def _apply_supportive_treatment(self, agent_state: AgentState, child_idx: torch.Tensor):
+        """Effective treatment under treatment_effect_model == "supportive".
+
+        For every pathogen with an active episode: severity is cut by
+        treatment_harm_reduction (ORS prevents dehydration, the harm, not the
+        diarrhoea); the remaining duration is shortened by
+        treatment_duration_reduction_days if the child is old enough (zinc);
+        and with that pathogen's treatment_clears_infection_prob the infection
+        is cleared and the episode shortened by a further
+        antibiotic_duration_reduction_days (an effective antibiotic). Day
+        reductions are applied by stochastic rounding (0.48 days = one day with
+        probability 0.48), so the expected effect equals the trial estimate.
+        Infections without an active episode are cleared with the same
+        probability, as an antibiotic would.
+        """
+        params = self.config.steering_parameters
+        self._treated_this_episode[child_idx] = True
+        age = agent_state.ndata[AgentPropertyKeys.AGE][child_idx].item()
+        zinc_days = (params.treatment_duration_reduction_days
+                     if age >= params.treatment_duration_min_age_months else 0.0)
+
+        for p_config in self.config.pathogens:
+            status_key = AgentPropertyKeys.status(p_config.name)
+            severity_key = AgentPropertyKeys.symptom_severity(p_config.name)
+            duration_key = AgentPropertyKeys.illness_duration(p_config.name)
+            has_episode = agent_state.ndata[duration_key][child_idx].item() > 0
+
+            cleared = False
+            if agent_state.ndata[status_key][child_idx].item() == Compartment.INFECTIOUS:
+                p_clear = float(getattr(p_config, "treatment_clears_infection_prob", 0.0))
+                if p_clear >= 1.0 or (p_clear > 0.0 and torch.rand(1).item() < p_clear):
+                    agent_state.ndata[status_key][child_idx] = Compartment.RECOVERED
+                    cleared = True
+
+            if not has_episode:
+                continue
+            agent_state.ndata[severity_key][child_idx] *= (1.0 - params.treatment_harm_reduction)
+            cut = zinc_days + (params.antibiotic_duration_reduction_days if cleared else 0.0)
+            if cut > 0.0:
+                whole = int(cut)
+                if torch.rand(1).item() < cut - whole:
+                    whole += 1
+                remaining = max(0, int(agent_state.ndata[duration_key][child_idx].item()) - whole)
+                agent_state.ndata[duration_key][child_idx] = remaining
+                if remaining == 0:
+                    agent_state.ndata[severity_key][child_idx] = 0.0
 
     def _apply_waiting_outcome(
         self,
@@ -508,6 +595,20 @@ class CareSeekingSystem(System):
                 agent_state.ndata[severity_key][child_idx] = min(
                     1.0, current_severity + params.untreated_severity_penalty
                 )
+
+def _treated_child_health(h_c: float, params) -> float:
+    """The child's health after SUCCESSFUL treatment, as the parent weighs it.
+
+    "cure": full health (the original model). "supportive": the episode's
+    severity reduced by treatment_harm_reduction, i.e. what treatment actually
+    does to the child in this model, so the decision and its consequence are
+    consistent. (With the default 0.93 this is close to full health, so the
+    decision frame changes little.)
+    """
+    if params.treatment_effect_model != "supportive":
+        return 1.0
+    return 1.0 - (1.0 - h_c) * (1.0 - params.treatment_harm_reduction)
+
 
 def _cpt_v(delta_u: float, lam: float, theta: float, eta: float) -> float:
     """

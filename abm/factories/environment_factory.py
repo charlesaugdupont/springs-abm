@@ -39,6 +39,10 @@ class EnvironmentFactory:
                 grid_tensor=torch.from_numpy(self.grid_tensor).to(self.device),
                 property_index=self.property_to_index
             )
+            # (minx, miny, x_step, y_step) in degrees - lets consumers convert
+            # cells to metres and real coordinates to cells
+            # (abm/environment/water_network.py).
+            self.grid_environment.bounds = self.grid_bounds
         else:
             raise Exception("Grid method should be 'realistic import'.")
 

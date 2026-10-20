@@ -71,6 +71,12 @@ export interface SimResultBundle {
   // fecal_oral, food_borne). Optional/empty when campy is disabled or for runs
   // created before this field existed.
   campy_daily_infections_by_route?: Record<string, number[]>
+  // Per-day new infections by route for EVERY multi-route pathogen, keyed
+  // pathogen -> route -> per-day counts (campylobacter: zoonotic, fecal_oral,
+  // food_borne; cryptosporidium: household, community, water, zoonotic).
+  // Superset of campy_daily_infections_by_route above, which is retained so
+  // the existing CampyRouteAreaChart keeps working unchanged.
+  daily_infections_by_route?: Record<string, Record<string, number[]>>
   summary_metrics: Record<string, unknown>
   proportion_infected_at_least_once: number
   n_u5: number

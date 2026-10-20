@@ -26,13 +26,13 @@ Three independent routes operate each day:
 
 Route tracking
 --------------
-Each new infection is attributed to exactly one route.  The counters
-``cases_zoonotic``, ``cases_fecal_oral``, and ``cases_food_borne`` are
-incremented accordingly and are reset at the start of each day alongside
-``new_cases_this_step``.  Over the full simulation, ``total_zoonotic``,
-``total_fecal_oral``, and ``total_food_borne`` accumulate the lifetime
-totals, which are used to compute route-attribution fractions at the end
-of a run.
+Each new infection is attributed to exactly one route. Attribution is handled
+generically by the Pathogen base class (ROUTES + Pathogen._commit_infections),
+which maintains per-step `cases_by_route` and lifetime `total_by_route`
+counters; the `cases_zoonotic` / `total_zoonotic` / ... attributes below are
+thin read-only views kept for backwards compatibility with
+experiments/metrics.py, experiments/perf/regression_check.py and
+webapp/simulation_runner.py.
 """
 
 from typing import Any
@@ -41,12 +41,14 @@ from scipy.special import hyp1f1
 
 from .pathogen import Pathogen
 from abm.state import AgentState
-from abm.constants import Compartment, AgentPropertyKeys
+from abm.constants import Compartment, AgentPropertyKeys, Phase
 from config import CampylobacterConfig, SteeringParamsSVEIR
 
 
 class Campylobacter(Pathogen):
     """Implements the logic for Campylobacter."""
+
+    ROUTES = ("zoonotic", "fecal_oral", "food_borne")
 
     def __init__(
         self,
@@ -57,20 +59,6 @@ class Campylobacter(Pathogen):
         super().__init__(config, global_params, device)
         self.config: CampylobacterConfig = config
 
-        # Per-step route counters (reset each day)
-        self.cases_zoonotic: int = 0
-        self.cases_fecal_oral: int = 0
-        self.cases_food_borne: int = 0
-
-        # Lifetime route totals (accumulate across all steps)
-        self.total_zoonotic: int = 0
-        self.total_fecal_oral: int = 0
-        self.total_food_borne: int = 0
-
-        # Tracks agents newly exposed within the current day to prevent
-        # double-counting across the two transmission phases.
-        self._newly_exposed_this_day: torch.Tensor | None = None
-
         # Cache for the weighted animal-density field (see
         # _combined_animal_density): the density layers are built once per run
         # and the weights are config values, so this grid-sized tensor is
@@ -79,21 +67,40 @@ class Campylobacter(Pathogen):
         self._combined_density_key: tuple | None = None
 
     # ------------------------------------------------------------------
+    # Backwards-compatible route counter views
+    # ------------------------------------------------------------------
+
+    @property
+    def cases_zoonotic(self) -> int:
+        return self.cases_by_route["zoonotic"]
+
+    @property
+    def cases_fecal_oral(self) -> int:
+        return self.cases_by_route["fecal_oral"]
+
+    @property
+    def cases_food_borne(self) -> int:
+        return self.cases_by_route["food_borne"]
+
+    @property
+    def total_zoonotic(self) -> int:
+        return self.total_by_route["zoonotic"]
+
+    @property
+    def total_fecal_oral(self) -> int:
+        return self.total_by_route["fecal_oral"]
+
+    @property
+    def total_food_borne(self) -> int:
+        return self.total_by_route["food_borne"]
+
+    # ------------------------------------------------------------------
     # Pathogen interface
     # ------------------------------------------------------------------
 
-    def reset_incidence(self):
-        """Reset per-step counters. Called once at the start of each day."""
-        super().reset_incidence()
-        self.cases_zoonotic = 0
-        self.cases_fecal_oral = 0
-        self.cases_food_borne = 0
-
     def step_progression(self, agent_state: AgentState):
         """Disease-state progression — called once per day."""
-        self._newly_exposed_this_day = torch.zeros(
-            agent_state.num_nodes(), dtype=torch.bool, device=self.device
-        )
+        self.begin_day(agent_state)
         # Recovery must be evaluated BEFORE the exposed->infectious
         # transition: otherwise agents that become infectious this call
         # would also face a same-day recovery roll, before ever reaching a
@@ -110,6 +117,7 @@ class Campylobacter(Pathogen):
         location_ids: torch.Tensor,
         num_locations: int,
         grid: Any,
+        phase: Phase,
     ):
         """
         Transmission — called twice per day (Day Phase and Night Phase).
@@ -118,7 +126,7 @@ class Campylobacter(Pathogen):
         The fecal-oral route fires only during the Night Phase.
         """
         self._zoonotic_transmission(agent_state, grid)
-        if self._is_night_phase(agent_state):
+        if phase is Phase.NIGHT:
             self._fecal_oral_transmission(agent_state)
 
     # ------------------------------------------------------------------
@@ -140,38 +148,19 @@ class Campylobacter(Pathogen):
         if self._newly_exposed_this_day is None:
             return
 
-        status_key = AgentPropertyKeys.status(self.name)
-        count_key = AgentPropertyKeys.num_infections(self.name)
-
-        susceptible_mask = (
-            ((agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE)
-             | (agent_state.ndata[status_key] == Compartment.RECOVERED))
-            & ~self._newly_exposed_this_day
-        )
+        susceptible_mask = self.susceptible_like_mask(agent_state, respect_daily_guard=True)
         if not torch.any(susceptible_mask):
             return
 
         target_indices = susceptible_mask.nonzero(as_tuple=True)[0]
 
-        num_prior = agent_state.ndata[count_key][target_indices].float()
-        immunity_factor = torch.exp(
-            -self.global_params.prior_infection_immunity_factor * num_prior
-        )
+        immunity_factor = self._relative_susceptibility(agent_state, target_indices, route="food_borne")
         effective_prob = self.config.food_borne_prob * immunity_factor
 
         rand_vals = torch.rand(len(target_indices), device=self.device)
         newly_infected = rand_vals < effective_prob
 
-        infected_indices = target_indices[newly_infected]
-        num_new = len(infected_indices)
-        if num_new > 0:
-            agent_state.ndata[status_key][infected_indices] = Compartment.EXPOSED
-            agent_state.ndata[AgentPropertyKeys.exposure_time(self.name)][infected_indices] = 0
-            agent_state.ndata[count_key][infected_indices] += 1
-            self.new_cases_this_step += num_new
-            self.cases_food_borne += num_new
-            self.total_food_borne += num_new
-            self._newly_exposed_this_day[infected_indices] = True
+        self._commit_infections(agent_state, target_indices[newly_infected], route="food_borne")
 
     # ------------------------------------------------------------------
     # Private: zoonotic route
@@ -235,13 +224,7 @@ class Campylobacter(Pathogen):
         local_density = combined_density[y, x]
         dose = local_density * self.config.human_animal_interaction_rate
 
-        status_key = AgentPropertyKeys.status(self.name)
-        count_key = AgentPropertyKeys.num_infections(self.name)
-
-        susceptible_mask = (
-            ((agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE) | (agent_state.ndata[status_key] == Compartment.RECOVERED))
-            & ~self._newly_exposed_this_day
-        )
+        susceptible_mask = self.susceptible_like_mask(agent_state, respect_daily_guard=True)
         if not torch.any(susceptible_mask):
             return
 
@@ -256,24 +239,17 @@ class Campylobacter(Pathogen):
             torch.from_numpy(prob_inf_np).to(self.device).float()
         )
 
-        num_prior = agent_state.ndata[count_key][susceptible_mask].float()
-        immunity_factor = torch.exp(
-            -self.global_params.prior_infection_immunity_factor * num_prior
+        target_indices = susceptible_mask.nonzero(as_tuple=True)[0]
+        prob_infection[susceptible_mask] *= self._relative_susceptibility(
+            agent_state, target_indices, route="zoonotic"
         )
-        prob_infection[susceptible_mask] *= immunity_factor
 
         rand_vals = torch.rand(agent_state.num_nodes(), device=self.device)
         new_infections = (rand_vals < prob_infection) & susceptible_mask
 
-        num_new = int(torch.sum(new_infections).item())
-        if num_new > 0:
-            agent_state.ndata[status_key][new_infections] = Compartment.EXPOSED
-            agent_state.ndata[AgentPropertyKeys.exposure_time(self.name)][new_infections] = 0
-            agent_state.ndata[count_key][new_infections] += 1
-            self.new_cases_this_step += num_new
-            self.cases_zoonotic += num_new
-            self.total_zoonotic += num_new
-            self._newly_exposed_this_day[new_infections] = True
+        self._commit_infections(
+            agent_state, new_infections.nonzero(as_tuple=True)[0], route="zoonotic"
+        )
 
     # ------------------------------------------------------------------
     # Private: fecal-oral household route
@@ -291,7 +267,6 @@ class Campylobacter(Pathogen):
             return
 
         status_key = AgentPropertyKeys.status(self.name)
-        count_key  = AgentPropertyKeys.num_infections(self.name)
         hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
 
         is_infectious = agent_state.ndata[status_key] == Compartment.INFECTIOUS
@@ -300,10 +275,7 @@ class Campylobacter(Pathogen):
 
         infectious_hh = torch.unique(hh_ids[is_infectious])
 
-        is_susceptible = (
-            ((agent_state.ndata[status_key] == Compartment.SUSCEPTIBLE) | (agent_state.ndata[status_key] == Compartment.RECOVERED))
-            & ~self._newly_exposed_this_day
-        )
+        is_susceptible = self.susceptible_like_mask(agent_state, respect_daily_guard=True)
         in_infectious_hh = torch.isin(hh_ids, infectious_hh)
         target_mask = is_susceptible & in_infectious_hh
 
@@ -312,34 +284,10 @@ class Campylobacter(Pathogen):
 
         target_indices = target_mask.nonzero(as_tuple=True)[0]
 
-        num_prior = agent_state.ndata[count_key][target_indices].float()
-        immunity_factor = torch.exp(
-            -self.global_params.prior_infection_immunity_factor * num_prior
-        )
+        immunity_factor = self._relative_susceptibility(agent_state, target_indices, route="fecal_oral")
 
         effective_prob = self.config.fecal_oral_prob * immunity_factor
         rand_vals = torch.rand(len(target_indices), device=self.device)
         newly_infected = rand_vals < effective_prob
 
-        infected_indices = target_indices[newly_infected]
-        num_new = len(infected_indices)
-        if num_new > 0:
-            agent_state.ndata[status_key][infected_indices] = Compartment.EXPOSED
-            agent_state.ndata[AgentPropertyKeys.exposure_time(self.name)][infected_indices] = 0
-            agent_state.ndata[count_key][infected_indices] += 1
-            self.new_cases_this_step += num_new
-            self.cases_fecal_oral    += num_new
-            self.total_fecal_oral    += num_new
-            self._newly_exposed_this_day[infected_indices] = True
-
-    # ------------------------------------------------------------------
-    # Private: phase detection
-    # ------------------------------------------------------------------
-
-    def _is_night_phase(self, agent_state: AgentState) -> bool:
-        """Returns True when all agents are at their home location."""
-        home  = agent_state.ndata[AgentPropertyKeys.HOME_LOCATION]
-        cur_y = agent_state.ndata[AgentPropertyKeys.Y]
-        cur_x = agent_state.ndata[AgentPropertyKeys.X]
-        at_home = (cur_y == home[:, 0]) & (cur_x == home[:, 1])
-        return bool(torch.all(at_home).item())
+        self._commit_infections(agent_state, target_indices[newly_infected], route="fecal_oral")

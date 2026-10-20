@@ -45,13 +45,21 @@ def test_submit_and_poll_to_completion_returns_config_form(client):
 
     assert result is not None, "Simulation did not finish within the test timeout"
     assert result["result"]["n_u5"] > 0
-    assert set(result["result"]["pathogen_names"]) <= {"rota", "campy"}
+    assert set(result["result"]["pathogen_names"]) <= {"rota", "campy", "crypto"}
 
 
-def test_rejects_both_pathogens_disabled(client):
-    resp = client.post("/api/scenario/run", json=_minimal_payload(rota_enabled=False, campy_enabled=False))
+def test_rejects_all_pathogens_disabled(client):
+    resp = client.post("/api/scenario/run", json=_minimal_payload(
+        rota_enabled=False, campy_enabled=False, crypto_enabled=False))
     assert resp.status_code == 422
     assert "pathogen" in resp.json()["detail"].lower()
+
+
+def test_accepts_a_single_pathogen(client):
+    """Disabling two of the three is legal - only disabling ALL of them is not."""
+    resp = client.post("/api/scenario/run", json=_minimal_payload(
+        rota_enabled=False, campy_enabled=False, crypto_enabled=True))
+    assert resp.status_code == 202
 
 
 def test_rejects_out_of_bounds_value(client):

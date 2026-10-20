@@ -35,34 +35,57 @@ def gsa_metrics_fn(model) -> dict:
 
 
 # Epidemic burden + care-seeking (the user's chosen headline set).
-HEADLINE_METRICS = [
-    "rota_peak_u5_prevalence",
-    "campy_peak_u5_prevalence",
-    "rota_cumulative_u5_days",
-    "campy_cumulative_u5_days",
-    "rota_episodes_per_child_year",
-    "campy_episodes_per_child_year",
-    "episode_care_seeking_rate",
-    "could_not_afford_rate",
-]
+#
+# Revised 2026-10-20 to the burn-in-aware metrics (experiments.metrics.
+# age_window_rates; 730-day burn-in), so a GSA run must be at least ~1460
+# days long (run_gsa.py's default). The earlier whole-run keys
+# (*_peak_u5_prevalence, *_cumulative_u5_days, *_episodes_per_child_year)
+# included the seeded initial epidemic wave of the first-generation model and,
+# for *_episodes_per_child_year, counted infections rather than episodes; they
+# are still computed and listed in ALSO_REPORTED for continuity.
+PATHOGENS = ("rota", "campy", "crypto")
+HEADLINE_METRICS = (
+    # Disease burden: attributable episodes per under-5 child-year ...
+    [f"{p}_symptomatic_episodes_per_child_year_0_60m" for p in PATHOGENS]
+    # ... the fraction of under-5s ill on an average day ...
+    + [f"{p}_mean_u5_symptomatic_prevalence_post_burnin" for p in PATHOGENS]
+    # ... and infection (carriage) burden.
+    + [f"{p}_infections_per_child_year_0_60m" for p in PATHOGENS]
+    + ["episode_care_seeking_rate", "could_not_afford_rate"]
+)
 
-# Metrics used to assign the importance TIER. This deliberately EXCLUDES the two
-# absolute *_cumulative_u5_days burden metrics: cumulative_u5_days = sum(daily u5
-# prevalence) * n_u5, so it is mechanically proportional to the number of under-5s
-# and any parameter that sets that count (child_probability, and partly
-# average_household_size) dominates it for a purely definitional/structural reason,
-# not because of interesting disease dynamics. Tiering on the de-confounded set
-# (fractions + per-child rates + care-seeking) measures dynamic influence. The
-# cumulative metrics are still analyzed and reported in per_metric_ST.
-TIER_METRICS = [m for m in HEADLINE_METRICS if not m.endswith("_cumulative_u5_days")]
+# Every headline metric is now a per-child rate, a prevalence or a fraction,
+# so none is mechanically proportional to the number of under-5s (the reason
+# the absolute *_cumulative_u5_days metrics used to be excluded here).
+TIER_METRICS = list(HEADLINE_METRICS)
 
 # Computed and reported, but not folded into the headline importance aggregate.
-ALSO_REPORTED = [
-    "campy_zoonotic_fraction",
-    "mean_household_wealth",
-    "mean_final_health",
-    "rota_extinct",
-    "campy_extinct",
-]
+ALSO_REPORTED = (
+    [f"{p}_infections_per_child_year_0_24m" for p in PATHOGENS]
+    + [f"{p}_symptomatic_episodes_per_child_year_0_24m" for p in PATHOGENS]
+    + [f"{p}_mean_u5_prevalence_post_burnin" for p in PATHOGENS]
+    + [
+        "campy_zoonotic_fraction_post_burnin",
+        "crypto_household_fraction_post_burnin",
+        "crypto_community_fraction_post_burnin",
+        "crypto_water_fraction_post_burnin",
+        "crypto_zoonotic_fraction_post_burnin",
+        "rota_water_fraction_post_burnin",
+        "mean_household_wealth",
+        "mean_final_health",
+        "rota_extinct",
+        "campy_extinct",
+        "crypto_extinct",
+        # first-generation (whole-run) keys, for continuity
+        "rota_peak_u5_prevalence",
+        "campy_peak_u5_prevalence",
+        "crypto_peak_u5_prevalence",
+        "rota_cumulative_u5_days",
+        "campy_cumulative_u5_days",
+        "crypto_cumulative_u5_days",
+        "rota_episodes_per_child_year",
+        "campy_episodes_per_child_year",
+    ]
+)
 
 ALL_GSA_METRICS = HEADLINE_METRICS + ALSO_REPORTED

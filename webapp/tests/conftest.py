@@ -17,6 +17,23 @@ def isolated_db(tmp_path):
     yield
 
 
+@pytest.fixture(autouse=True)
+def drain_simulation_worker():
+    """Wait, after each test, for any simulation it submitted to finish.
+
+    POST /api/scenario/run is fire-and-forget: the job runs on the executor's
+    worker thread after the request returns. Left running, it keeps drawing
+    from torch's process-global RNG while later tests - including the
+    model-core suite, which runs in the same process - seed and step their own
+    models, so their random streams (and any marginal assertion) depended on
+    thread timing. The executor has one worker, so a no-op submitted behind
+    the queue completes only once everything before it has.
+    """
+    yield
+    from webapp.executor import _EXECUTOR
+    _EXECUTOR.submit(lambda: None).result(timeout=600)
+
+
 @pytest.fixture
 def client():
     """An authenticated TestClient - bypasses require_login via FastAPI's

@@ -59,6 +59,11 @@ class SimResultBundle:
     # so runs serialized before this field was added still deserialize via
     # SimResultBundle(**json.loads(...)) in _row_to_record.
     campy_daily_infections_by_route: dict[str, list[float]] = field(default_factory=dict)
+    # Per-day new infections by route for EVERY multi-route pathogen, keyed
+    # pathogen -> route -> per-day counts. Superset of the campy-only field
+    # above, which is retained so the existing frontend chart is unaffected.
+    # Has a default so previously-persisted rows deserialize unchanged.
+    daily_infections_by_route: dict[str, dict[str, list[float]]] = field(default_factory=dict)
 
     # Static reference overlays for the spatial map, each a 25x25 [y][x] grid in
     # the same frame as spatial_daily_grids (household_density, animal_density,

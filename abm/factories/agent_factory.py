@@ -111,17 +111,23 @@ class AgentFactory:
         agent_properties[AgentPropertyKeys.INITIAL_WEALTH] = wealth.clone()
         agent_properties[AgentPropertyKeys.INITIAL_HEALTH] = health.clone()
 
-        # --- Household Animal Ownership (Campylobacter zoonotic route) ---
+        # --- Household Animal Ownership (zoonotic routes) ---
         # Drawn once per household (not per agent) and shared by all members,
-        # mirroring the household-wealth pattern above. Only drawn if
-        # Campylobacter is among the configured pathogens.
-        campy_cfg = next((p for p in self.config.pathogens if p.name == "campy"), None)
-        if campy_cfg is not None:
+        # mirroring the household-wealth pattern above. Drawn if ANY configured
+        # pathogen reads the animal density layers - campylobacter (poultry +
+        # ruminants) or Cryptosporidium (ruminants only) - from a single draw,
+        # so both see the same livestock landscape. See
+        # abm.environment.animal_density.resolve_ownership_params for where the
+        # probabilities come from when campylobacter is disabled.
+        from abm.environment.animal_density import resolve_ownership_params
+
+        ownership = resolve_ownership_params(self.config.pathogens)
+        if ownership is not None:
             household_owns_poultry = (
-                torch.rand(len(unique_households)) < campy_cfg.poultry_ownership_prob
+                torch.rand(len(unique_households)) < ownership["poultry_ownership_prob"]
             ).float()
             household_owns_ruminant = (
-                torch.rand(len(unique_households)) < campy_cfg.ruminant_ownership_prob
+                torch.rand(len(unique_households)) < ownership["ruminant_ownership_prob"]
             ).float()
             owns_poultry = household_owns_poultry[household_indices]
             owns_ruminant = household_owns_ruminant[household_indices]
@@ -135,9 +141,71 @@ class AgentFactory:
         # --- Care Seeking ---
         agent_properties[AgentPropertyKeys.CARE_SEEKING_COUNT] = torch.zeros(num_agents, dtype=torch.int)
 
+        # --- Age structure (see abm/systems/demography.py) ---
+        # Drawn LAST, after every draw the original factory made, so that with
+        # the demography features switched off (no prior infections, everyone
+        # eligible for school) the RNG stream - and hence every other property
+        # above - is exactly what it always was.
+        self._initialize_age_structure(agent_properties, num_agents, is_child, ages)
+
         # --- Assign all properties to the graph ---
         for key, value in agent_properties.items():
             agent_state.ndata[key] = value.to(self.config.device)
+
+    def _initialize_age_structure(self, props: Dict[str, torch.Tensor], num_agents: int,
+                                  is_child: torch.Tensor, ages: torch.Tensor):
+        from abm.evidence.maled import cumulative_infections_by_age
+        from abm.systems.demography import effective_time_use
+
+        demo = self.config.demography
+        props[AgentPropertyKeys.BIRTH_DAY] = torch.full((num_agents,), -1, dtype=torch.int)
+
+        # School attendance, drawn once per slot. No draw when everyone attends
+        # from birth (the original behaviour), so that configuration consumes
+        # no RNG.
+        if demo.school_attendance_prob >= 1.0:
+            attends = torch.ones(num_agents, dtype=torch.bool)
+        else:
+            attends = torch.rand(num_agents) < demo.school_attendance_prob
+        props[AgentPropertyKeys.ATTENDS_SCHOOL] = attends
+        props[AgentPropertyKeys.TIME_USE_BASE] = props[AgentPropertyKeys.TIME_USE]
+        props[AgentPropertyKeys.TIME_USE] = effective_time_use(
+            props[AgentPropertyKeys.TIME_USE_BASE], is_child, ages, attends,
+            demo.school_entry_age_months,
+        )
+
+        # Prior infection history for children present at t=0: Poisson counts
+        # with MAL-ED's cumulative age-specific incidence as the mean. Without
+        # this every child, even a 4-year-old, starts naive, which is what
+        # generated the large seeded initial epidemic wave.
+        for pathogen_conf in self.config.pathogens:
+            p_name = pathogen_conf.name
+            props[AgentPropertyKeys.first_infection_day(p_name)] = torch.full(
+                (num_agents,), -1, dtype=torch.int
+            )
+            if demo.initial_prior_infections != "maled" or not torch.any(is_child):
+                continue
+            mean = cumulative_infections_by_age(p_name, ages[is_child]).float()
+            counts = torch.poisson(mean).int()
+            n_inf = props[AgentPropertyKeys.num_infections(p_name)]
+            n_inf[is_child] = counts
+            # One episode per NEW infection: mark the prior ones as already
+            # having had their chance (see ChildIllnessSystem).
+            props[AgentPropertyKeys.last_episode_infection(p_name)][is_child] = counts - 1
+
+        # Household environmental-exposure heterogeneity
+        # (steering_parameters.household_exposure_sdlog): one log-normal
+        # (mean 1) draw per household, shared by its members. No draw (and no
+        # RNG consumed) when the SD is 0.
+        sdlog = float(self.config.steering_parameters.household_exposure_sdlog)
+        if sdlog > 0.0:
+            household_ids = props[AgentPropertyKeys.HOUSEHOLD_ID]
+            unique_households, household_indices = torch.unique(household_ids, return_inverse=True)
+            z = torch.randn(len(unique_households))
+            frailty = torch.exp(sdlog * z - 0.5 * sdlog ** 2)
+            props[AgentPropertyKeys.EXPOSURE_FRAILTY] = frailty[household_indices].float()
+        else:
+            props[AgentPropertyKeys.EXPOSURE_FRAILTY] = torch.ones(num_agents)
 
     def _initialize_compartment(self, num_agents: int, proportion: float) -> torch.Tensor:
         num_exposed = round(num_agents * proportion)

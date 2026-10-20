@@ -158,13 +158,18 @@ def build_zoonotic_density_layers(grid_id: str, seed: int | None = None, agents:
 
     if poultry is None or ruminant is None:
         raise RuntimeError(
-            "Poultry/ruminant density layers were not built. Is 'campy' "
+            "Poultry/ruminant density layers were not built. Is 'campy' or 'crypto' "
             "included in cfg.pathogens?"
         )
 
     poultry_np = poultry.cpu().numpy()
     ruminant_np = ruminant.cpu().numpy()
 
+    # Visualised with campylobacter's species weights, since this view exists
+    # to inspect the campy zoonotic dose field. Cryptosporidium reads the
+    # SAME ruminant layer but weights poultry at zero (birds are not hosts of
+    # the human-infecting Cryptosporidium species), so its effective dose
+    # field is the ruminant panel alone, not this combined one.
     campy_cfg = next(p for p in cfg.pathogens if p.name == "campy")
     combined = np.clip(
         poultry_np * campy_cfg.poultry_weight + ruminant_np * campy_cfg.ruminant_weight,

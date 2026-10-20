@@ -24,7 +24,7 @@ from abm.environment.grid_constants import GRID_SIZE
 from abm.model.initialize_model import SVEIRModel
 from abm.utils.rng import set_global_seed
 from experiments.metrics import (
-    campy_route_fractions, care_seeking_metrics, epidemic_metrics, wellbeing_metrics,
+    care_seeking_metrics, epidemic_metrics, route_fractions, wellbeing_metrics,
 )
 from webapp import jobs
 from webapp.jobs import SimResultBundle
@@ -139,15 +139,15 @@ def _capture_daily_snapshot(model: SVEIRModel, daily: dict[str, list]) -> None:
         status = g.ndata[AgentPropertyKeys.status(p.name)].cpu().numpy()
         daily[f"all_ages_prevalence_{p.name}"].append(float((status == Compartment.INFECTIOUS).mean()))
 
-        # Campylobacter attributes each new infection to exactly one of its three
-        # routes. Its per-day counters are reset at the start of each day and
-        # incremented during that day's transmission/progression, so right here
-        # (immediately after model.step()) they hold THIS day's new infections by
-        # route. Captured only when campy is enabled.
-        if p.name == "campy" and hasattr(p, "cases_zoonotic"):
-            daily["campy_cases_zoonotic"].append(float(p.cases_zoonotic))
-            daily["campy_cases_fecal_oral"].append(float(p.cases_fecal_oral))
-            daily["campy_cases_food_borne"].append(float(p.cases_food_borne))
+        # Multi-route pathogens (campylobacter, Cryptosporidium) attribute each
+        # new infection to exactly one route. The per-day counters are reset at
+        # the start of each day and incremented during that day's
+        # transmission/progression, so right here (immediately after
+        # model.step()) they hold THIS day's new infections by route. Read
+        # generically from the Pathogen base class's cases_by_route, so a new
+        # multi-route pathogen is picked up without touching this function.
+        for route, n in p.cases_by_route.items():
+            daily[f"{p.name}_cases_{route}"].append(float(n))
 
     x = g.ndata[AgentPropertyKeys.X].cpu().numpy()
     y = g.ndata[AgentPropertyKeys.Y].cpu().numpy()
@@ -183,6 +183,7 @@ def run_simulation_for_ui(config: SVEIRConfig, job_id: str) -> SimResultBundle:
     # capture additional per-day snapshots between steps.
     model.infection_incidence.clear()
     model.u5_prevalence_history = {p.name: [] for p in model.pathogens}
+    model.u5_symptomatic_prevalence_history = {p.name: [] for p in model.pathogens}
     child_mask = model.graph.ndata[AgentPropertyKeys.IS_CHILD]
 
     daily: dict[str, list] = defaultdict(list)
@@ -208,18 +209,22 @@ def run_simulation_for_ui(config: SVEIRConfig, job_id: str) -> SimResultBundle:
         **epidemic_metrics(model),
         **care_seeking_metrics(model),
         **wellbeing_metrics(model),
-        **campy_route_fractions(model),
+        **route_fractions(model),
     }
 
-    # Per-day new-infection counts split by Campylobacter's three routes (empty
-    # when campy is disabled). Feeds the results page's 100%-stacked route plot.
-    campy_daily_infections_by_route: dict[str, list[float]] = {}
-    if "campy" in pathogen_names:
-        campy_daily_infections_by_route = {
-            "zoonotic": daily["campy_cases_zoonotic"],
-            "fecal_oral": daily["campy_cases_fecal_oral"],
-            "food_borne": daily["campy_cases_food_borne"],
-        }
+    # Per-day new-infection counts split by route, for every multi-route
+    # pathogen that is enabled. Feeds the results page's 100%-stacked route
+    # plot. `campy_daily_infections_by_route` is kept as its own field so the
+    # existing frontend chart keeps working unchanged; the generic
+    # `daily_infections_by_route` carries every pathogen, Cryptosporidium
+    # included.
+    daily_infections_by_route: dict[str, dict[str, list[float]]] = {}
+    for p in model.pathogens:
+        if p.cases_by_route:
+            daily_infections_by_route[p.name] = {
+                route: daily[f"{p.name}_cases_{route}"] for route in p.cases_by_route
+            }
+    campy_daily_infections_by_route = daily_infections_by_route.get("campy", {})
 
     return SimResultBundle(
         config_snapshot=config.model_dump(),
@@ -234,6 +239,7 @@ def run_simulation_for_ui(config: SVEIRConfig, job_id: str) -> SimResultBundle:
         spatial_daily_grids=daily["spatial_grid"],
         static_layers=_static_layers(model, config, pathogen_names),
         campy_daily_infections_by_route=campy_daily_infections_by_route,
+        daily_infections_by_route=daily_infections_by_route,
         summary_metrics=summary_metrics,
         proportion_infected_at_least_once=model.get_proportion_infected_at_least_once(),
         n_u5=n_u5,

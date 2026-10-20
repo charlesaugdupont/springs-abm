@@ -13,9 +13,10 @@ The simulation is set in a geographical context inspired by Akuse, Ghana, using 
 
 *   **Agent Demographics:** Agents are situated within households, with distinct roles as adults or children, influencing their behaviors and susceptibility.
 *   **Spatial Environment:** The simulation unfolds on a grid generated from OpenStreetMap (OSM) data, featuring key points of interest such as residences, schools, places of worship, and water sources.
-*   **Dual Pathogen Dynamics:** The model simulates two distinct pathogens with different transmission pathways:
+*   **Three-Pathogen Dynamics:** The model simulates three distinct pathogens with different transmission pathways:
     *   **Rotavirus:** A viral pathogen spreading through human-to-human contact and contaminated water sources. The model includes vaccination dynamics.
     *   **Campylobacter:** A bacterial pathogen with a zoonotic transmission pathway, where infection risk is linked to an environmental animal density layer.
+    *   **Cryptosporidium:** A protozoan parasite with four routes (household person-to-person, community co-location, waterborne via a persistent oocyst reservoir, and a small ruminant-only zoonotic route). Two features set it apart mechanically: most childhood infections are **subclinical** yet still shed and transmit, and its environmental stage **accumulates and decays over weeks** rather than flipping between clean and contaminated.
 *   **Behavioral Economics:** Parent agents make care-seeking decisions for their sick children based on principles of Cumulative Prospect Theory (CPT). Each agent is assigned a behavioral "persona" with unique parameters for risk and loss aversion.
 *   **Modular & High-Performance:**
     *   Written in Python, using **PyTorch** for efficient tensor computations, enabling potential GPU acceleration.
@@ -41,17 +42,18 @@ The project is organized into several key directories. Note there are two parall
 │ ├── environment/          # Spatial grid creation, generation, and OpenStreetMap integration
 │ ├── factories/            # Builders that populate agents and the environment at model init
 │ ├── model/                # The main model class, day/night step loop, and data collection
-│ ├── pathogens/            # Pathogen-specific transmission and progression (Rotavirus, Campylobacter)
+│ ├── pathogens/            # Pathogen-specific transmission and progression (Rotavirus, Campylobacter, Cryptosporidium) + the name->class registry
 │ ├── simulation_analysis/  # Plotting/output helpers for the legacy main.py workflow (see §5)
 │ ├── systems/              # Core per-day processes: movement, illness, care-seeking, environment, economics
 │ └── utils/                # Utilities (RNG seeding)
 ├── experiments/            # Actively-developed sweep/calibration framework (see §6)
-│ ├── calibration/          # Epidemic transmission-parameter calibration (LHS search)
+│ ├── calibration/          # Epidemic transmission-parameter calibration (LHS search); run_calibration.py for rotavirus+campylobacter, run_crypto_calibration.py for Cryptosporidium
 │ ├── care_seeking/         # Care-seeking/economics OAT, interaction, and DHS-calibration sweeps
 │ ├── shocks/               # Ecological water-contamination disturbance sweeps
 │ ├── vaccination/          # Vaccination rate/efficacy sweep
 │ ├── metrics.py            # Reusable per-run and post-hoc metrics shared across all sweeps
 │ └── orchestrator.py       # Shared parallel sweep-execution engine
+├── model_tests/            # Pytest suite for the model core (pathogen framework, Cryptosporidium routes, illness mechanics)
 ├── notebooks/              # Exploratory data analysis (e.g. Ghana animal-ownership estimation)
 ├── grids/                  # Cached generated spatial grids (one per unique grid_id)
 └── cache/                  # OpenStreetMap query cache (raw API responses)
@@ -147,7 +149,23 @@ Common flags across these scripts: `--pilot` (small grid/reps/steps for a quick 
 
 `experiments/shocks/` has two scripts: `run_shock_sweep.py` (a single rectangular duration x magnitude shock window; produces the `shocks_day200` result) and `run_shock_scenarios.py` (GoodBYE-paper-inspired cyclical background stress + punctuated/persistent shock recovery shapes, layered on the same underlying mechanism; produces `shocks_scenarios_named`).
 
-## 7. Configuration
+## 7. Testing
+
+```bash
+pytest          # both suites; see pytest.ini for why --pyargs is required
+```
+
+Two packages: `webapp/tests/` (FastAPI layer + the parameter-registry completeness check) and `model_tests/` (the model core). In addition, `experiments/perf/regression_check.py` is a byte-for-byte fingerprint harness used to prove that a refactor leaves behaviour untouched:
+
+```bash
+python -m experiments.perf.regression_check                      # vs the saved golden
+python -m experiments.perf.regression_check --determinism        # bit-reproducibility
+python -m experiments.perf.regression_check --pathogens rota campy --allow-new-keys
+```
+
+The last form is how the Cryptosporidium work was validated: it reproduces a golden captured *before* the third pathogen existed, proving the framework refactors left rotavirus and campylobacter bit-identical.
+
+## 8. Configuration
 
 All model parameters are defined in `config.py` using Pydantic models. To alter the model's behavior (e.g., pathogen infectiousness, number of agents, agent persona ranges), you can modify the values in this file before running a simulation.
 

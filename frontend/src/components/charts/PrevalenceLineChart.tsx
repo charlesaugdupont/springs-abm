@@ -4,7 +4,18 @@ import { useECharts } from "@/hooks/useECharts"
 import { chartColors, baseGridAxisOption, axisStyle, axisNameStyle, dayAxisTooltip, PATHOGEN_COLOR } from "@/lib/chartTheme"
 import type { EChartsLike } from "@/lib/download"
 
-const PATHOGEN_LABEL: Record<string, string> = { rota: "Rotavirus", campy: "Campylobacter" }
+const PATHOGEN_LABEL: Record<string, string> = {
+  rota: "Rotavirus",
+  campy: "Campylobacter",
+  crypto: "Cryptosporidium",
+}
+
+// NOTE for Cryptosporidium: u5Prevalence is the fraction of under-5s
+// INFECTIOUS, i.e. SHEDDING. For rotavirus and campylobacter that is
+// effectively the same as being ill, but ~2/3 of childhood Cryptosporidium
+// infections are subclinical, so this line is a CARRIAGE curve and runs
+// several times above the symptomatic curve. See docs/model_description.md
+// section 5a.
 
 interface PrevalenceLineChartProps {
   days: number[]
@@ -43,7 +54,9 @@ export function PrevalenceLineChart({ days, u5Prevalence, allAgesPrevalence, pat
 
     return {
       ...baseGridAxisOption(),
-      color: [colors.rota, colors.campy],
+      // Driven by the series actually present, not a fixed two-colour array,
+      // so a third (or absent) pathogen gets the right legend swatch.
+      color: pathogenNames.map((name) => colors[PATHOGEN_COLOR[name] ?? "rota"]),
       legend: { top: 0, textStyle: { color: colors.secondary, fontSize: 11 } },
       tooltip: {
         trigger: "axis",

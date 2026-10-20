@@ -4,61 +4,49 @@ import torch
 
 from .system import System
 from abm.state import AgentState
-from abm.constants import GridLayer, WaterStatus
 
 
 class EnvironmentSystem(System):
-    """Handles environmental dynamics like water contamination recovery and shocks."""
+    """Handles environmental dynamics: water-reservoir die-off and shocks.
+
+    Water contamination state is PER PATHOGEN (see
+    GridEnvironment.set_water_state and the rationale there): rotavirus holds a
+    binary CLEAN/CONTAMINATED flag that reverts stochastically on a ~5-day
+    timescale, while Cryptosporidium holds a continuous oocyst load that decays
+    first-order over weeks. This system therefore does not implement either
+    rule itself - it drives each waterborne pathogen's own
+    decay_water_reservoir() / apply_water_shock(), so adding a pathogen with
+    different environmental persistence needs no change here.
+
+    A shock is a single whole-supply event (flooding, infrastructure failure),
+    so one roll against shock_daily_prob applies to every waterborne pathogen
+    at once rather than being drawn independently per pathogen - physically the
+    same flood contaminates the same sources for everything living in them.
+    """
 
     def update(self, agent_state: AgentState, **kwargs):
         grid     = kwargs.get("grid")
         timestep = kwargs.get("timestep")
+        pathogens = kwargs.get("pathogens") or []
         if grid is None or timestep is None:
             return
 
-        self._water_recovery(grid)
+        waterborne = [p for p in pathogens if getattr(p, "WATERBORNE", False)]
+
+        # Catchment model: one shock roll for the day, then each pathogen's
+        # sources decay, receive today's faecal loading from infectious
+        # households, and (on a shock day) a loading pulse.
+        network = getattr(grid, "water_network", None)
+        if network is not None:
+            shock = torch.rand(1).item() < self.config.steering_parameters.shock_daily_prob
+            for pathogen in waterborne:
+                if pathogen.name in network.concentration:
+                    network.advance(agent_state, pathogen.name, pathogen.water_decay_rate, shock)
+            return
+
+        for pathogen in waterborne:
+            pathogen.decay_water_reservoir(grid)
 
         if torch.rand(1).item() < self.config.steering_parameters.shock_daily_prob:
-            self._water_shock(grid)
-
-    def _water_recovery(self, grid: Any):
-        """Models the natural recovery of contaminated water sources."""
-        water_idx = grid.property_to_index.get(GridLayer.WATER)
-        if water_idx is None:
-            return
-
-        water_slice   = grid.grid_tensor[:, :, water_idx]
-        infected_mask = water_slice == WaterStatus.CONTAMINATED
-        if not torch.any(infected_mask):
-            return
-
-        prob    = self.config.steering_parameters.water_recovery_prob
-        chance  = torch.rand(torch.sum(infected_mask), device=self.device)
-        success = chance < prob
-
-        coords_to_recover  = infected_mask.nonzero(as_tuple=True)
-        recovered_coords   = (coords_to_recover[0][success], coords_to_recover[1][success])
-
-        if len(recovered_coords[0]) > 0:
-            water_slice[recovered_coords] = WaterStatus.CLEAN
-
-    def _water_shock(self, grid: Any):
-        """
-        Contaminates all currently clean water sources.
-
-        When a shock event fires (governed by shock_daily_prob), every clean
-        water source is contaminated.  This reflects a sudden environmental
-        event (e.g. flooding, infrastructure failure) that affects the whole
-        water supply simultaneously.  The probability of the shock occurring
-        is the only stochastic element; the extent is always total.
-        """
-        water_idx = grid.property_to_index.get(GridLayer.WATER)
-        if water_idx is None:
-            return
-
-        water_slice = grid.grid_tensor[:, :, water_idx]
-        clean_mask  = water_slice == WaterStatus.CLEAN
-        if not torch.any(clean_mask):
-            return
-
-        water_slice[clean_mask] = WaterStatus.CONTAMINATED
+            for pathogen in waterborne:
+                pathogen.apply_water_shock(grid)

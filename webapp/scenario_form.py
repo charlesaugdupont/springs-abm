@@ -22,7 +22,9 @@ from typing import Any
 
 from pydantic import ConfigDict, Field, create_model
 
-from config import CampylobacterConfig, RotavirusConfig, SVEIRCONFIG, SVEIRConfig
+from config import (
+    CampylobacterConfig, CryptosporidiumConfig, RotavirusConfig, SVEIRCONFIG, SVEIRConfig,
+)
 from experiments.orchestrator import get_param, set_param
 from webapp.parameter_registry import REGISTRY_BY_PATH, editable_fields
 from webapp.settings import DEFAULT_GRID_ID, MAX_AGENTS, MAX_STEPS, MIN_AGENTS, MIN_STEPS
@@ -54,6 +56,7 @@ _field_definitions: dict[str, Any] = {
     "step_target": (int, Field(default=SVEIRCONFIG.step_target, ge=MIN_STEPS, le=MAX_STEPS)),
     "rota_enabled": (bool, Field(default=True)),
     "campy_enabled": (bool, Field(default=True)),
+    "crypto_enabled": (bool, Field(default=True)),
 }
 # seed/number_agents/step_target use an identity mapping (top-level SVEIRConfig fields,
 # no pathogens[]/steering_parameters. prefix to strip) - registered here too, not just in
@@ -92,8 +95,21 @@ ScenarioFormInput = create_model(
 )
 
 
+#: Pathogen toggles, in the order the pathogens are added to the config.
+#: Driven by one table so adding a pathogen means adding one row here plus one
+#: "<name>_enabled" field above, rather than editing three separate places.
+_PATHOGEN_TOGGLES: tuple[tuple[str, str, type], ...] = (
+    ("rota", "rota_enabled", RotavirusConfig),
+    ("campy", "campy_enabled", CampylobacterConfig),
+    ("crypto", "crypto_enabled", CryptosporidiumConfig),
+)
+
+
 def build_sveir_config(form: "ScenarioFormInput") -> SVEIRConfig:
-    if not form.rota_enabled and not form.campy_enabled:
+    enabled = {
+        name: bool(getattr(form, field)) for name, field, _ in _PATHOGEN_TOGGLES
+    }
+    if not any(enabled.values()):
         raise ValueError("At least one pathogen must be enabled.")
 
     cfg = SVEIRConfig()
@@ -102,14 +118,11 @@ def build_sveir_config(form: "ScenarioFormInput") -> SVEIRConfig:
     cfg.step_target = form.step_target
     cfg.spatial_creation_args.grid_id = DEFAULT_GRID_ID  # always hardcoded - never from the client
 
-    pathogens = []
-    if form.rota_enabled:
-        pathogens.append(RotavirusConfig())
-    if form.campy_enabled:
-        pathogens.append(CampylobacterConfig())
-    cfg.pathogens = pathogens
+    cfg.pathogens = [
+        config_cls() for name, _, config_cls in _PATHOGEN_TOGGLES if enabled[name]
+    ]
 
-    active = {name for name, on in (("rota", form.rota_enabled), ("campy", form.campy_enabled)) if on}
+    active = {name for name, on in enabled.items() if on}
     for form_name, path in FORM_FIELD_TO_PATH.items():
         if path.startswith("pathogens["):
             pname = path[len("pathogens["):path.index("]")]

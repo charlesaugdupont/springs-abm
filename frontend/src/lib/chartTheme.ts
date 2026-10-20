@@ -2,9 +2,17 @@
 // palette (references/palette.md) - not shadcn's default --chart-* tokens,
 // which the "Nova" preset ships as pure zero-chroma grays, unusable for
 // distinguishing series. Validated via scripts/validate_palette.js for
-// both this app's two series (rota=slot1 blue, campy=slot2 orange): all
+// this app's first two series (rota=slot1 blue, campy=slot2 orange): all
 // checks pass in both light and dark mode (worst adjacent CVD ΔE 24.7
 // light / 26.8 dark, well clear of the >=8 target).
+//
+// The third series (crypto=teal) reuses the EXACT teal already validated as
+// campy's fecal_oral route colour below - the same hex in each mode,
+// including the light-mode deepening that keeps it >=3:1 on the light
+// surface - rather than introducing an unvalidated hue. NOTE it has not
+// itself been re-run through the all-pairs validator, because the
+// scripts/validate_palette.js referenced above is no longer present in the
+// repo. Re-validate if that script is restored.
 
 export function isDarkMode(): boolean {
   return document.documentElement.classList.contains("dark")
@@ -13,6 +21,7 @@ export function isDarkMode(): boolean {
 interface ThemeColors {
   rota: string
   campy: string
+  crypto: string
   primary: string
   secondary: string
   muted: string
@@ -24,6 +33,7 @@ interface ThemeColors {
 const LIGHT: ThemeColors = {
   rota: "#2a78d6",
   campy: "#eb6834",
+  crypto: "#12946a",
   primary: "#0b0b0b",
   secondary: "#52514e",
   muted: "#898781",
@@ -35,6 +45,7 @@ const LIGHT: ThemeColors = {
 const DARK: ThemeColors = {
   rota: "#3987e5",
   campy: "#d95926",
+  crypto: "#199e70",
   primary: "#ffffff",
   secondary: "#c3c2b7",
   muted: "#898781",
@@ -47,9 +58,13 @@ export function chartColors(): ThemeColors {
   return isDarkMode() ? DARK : LIGHT
 }
 
-export const PATHOGEN_COLOR: Record<string, keyof Pick<ThemeColors, "rota" | "campy">> = {
+export const PATHOGEN_COLOR: Record<
+  string,
+  keyof Pick<ThemeColors, "rota" | "campy" | "crypto">
+> = {
   rota: "rota",
   campy: "campy",
+  crypto: "crypto",
 }
 
 // Campylobacter's three transmission routes. Display/stacking order matters:

@@ -4,13 +4,12 @@ from pathlib import Path
 import torch
 from scipy.stats import qmc
 
-from config import SVEIRConfig, RotavirusConfig, CampylobacterConfig
+from config import SVEIRConfig
 from abm.model.step import sveir_step
 from abm.constants import AgentPropertyKeys, Compartment
 from abm.factories.agent_factory import AgentFactory
 from abm.factories.environment_factory import EnvironmentFactory
-from abm.pathogens.rotavirus import Rotavirus
-from abm.pathogens.campylobacter import Campylobacter
+from abm.pathogens.registry import build_pathogen, is_implemented
 from abm.state import AgentState
 
 
@@ -40,6 +39,24 @@ class SVEIRModel(Model):
         self.graph = None
         self.infection_incidence = []
         self.u5_prevalence_history: dict[str, list[float]] = {}
+        # Fraction of under-5s with an ACTIVE SYMPTOMATIC EPISODE, as distinct
+        # from u5_prevalence_history, which is the fraction INFECTIOUS (i.e.
+        # shedding). For rotavirus and campylobacter the two track each other,
+        # since every infection in a child produces an episode. For
+        # Cryptosporidium they differ by design and by a large factor: ~2/3 of
+        # childhood infections are subclinical and shedding runs ~3 weeks, so
+        # carriage prevalence is several times symptomatic prevalence. Keeping
+        # both means a "prevalence" target can never silently compare a
+        # carriage figure to a diarrhoea figure.
+        self.u5_symptomatic_prevalence_history: dict[str, list[float]] = {}
+        # Age-structured daily incidence records - see
+        # _record_age_structured_incidence(). Populated on EVERY step (whether
+        # stepped via run() or manually), so callers that drive step()
+        # themselves (webapp, orchestrator) need no extra setup.
+        self.child_days_by_age_month: list = []
+        self.new_infections_by_age_month: dict[str, list] = {}
+        self._prev_num_infections: dict[str, torch.Tensor] = {}
+        self._age_records_ready = False
         self.pathogens = []
         self.systems = []
         self.grid_environment = None
@@ -63,7 +80,12 @@ class SVEIRModel(Model):
     def _build_animal_density_layers(self):
         """
         Builds and attaches the household-ownership-derived poultry/ruminant
-        density layers used by Campylobacter's zoonotic route.
+        density layers used by the zoonotic routes.
+
+        Both Campylobacter (poultry + ruminants) and Cryptosporidium
+        (ruminants only) read these layers, so they are built whenever either
+        pathogen is configured - and from ONE ownership draw, so the two
+        pathogens always see the same livestock landscape.
 
         Unlike the water/school/worship layers, these are NOT part of the
         static grid.npz file: they depend on this run's random household
@@ -73,11 +95,14 @@ class SVEIRModel(Model):
         if self.grid_environment is None:
             return
 
-        campy_cfg = next((p for p in self.config.pathogens if p.name == "campy"), None)
-        if campy_cfg is None:
-            return
+        from abm.environment.animal_density import (
+            build_animal_density_layers,
+            resolve_ownership_params,
+        )
 
-        from abm.environment.animal_density import build_animal_density_layers
+        ownership = resolve_ownership_params(self.config.pathogens)
+        if ownership is None:
+            return
 
         household_ids = self.graph.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
         unique_households, inverse = torch.unique(household_ids, return_inverse=True)
@@ -104,8 +129,8 @@ class SVEIRModel(Model):
             household_owns_poultry=hh_owns_poultry,
             household_owns_ruminant=hh_owns_ruminant,
             grid_shape=grid_shape,
-            poultry_sigma=campy_cfg.poultry_roam_sigma,
-            ruminant_sigma=campy_cfg.ruminant_roam_sigma,
+            poultry_sigma=ownership["poultry_roam_sigma"],
+            ruminant_sigma=ownership["ruminant_roam_sigma"],
             device=self.config.device,
         )
         self.grid_environment.set_dynamic_layer("poultry_density", poultry_density)
@@ -156,6 +181,34 @@ class SVEIRModel(Model):
         # 6. Initialize pathogen and system objects
         self._initialize_pathogens_and_systems()
 
+        # 7. Water. Catchment model (default): build the source network
+        # (sources, household assignments, runoff kernels), send water
+        # collectors to their household's own source, and give each
+        # waterborne pathogen a concentration vector. Legacy model: seed each
+        # waterborne pathogen's own point-source state (see
+        # GridEnvironment.set_water_state for why that is per-pathogen).
+        if self.grid_environment is not None:
+            if self.config.water.model == "catchment":
+                from abm.environment.water_network import WaterNetwork
+
+                network = WaterNetwork.build(self.grid_environment, self.graph, self.config.water,
+                                             device=self.config.device)
+                self.grid_environment.water_network = network
+                self.graph.ndata[AgentPropertyKeys.WATER_LOCATION] = (
+                    network.agent_water_location().to(self.config.device)
+                )
+                for pathogen in self.pathogens:
+                    if getattr(pathogen, "WATERBORNE", False):
+                        pathogen.use_catchment_water = True
+                        network.init_pathogen(pathogen.name)
+            else:
+                for pathogen in self.pathogens:
+                    if getattr(pathogen, "WATERBORNE", False):
+                        pathogen.init_water_reservoir(self.grid_environment)
+
+        # 8. Age-structured incidence bookkeeping (no RNG; pure observation).
+        self._init_age_structured_records()
+
         if verbose:
             print(f'{self.graph.num_nodes()} agents initialized on {self.config.device}')
 
@@ -167,16 +220,12 @@ class SVEIRModel(Model):
         from abm.systems.care_seeking import CareSeekingSystem
         from abm.systems.economics import EconomicSystem
         from abm.systems.household import HouseholdSystem
-
-        pathogen_map = {"rota": Rotavirus, "campy": Campylobacter}
-        pathogen_config_map = {"rota": RotavirusConfig, "campy": CampylobacterConfig}
+        from abm.systems.demography import DemographySystem
 
         for p_config in self.config.pathogens:
-            if p_config.name in pathogen_map:
-                pathogen_class = pathogen_map[p_config.name]
-                typed_config = pathogen_config_map[p_config.name](**p_config.model_dump())
+            if is_implemented(p_config.name):
                 self.pathogens.append(
-                    pathogen_class(typed_config, self.steering_parameters, self.config.device)
+                    build_pathogen(p_config, self.steering_parameters, self.config.device)
                 )
             else:
                 print(f"Warning: Pathogen '{p_config.name}' not implemented.")
@@ -188,6 +237,11 @@ class SVEIRModel(Model):
             HouseholdSystem(self.config),
             EnvironmentSystem(self.config),
             EconomicSystem(self.config),
+            # systems[6]. Not called from sveir_step: it runs from
+            # SVEIRModel.step() AFTER the day's age-structured incidence has
+            # been recorded, so infections are attributed to the age the
+            # child had when infected, before any slot is renewed.
+            DemographySystem(self.config),
         ]
 
     def _calculate_demographics(self, num_agents: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -227,6 +281,7 @@ class SVEIRModel(Model):
         if n_u5 == 0:
             for p in self.pathogens:
                 self.u5_prevalence_history[p.name].append(0.0)
+                self.u5_symptomatic_prevalence_history[p.name].append(0.0)
             return
 
         for p in self.pathogens:
@@ -234,6 +289,138 @@ class SVEIRModel(Model):
             status_u5   = self.graph.ndata[status_key][u5_mask]
             n_infectious = (status_u5 == Compartment.INFECTIOUS).sum().item()
             self.u5_prevalence_history[p.name].append(n_infectious / n_u5)
+
+            severity_u5 = self.graph.ndata[AgentPropertyKeys.symptom_severity(p.name)][u5_mask]
+            n_symptomatic = (severity_u5 > 0).sum().item()
+            self.u5_symptomatic_prevalence_history[p.name].append(n_symptomatic / n_u5)
+
+    # ------------------------------------------------------------------
+    # Age-structured incidence
+    # ------------------------------------------------------------------
+    #: Children are binned by completed month of age, 0..AGE_RECORD_MONTHS-1.
+    #: 60 covers the under-5 population; any older child (none exist today)
+    #: would be clamped into the last bin.
+    AGE_RECORD_MONTHS = 60
+
+    def _init_age_structured_records(self):
+        """(Re)initialises the per-day, per-month-of-age incidence records."""
+        self.child_days_by_age_month = []
+        self.new_infections_by_age_month = {p.name: [] for p in self.pathogens}
+        # The same two records restricted to children with NO prior infection
+        # by that pathogen at the start of the day (the "naive" stratum of
+        # MAL-ED Supplementary Table 3); the ">=1 prior" stratum is the
+        # difference from the totals above.
+        self.child_days_naive_by_age_month = {p.name: [] for p in self.pathogens}
+        self.new_infections_naive_by_age_month = {p.name: [] for p in self.pathogens}
+        self._prev_num_infections = {
+            p.name: self.graph.ndata[AgentPropertyKeys.num_infections(p.name)].clone()
+            for p in self.pathogens
+        }
+        self._age_records_ready = True
+
+    def _record_age_structured_incidence(self):
+        """Appends today's child-days and new child infections by month of age.
+
+        Records, for each simulated day:
+          * child_days_by_age_month[d][m]: number of children whose age is in
+            completed month m at the end of day d (the person-time denominator);
+          * new_infections_by_age_month[p][d][m]: number of NEW infections
+            (S/R -> E transitions) with pathogen p among those children on day d.
+
+        Rates over any age window and any day window (e.g. excluding a burn-in
+        period) are then exact ratios of sums - see
+        experiments.metrics.age_window_rates. Unlike num_infections, which is a
+        lifetime total per agent, this lets metrics ignore the seeded initial
+        epidemic wave and select the 0-24 month window that the MAL-ED
+        targets refer to.
+
+        Also stamps first_infection_day for children born in the simulation
+        whose first infection with a pathogen happened today.
+
+        Pure observation: reads state, draws no random numbers.
+        """
+        if not self._age_records_ready:
+            self._init_age_structured_records()
+        is_child = self.graph.ndata[AgentPropertyKeys.IS_CHILD].bool()
+        n_bins = self.AGE_RECORD_MONTHS
+        age_m = self.graph.ndata[AgentPropertyKeys.AGE][is_child]
+        month = torch.clamp(age_m.floor().long(), 0, n_bins - 1)
+        self.child_days_by_age_month.append(
+            torch.bincount(month, minlength=n_bins).cpu().numpy()
+        )
+        birth_key = AgentPropertyKeys.BIRTH_DAY
+        born_in_sim = (
+            (self.graph.ndata[birth_key] >= 0) & is_child
+            if birth_key in self.graph.ndata else None
+        )
+        for p in self.pathogens:
+            current = self.graph.ndata[AgentPropertyKeys.num_infections(p.name)]
+            prev = self._prev_num_infections[p.name]
+            if born_in_sim is not None:
+                first_key = AgentPropertyKeys.first_infection_day(p.name)
+                first = born_in_sim & (prev == 0) & (current > 0)
+                if torch.any(first):
+                    self.graph.ndata[first_key][first] = self.step_count
+            new = (current - prev)[is_child]
+            naive = (prev[is_child] == 0)
+            self._prev_num_infections[p.name] = current.clone()
+            self.new_infections_by_age_month[p.name].append(
+                torch.bincount(month, weights=new.double(), minlength=n_bins)
+                .round().long().cpu().numpy()
+            )
+            self.child_days_naive_by_age_month[p.name].append(
+                torch.bincount(month[naive], minlength=n_bins).cpu().numpy()
+            )
+            self.new_infections_naive_by_age_month[p.name].append(
+                torch.bincount(month[naive], weights=new[naive].double(), minlength=n_bins)
+                .round().long().cpu().numpy()
+            )
+
+    def _advance_demography(self):
+        """Ages everyone by a day and renews children leaving the under-5
+        population (abm/systems/demography.py)."""
+        from abm.systems.demography import DemographySystem
+        from abm.systems.child_illness import ChildIllnessSystem
+
+        demo = next((s for s in self.systems if isinstance(s, DemographySystem)), None)
+        if demo is None:
+            return
+        illness = next((s for s in self.systems if isinstance(s, ChildIllnessSystem)), None)
+        reborn = demo.update(self.graph, timestep=self.step_count, illness_system=illness)
+        if reborn.numel() > 0:
+            # The renewed slots' infection counts were reset to 0; keep the
+            # incidence snapshot in step so tomorrow's diff is not negative.
+            for name, prev in self._prev_num_infections.items():
+                prev[reborn] = 0
+
+    def get_birth_cohorts(self) -> list[dict]:
+        """Every child born in the simulation, with first-infection days.
+
+        Children who have already left (aged out) come from
+        DemographySystem.cohort_log; children still present are read from
+        agent state, with exit_day None. first_infection_day is -1 for a
+        pathogen the child has not (yet) had.
+        """
+        from abm.systems.demography import DemographySystem
+
+        demo = next((s for s in self.systems if isinstance(s, DemographySystem)), None)
+        cohorts = list(demo.cohort_log) if demo is not None else []
+        if AgentPropertyKeys.BIRTH_DAY not in self.graph.ndata:
+            return cohorts
+        birth = self.graph.ndata[AgentPropertyKeys.BIRTH_DAY]
+        present = ((birth >= 0) & self.graph.ndata[AgentPropertyKeys.IS_CHILD].bool()).nonzero(as_tuple=True)[0]
+        if present.numel() == 0:
+            return cohorts
+        firsts = {
+            p.name: self.graph.ndata[AgentPropertyKeys.first_infection_day(p.name)][present].tolist()
+            for p in self.pathogens
+        }
+        for j, b in enumerate(birth[present].tolist()):
+            cohorts.append({
+                "birth_day": int(b), "exit_day": None,
+                "first_infection_day": {name: int(v[j]) for name, v in firsts.items()},
+            })
+        return cohorts
 
     # ------------------------------------------------------------------
     # Run / step
@@ -244,7 +431,9 @@ class SVEIRModel(Model):
         self.infection_incidence.clear()
         # Initialise per-pathogen under-5 prevalence lists
         self.u5_prevalence_history = {p.name: [] for p in self.pathogens}
-        # Pre-compute the under-5 mask once — demographics don't change mid-run
+        self.u5_symptomatic_prevalence_history = {p.name: [] for p in self.pathogens}
+        # Pre-compute the under-5 mask once - IS_CHILD never changes mid-run
+        # (turnover renews child slots in place; see DemographySystem)
         child_mask = self.graph.ndata[AgentPropertyKeys.IS_CHILD]
 
         while self.step_count < self.config.step_target:
@@ -265,6 +454,9 @@ class SVEIRModel(Model):
             # Record under-5 prevalence if a mask was supplied (i.e. called from run())
             if child_mask is not None:
                 self._record_u5_prevalence(child_mask)
+            # Always recorded, regardless of how step() is driven.
+            self._record_age_structured_incidence()
+            self._advance_demography()
 
         except Exception as e:
             raise RuntimeError(f'Execution of step {self.step_count} failed.') from e
@@ -294,6 +486,7 @@ class SVEIRModel(Model):
         return {
             "incidence": self.infection_incidence,
             "u5_prevalence": self.u5_prevalence_history,
+            "u5_symptomatic_prevalence": self.u5_symptomatic_prevalence_history,
         }
 
     def get_child_episode_log(self) -> list[dict]:
