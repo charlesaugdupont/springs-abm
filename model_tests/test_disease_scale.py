@@ -51,14 +51,16 @@ def test_maled_pooled_rates_lie_within_the_site_ranges():
 
 
 @pytest.mark.parametrize("pathogen", ["rota", "campy", "crypto"])
-def test_config_symptomatic_fraction_matches_maled(pathogen):
+def test_config_age_profile_has_maled_shape(pathogen):
+    """symptomatic_fraction is calibrated (campaign v3: P(illness | first
+    infection), compared with MAL-ED through the observation layer), but the
+    age profile keeps MAL-ED Supplementary Table 5's relative shape: the
+    multipliers times MAL-ED's overall fraction give its 6-month bands."""
     cfg = CONFIGS[pathogen]()
-    assert cfg.symptomatic_fraction == pytest.approx(
-        maled.overall_symptomatic_fraction(pathogen), abs=0.001
-    )
+    assert 0.0 < cfg.symptomatic_fraction < 1.0
     profile = cfg.symptomatic_fraction_age_profile
     assert [u for u, _ in profile] == [6.0, 12.0, 18.0, 24.0]
-    bands = [cfg.symptomatic_fraction * m for _, m in profile]
+    bands = [maled.overall_symptomatic_fraction(pathogen) * m for _, m in profile]
     assert bands == pytest.approx(list(maled.SYMPTOMATIC_FRACTION_BY_AGE[pathogen]), abs=0.001)
 
 
@@ -75,7 +77,8 @@ def test_age_profile_reproduces_overall_fraction_under_maled_infection_mix(patho
 
 
 def test_symptomatic_probability_band_edges_and_extrapolation():
-    cfg = CampylobacterConfig()
+    # at MAL-ED's overall fraction the bands are MAL-ED's own
+    cfg = CampylobacterConfig(symptomatic_fraction=maled.overall_symptomatic_fraction("campy"))
     ages = torch.tensor([0.0, 6.0, 6.01, 12.0, 17.9, 24.0, 30.0, 59.0])
     probs = symptomatic_probability(cfg, ages)
     expected = [0.22, 0.22, 0.20, 0.20, 0.15, 0.11, 0.11, 0.11]   # held flat beyond 24 months

@@ -125,6 +125,14 @@ class SweepSpec:
     n_cores: Optional[int] = None
     base_seed: Optional[int] = None
     step_callback: Optional[Callable[[SVEIRModel, int, Dict[str, Any]], None]] = None
+    # Long sweeps (a calibration wave of several hours): write results.parquet
+    # every `checkpoint_every` finished runs, and with `resume`, skip runs
+    # whose run_id an existing results.parquet already holds - so an
+    # interrupted sweep restarts where it stopped. Rows in that file that
+    # match no run of this sweep are dropped. None/False (the default) keep
+    # the original single write at the end.
+    checkpoint_every: Optional[int] = None
+    resume: bool = False
     # Optional per-day hook: step_callback(model, day, combo), called once per
     # simulated day BEFORE model.step(). Lets a sweep mutate
     # model.config.steering_parameters.* mid-run (e.g. a shock schedule).
@@ -276,6 +284,12 @@ def _combo_id(combo: Dict[str, Any], rep: int) -> str:
     return "_".join(parts)
 
 
+def _write_parquet_atomic(df: pd.DataFrame, path: Path) -> None:
+    tmp = path.with_suffix(".parquet.tmp")
+    df.to_parquet(tmp, index=False)
+    os.replace(tmp, path)
+
+
 def run_sweep(spec: SweepSpec, combos: Optional[List[Dict[str, Any]]] = None) -> pd.DataFrame:
     """Runs the full sweep in parallel, saves a tidy long-format Parquet file,
     and returns the resulting DataFrame.
@@ -308,6 +322,24 @@ def run_sweep(spec: SweepSpec, combos: Optional[List[Dict[str, Any]]] = None) ->
             run_id = _combo_id(combo, rep)
             tasks.append((spec, combo, rep, run_id))
 
+    results_path = out_dir / "results.parquet"
+    done_records: List[Dict[str, Any]] = []
+    if spec.resume and results_path.exists():
+        wanted = {t[3] for t in tasks}
+        prev = pd.read_parquet(results_path)
+        stale = ~prev["run_id"].isin(wanted)
+        if stale.any():
+            # Never lose finished runs silently: keep the rows this design
+            # does not contain beside the results before they are dropped.
+            backup = out_dir / f"results_not_in_design_{int(time.time())}.parquet"
+            prev[stale].to_parquet(backup, index=False)
+            print(f"  {int(stale.sum())} finished runs are not part of this design; kept in {backup}")
+        prev = prev[~stale]
+        done_records = prev.to_dict("records")
+        done = set(prev["run_id"])
+        tasks = [t for t in tasks if t[3] not in done]
+        print(f"  Resuming: {len(done)} runs already in {results_path}, {len(tasks)} to go")
+
     n_cores = spec.n_cores or max(1, min(6, cpu_count()))
     total = len(tasks)
 
@@ -326,7 +358,7 @@ def run_sweep(spec: SweepSpec, combos: Optional[List[Dict[str, Any]]] = None) ->
     print(f"  Steps / Agents   : {spec.steps} / {spec.agents}\n")
 
     t0 = time.time()
-    records, timeseries_rows = [], []
+    records, timeseries_rows = list(done_records), []
 
     with Pool(processes=n_cores, initializer=_worker_init) as pool:
         for i, result in enumerate(pool.imap(_run_one, tasks), 1):
@@ -334,6 +366,8 @@ def run_sweep(spec: SweepSpec, combos: Optional[List[Dict[str, Any]]] = None) ->
                 records.append(result["record"])
                 if result["timeseries"]:
                     timeseries_rows.extend(result["timeseries"])
+                if spec.checkpoint_every and len(records) % spec.checkpoint_every == 0:
+                    _write_parquet_atomic(pd.DataFrame.from_records(records), results_path)
             elapsed = time.time() - t0
             eta = (elapsed / i) * (total - i)
             print(f"  [{i:>4}/{total}]  elapsed={elapsed:6.0f}s  ETA={eta:6.0f}s", end="\r")
@@ -342,8 +376,10 @@ def run_sweep(spec: SweepSpec, combos: Optional[List[Dict[str, Any]]] = None) ->
           f"({len(records)}/{total} runs succeeded)")
 
     df = pd.DataFrame.from_records(records)
-    results_path = out_dir / "results.parquet"
-    df.to_parquet(results_path, index=False)
+    if spec.checkpoint_every or spec.resume:
+        _write_parquet_atomic(df, results_path)
+    else:
+        df.to_parquet(results_path, index=False)
     print(f"  Results saved -> {results_path}")
 
     if spec.record_timeseries and timeseries_rows:

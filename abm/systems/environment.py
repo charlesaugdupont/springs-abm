@@ -41,7 +41,9 @@ class EnvironmentSystem(System):
             shock = torch.rand(1).item() < self.config.steering_parameters.shock_daily_prob
             for pathogen in waterborne:
                 if pathogen.name in network.concentration:
-                    network.advance(agent_state, pathogen.name, pathogen.water_decay_rate, shock)
+                    weights = (pathogen.infectiousness_weights(agent_state)
+                               if pathogen.config.asymptomatic_relative_infectiousness < 1.0 else None)
+                    network.advance(agent_state, pathogen.name, pathogen.water_decay_rate, shock, weights)
             return
 
         for pathogen in waterborne:

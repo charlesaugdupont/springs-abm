@@ -43,6 +43,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 
@@ -66,7 +67,7 @@ GOLDEN_PATH = os.path.join("experiments", "outputs", "perf", "golden.pt")
 _TMP_ROOT = os.path.join("experiments", "outputs", "perf", "_tmp")
 
 
-from experiments.legacy import LEGACY_V1_OVERRIDES  # noqa: E402  (see experiments/legacy.py)
+from experiments.legacy import LEGACY_V1_OVERRIDES, V2_OVERRIDES  # noqa: E402  (see experiments/legacy.py)
 
 
 # ---------------------------------------------------------------------------
@@ -257,8 +258,25 @@ def main():
     parser.add_argument("--legacy-v1", action="store_true",
                         help="Apply LEGACY_V1_OVERRIDES (disease-scale and demography features off) "
                              "to reproduce a golden captured from the first-generation model.")
+    parser.add_argument("--v2", action="store_true",
+                        help="Apply experiments.legacy.V2_OVERRIDES: reproduce the second-generation "
+                             "model (the v2 calibration, as committed in 40fb731).")
+    parser.add_argument("--set", action="append", default=[], metavar="PATH=VALUE",
+                        help="Extra config override (orchestrator dot-path; VALUE parsed as JSON, "
+                             "else taken as a string), applied after --legacy-v1. Repeatable. E.g. "
+                             "--set illness_mechanics.onset_before_transmission=false to check that a "
+                             "new switch's 'off' value reproduces a golden from before it existed.")
     args = parser.parse_args()
-    overrides = LEGACY_V1_OVERRIDES if args.legacy_v1 else None
+    overrides = dict(LEGACY_V1_OVERRIDES) if args.legacy_v1 else {}
+    if args.v2:
+        overrides.update(V2_OVERRIDES)
+    for item in args.set:
+        path, _, raw = item.partition("=")
+        try:
+            overrides[path] = json.loads(raw)
+        except json.JSONDecodeError:
+            overrides[path] = raw
+    overrides = overrides or None
 
     print(f"Config: {len(args.seeds)} seeds {args.seeds}, {args.agents} agents, "
           f"{args.steps} days, grid {args.grid_id}, torch_threads={torch.get_num_threads()}")

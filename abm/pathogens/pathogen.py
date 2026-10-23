@@ -293,6 +293,49 @@ class Pathogen(ABC):
     # Shared progression helpers
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Infectiousness
+    # ------------------------------------------------------------------
+
+    def infectiousness_weights(self, agent_state: AgentState) -> torch.Tensor:
+        """Per-agent infectiousness for every transmission route: 1 for an
+        INFECTIOUS agent whose current infection produced an illness episode,
+        asymptomatic_relative_infectiousness for any other INFECTIOUS agent
+        (every adult, and children's subclinical infections), 0 otherwise.
+
+        At the default relative infectiousness of 1.0 this is exactly the
+        float of the INFECTIOUS mask - the original count of infectious
+        agents - so every route is unchanged bit for bit.
+        """
+        from abm.constants import Compartment, AgentPropertyKeys
+        is_infectious = (agent_state.ndata[AgentPropertyKeys.status(self.name)] == Compartment.INFECTIOUS).float()
+        rho = float(getattr(self.config, "asymptomatic_relative_infectiousness", 1.0))
+        if rho >= 1.0:
+            return is_infectious
+        sym = agent_state.ndata.get(AgentPropertyKeys.symptomatic_infection(self.name))
+        if sym is None:
+            return is_infectious * rho
+        return is_infectious * torch.where(sym.bool(), torch.ones_like(is_infectious),
+                                           torch.full_like(is_infectious, rho))
+
+    def household_infectiousness(self, agent_state: AgentState):
+        """(household ids with an infectious member, the largest infectiousness
+        weight among each one's infectious members). For the presence-based
+        household routes: a household whose infectious members are all
+        symptomless transmits at asymptomatic_relative_infectiousness times
+        the per-contact probability. Returns (None, None) if nobody is
+        infectious."""
+        from abm.constants import AgentPropertyKeys
+        w = self.infectiousness_weights(agent_state)
+        infectious = w > 0
+        if not torch.any(infectious):
+            return None, None
+        hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
+        hh_inf, inv = torch.unique(hh_ids[infectious], return_inverse=True)
+        w_max = torch.zeros(len(hh_inf), dtype=w.dtype).scatter_reduce_(
+            0, inv, w[infectious], reduce="amax", include_self=False)
+        return hh_inf, w_max
+
     def _increment_exposure_time(self, agent_state: AgentState):
         from abm.constants import Compartment, AgentPropertyKeys
         status_key = AgentPropertyKeys.status(self.name)
@@ -360,6 +403,9 @@ class Pathogen(ABC):
         agent_state.ndata[status_key][infected_indices] = Compartment.EXPOSED
         agent_state.ndata[AgentPropertyKeys.exposure_time(self.name)][infected_indices] = 0
         agent_state.ndata[AgentPropertyKeys.num_infections(self.name)][infected_indices] += 1
+        sym_key = AgentPropertyKeys.symptomatic_infection(self.name)
+        if sym_key in agent_state.ndata:
+            agent_state.ndata[sym_key][infected_indices] = False
 
         self.new_cases_this_step += num_new
         if route is not None and route in self.cases_by_route:
@@ -438,7 +484,9 @@ class Pathogen(ABC):
         if forced_pressure is not None:
             infection_pressure = forced_pressure[target_indices]
         elif location_ids is not None and num_locations is not None:
-            is_infectious = (agent_state.ndata[status_key] == Compartment.INFECTIOUS).float()
+            # Infectiousness-weighted count of infectious agents (exactly the
+            # count when asymptomatic_relative_infectiousness is 1).
+            is_infectious = self.infectiousness_weights(agent_state)
             infected_per_location = torch.zeros(num_locations, device=self.device)
             infected_per_location.index_add_(0, location_ids, is_infectious)
             pressure_per_agent = infected_per_location[location_ids]

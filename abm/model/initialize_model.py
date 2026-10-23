@@ -100,7 +100,7 @@ class SVEIRModel(Model):
             resolve_ownership_params,
         )
 
-        ownership = resolve_ownership_params(self.config.pathogens)
+        ownership = resolve_ownership_params(self.config.pathogens, getattr(self, "cell_size_m", None))
         if ownership is None:
             return
 
@@ -159,6 +159,7 @@ class SVEIRModel(Model):
             env_factory.create_grid()
             env_factory.place_agents(self.graph)
             self.grid_environment = env_factory.grid_environment
+            self._resolve_metric_parameters()
         else:
             self.grid_environment = None
             self.graph.ndata[AgentPropertyKeys.X] = torch.zeros(
@@ -211,6 +212,36 @@ class SVEIRModel(Model):
 
         if verbose:
             print(f'{self.graph.num_nodes()} agents initialized on {self.config.device}')
+
+    def _resolve_metric_parameters(self):
+        """Converts every distance given in metres (the "_m" twins of
+        cell-based parameters) into cells of the loaded grid, writing the
+        cell value into this model's own config. Distances left as None keep
+        their cell values, so the original grid is untouched."""
+        import math
+        bounds = getattr(self.grid_environment, "bounds", None)
+        if bounds is None:
+            return
+        rows = self.grid_environment.grid_tensor.shape[0]
+        minx, miny, x_step, y_step = (float(v) for v in bounds)
+        lat = miny + rows * y_step / 2
+        dx = x_step * 111_320.0 * math.cos(math.radians(lat))
+        dy = y_step * 110_574.0
+        cell_m = math.sqrt(dx * dy)
+        self.cell_size_m = cell_m
+        sp = self.config.steering_parameters
+        if sp.social_interaction_radius_m is not None:
+            sp.social_interaction_radius = sp.social_interaction_radius_m / cell_m
+        for p in self.config.pathogens:
+            for f in ("poultry_roam_sigma", "ruminant_roam_sigma"):
+                metres = getattr(p, f + "_m", None)
+                if metres is not None:
+                    setattr(p, f, metres / cell_m)
+        w = self.config.water
+        if w.reach_block_m is not None:
+            w.reach_block_cells = max(1, int(round(w.reach_block_m / cell_m)))
+        if w.river_min_width_m is not None:
+            w.river_min_width_cells = max(2, int(round(w.river_min_width_m / cell_m)))
 
     def _initialize_pathogens_and_systems(self):
         """Instantiates the pathogen and system objects that drive the simulation."""
@@ -393,6 +424,17 @@ class SVEIRModel(Model):
             for name, prev in self._prev_num_infections.items():
                 prev[reborn] = 0
 
+    def get_infection_log(self, pathogen_name: str) -> dict:
+        """ChildIllnessSystem.get_infection_log for this model (empty arrays
+        if there is no illness system)."""
+        from abm.systems.child_illness import ChildIllnessSystem
+        for system in self.systems:
+            if isinstance(system, ChildIllnessSystem):
+                return system.get_infection_log(pathogen_name)
+        import numpy as np
+        empty = np.zeros(0, dtype=np.int64)
+        return {"agent_idx": empty, "birth_day": empty, "day": empty, "symptomatic": empty.astype(bool)}
+
     def get_birth_cohorts(self) -> list[dict]:
         """Every child born in the simulation, with first-infection days.
 
@@ -415,9 +457,10 @@ class SVEIRModel(Model):
             p.name: self.graph.ndata[AgentPropertyKeys.first_infection_day(p.name)][present].tolist()
             for p in self.pathogens
         }
+        slots = present.tolist()
         for j, b in enumerate(birth[present].tolist()):
             cohorts.append({
-                "birth_day": int(b), "exit_day": None,
+                "agent_idx": int(slots[j]), "birth_day": int(b), "exit_day": None,
                 "first_infection_day": {name: int(v[j]) for name, v in firsts.items()},
             })
         return cohorts

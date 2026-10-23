@@ -35,6 +35,7 @@ LEGACY_V1_OVERRIDES: dict = {
     "illness_mechanics.duration_max_days": 12.0,
     "illness_mechanics.duration_noise_std": 1.5,
     "illness_mechanics.duration_cap_days": None,
+    "illness_mechanics.onset_before_transmission": False,
     "pathogens[crypto].duration_scale": 1.6,
 }
 for _p, _frac in (("rota", 1.0), ("campy", 1.0), ("crypto", 0.33)):
@@ -67,3 +68,66 @@ LEGACY_V1_OVERRIDES.update({
     "steering_parameters.cost_of_care": 0.0702,
     "steering_parameters.daily_income_rate": 0.0462,
 })
+
+
+#: Dot-path overrides that reproduce the SECOND-GENERATION model: the joint
+#: history-matching calibration on the original grid (history_matching.py
+#: campaign "v2", 4000 agents; the model as committed in 40fb731). The
+#: settlement-grid recalibration (campaign "v3") changed the defaults of
+#: every parameter listed here and switched on mechanisms v2 did not have
+#: (illness decided before the day's transmission, reduced infectiousness of
+#: symptomless infections, illness probability falling with prior
+#: infections, population-weighted household placement, distances in
+#: metres). These overrides pin all of it back, so that
+#:   * the v2 calibration and its verification runs reproduce, and
+#:   * regression_check --v2 matches a golden captured from 40fb731 byte for
+#:     byte on the original grid.
+#: The observation layer's detectability values are included for
+#: completeness (they do not affect the simulation).
+V2_OVERRIDES: dict = {
+    "illness_mechanics.onset_before_transmission": False,
+    "spatial_creation_args.household_placement": "uniform",
+    "steering_parameters.social_interaction_radius_m": None,
+    "pathogens[campy].poultry_roam_sigma_m": None,
+    "pathogens[campy].ruminant_roam_sigma_m": None,
+    "water.reach_block_m": None,
+    "water.river_min_width_m": None,
+    "pathogens[rota].infection_prob_mean": 0.0261,
+    "pathogens[rota].water_dose_scale": 0.0438,
+    "pathogens[rota].importation_rate": 0.00042,
+    "pathogens[rota].symptomatic_fraction": 0.643,
+    "pathogens[rota].infant_susceptibility_at_birth": 0.44,
+    "pathogens[rota].infant_susceptibility_ramp_months": 7.5,
+    "pathogens[rota].detectable_shedding_days_symptomatic": 14.0,
+    "pathogens[rota].detectable_shedding_days_asymptomatic": 3.0,
+    "pathogens[campy].human_animal_interaction_rate": 0.0036,
+    "pathogens[campy].fecal_oral_prob": 0.000884,
+    "pathogens[campy].food_borne_prob": 0.00243,
+    "pathogens[campy].symptomatic_fraction": 0.171,
+    "pathogens[campy].infant_susceptibility_at_birth": 0.18,
+    "pathogens[campy].infant_susceptibility_ramp_months": 10.0,
+    "pathogens[campy].detectable_shedding_days_symptomatic": 14.0,
+    "pathogens[campy].detectable_shedding_days_asymptomatic": 10.0,
+    "pathogens[crypto].household_transmission_prob": 0.0257,
+    "pathogens[crypto].community_infection_prob": 0.00221,
+    "pathogens[crypto].water_dose_scale": 0.329,
+    "pathogens[crypto].zoonotic_interaction_rate": 0.0147,
+    "pathogens[crypto].symptomatic_fraction": 0.18,
+    "pathogens[crypto].infant_susceptibility_at_birth": 0.0,
+    "pathogens[crypto].infant_susceptibility_ramp_months": 16.0,
+    "pathogens[crypto].detectable_shedding_days_symptomatic": 21.0,
+    "pathogens[crypto].detectable_shedding_days_asymptomatic": 14.0,
+    "steering_parameters.household_exposure_sdlog": 0.8,
+    "steering_parameters.cost_of_care": 0.12,
+    "steering_parameters.daily_income_rate": 0.0462,
+}
+for _p in ("rota", "campy", "crypto"):
+    V2_OVERRIDES[f"pathogens[{_p}].asymptomatic_relative_infectiousness"] = 1.0
+    V2_OVERRIDES[f"pathogens[{_p}].symptomatic_reduction_per_prior_infection"] = 0.0
+
+# The first-generation model predates everything V2_OVERRIDES pins as well:
+# every key LEGACY_V1_OVERRIDES does not set itself takes its v2 value, which
+# is what the code defaults were when the --legacy-v1 regression was last
+# shown byte-identical (before the v3 defaults were adopted).
+for _k, _v in V2_OVERRIDES.items():
+    LEGACY_V1_OVERRIDES.setdefault(_k, _v)

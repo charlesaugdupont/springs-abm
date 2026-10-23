@@ -50,7 +50,7 @@ import torch.nn.functional as F
 ANIMAL_DENSITY_CONSUMERS = ("campy", "crypto")
 
 
-def resolve_ownership_params(pathogen_configs):
+def resolve_ownership_params(pathogen_configs, cell_m: float | None = None):
     """Returns the household animal-ownership parameters for this run.
 
     Animal ownership is a HOUSEHOLD property, not a pathogen property: the same
@@ -75,11 +75,20 @@ def resolve_ownership_params(pathogen_configs):
         return None
 
     source = next((p for p in consumers if p.name == "campy"), None) or CampylobacterConfig()
+
+    def sigma(name):
+        # A roam radius given in metres (CampylobacterConfig.*_roam_sigma_m)
+        # is converted with the grid's cell size; otherwise the cell value.
+        metres = getattr(source, name + "_m", None)
+        if metres is not None and cell_m:
+            return metres / cell_m
+        return getattr(source, name)
+
     return {
         "poultry_ownership_prob": source.poultry_ownership_prob,
         "ruminant_ownership_prob": source.ruminant_ownership_prob,
-        "poultry_roam_sigma": source.poultry_roam_sigma,
-        "ruminant_roam_sigma": source.ruminant_roam_sigma,
+        "poultry_roam_sigma": sigma("poultry_roam_sigma"),
+        "ruminant_roam_sigma": sigma("ruminant_roam_sigma"),
     }
 
 

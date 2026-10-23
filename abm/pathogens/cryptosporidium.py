@@ -168,13 +168,13 @@ class Cryptosporidium(Pathogen):
         control households).
         """
         hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
-        status_key = AgentPropertyKeys.status(self.name)
 
-        is_infectious = agent_state.ndata[status_key] == Compartment.INFECTIOUS
-        if not torch.any(is_infectious):
+        # Households with an infectious member, and the largest infectiousness
+        # weight among them (see Pathogen.household_infectiousness).
+        infectious_hh, w_max = self.household_infectiousness(agent_state)
+        if infectious_hh is None:
             return
 
-        infectious_hh = torch.unique(hh_ids[is_infectious])
         target_mask = (
             self.susceptible_like_mask(agent_state, respect_daily_guard=True)
             & torch.isin(hh_ids, infectious_hh)
@@ -186,6 +186,8 @@ class Cryptosporidium(Pathogen):
         prob = self.config.household_transmission_prob * self._relative_susceptibility(
             agent_state, target_indices, route="household"
         )
+        if self.config.asymptomatic_relative_infectiousness < 1.0:
+            prob = prob * w_max[torch.searchsorted(infectious_hh, hh_ids[target_indices])]
         self._apply_bernoulli_infections(agent_state, target_mask, prob, route="household")
 
     # ------------------------------------------------------------------

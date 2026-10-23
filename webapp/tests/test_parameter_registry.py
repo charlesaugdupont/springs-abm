@@ -69,14 +69,14 @@ def test_editable_numeric_defaults_lie_within_their_ui_bounds():
     """A calibrated default outside its slider range would make the UI unable
     to reproduce the model's own baseline - and the GSA, which samples the UI
     ranges (experiments/gsa/param_space.py), would never visit it."""
-    from config import SVEIRCONFIG
     from experiments.orchestrator import get_param
+    from webapp.scenario_form import WEBAPP_DEFAULTS   # the web app's model (see _webapp_defaults)
 
     outside = []
     for m in REGISTRY:
         if not m.editable or m.ui_min is None or m.ui_max is None:
             continue
-        value = get_param(SVEIRCONFIG, m.path)
+        value = get_param(WEBAPP_DEFAULTS, m.path)
         if isinstance(value, (int, float)) and not (m.ui_min <= value <= m.ui_max):
             outside.append((m.path, value, m.ui_min, m.ui_max))
     assert not outside, f"defaults outside their UI ranges: {outside}"

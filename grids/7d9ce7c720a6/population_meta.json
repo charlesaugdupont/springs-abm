@@ -1,0 +1,20 @@
+{
+  "source": "GHS-POP R2023A (JRC), 100 m, ESRI:54009, SUM-resampled onto the grid",
+  "tiles": {
+    "2020": [
+      "GHS_POP_E2020_GLOBE_R2023A_54009_100_V1_0_R9_C19.tif"
+    ],
+    "2025": [
+      "GHS_POP_E2025_GLOBE_R2023A_54009_100_V1_0_R9_C19.tif"
+    ],
+    "2030": [
+      "GHS_POP_E2030_GLOBE_R2023A_54009_100_V1_0_R9_C19.tif"
+    ]
+  },
+  "building_redistribution": false,
+  "totals": {
+    "2020": 9176.598949256333,
+    "2025": 9855.602011206649,
+    "2030": 10589.264800463452
+  }
+}

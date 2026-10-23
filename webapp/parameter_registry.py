@@ -1115,6 +1115,114 @@ REGISTRY: list[ParamMeta] = [
         rationale="Daily per-person probability of infection acquired outside Akuse. As for rotavirus.",
     ),
     ParamMeta(
+        path="pathogens[rota].asymptomatic_relative_infectiousness", label="Infectiousness of symptomless infections", category="internal", evidence_tier="assumption",
+        rationale="Infectiousness of a symptomless infection (every adult one, children's subclinical ones) relative to one that caused illness, on every transmission route. Symptomless infections shed far less; calibrated within 0.1-1.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].symptomatic_reduction_per_prior_infection", label="Fall in illness probability per prior infection", category="internal", evidence_tier="assumption",
+        rationale="Acquired immunity protects against illness more than against infection (Velazquez et al. 1996): P(illness | infection) is multiplied by exp(-value x prior infections). 0 = no dependence on history.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].detectable_shedding_days_symptomatic", label="Detectable shedding, symptomatic (observation only)", category="internal", evidence_tier="structural",
+        rationale="Used only to reproduce what MAL-ED's monthly stool surveillance would have detected; no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].detectable_shedding_days_asymptomatic", label="Detectable shedding, symptomless (observation only)", category="internal", evidence_tier="structural",
+        rationale="Used only to reproduce what MAL-ED's monthly stool surveillance would have detected; no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].asymptomatic_relative_infectiousness", label="Infectiousness of symptomless infections", category="internal", evidence_tier="assumption",
+        rationale="Infectiousness of a symptomless infection (every adult one, children's subclinical ones) relative to one that caused illness, on every transmission route. Symptomless infections shed far less; calibrated within 0.1-1.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].symptomatic_reduction_per_prior_infection", label="Fall in illness probability per prior infection", category="internal", evidence_tier="assumption",
+        rationale="Acquired immunity protects against illness more than against infection (Velazquez et al. 1996): P(illness | infection) is multiplied by exp(-value x prior infections). 0 = no dependence on history.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].detectable_shedding_days_symptomatic", label="Detectable shedding, symptomatic (observation only)", category="internal", evidence_tier="structural",
+        rationale="Used only to reproduce what MAL-ED's monthly stool surveillance would have detected; no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].detectable_shedding_days_asymptomatic", label="Detectable shedding, symptomless (observation only)", category="internal", evidence_tier="structural",
+        rationale="Used only to reproduce what MAL-ED's monthly stool surveillance would have detected; no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].asymptomatic_relative_infectiousness", label="Infectiousness of symptomless infections", category="internal", evidence_tier="assumption",
+        rationale="Infectiousness of a symptomless infection (every adult one, children's subclinical ones) relative to one that caused illness, on every transmission route. Symptomless infections shed far less; calibrated within 0.1-1.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].symptomatic_reduction_per_prior_infection", label="Fall in illness probability per prior infection", category="internal", evidence_tier="assumption",
+        rationale="Acquired immunity protects against illness more than against infection (Velazquez et al. 1996): P(illness | infection) is multiplied by exp(-value x prior infections). 0 = no dependence on history.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].detectable_shedding_days_symptomatic", label="Detectable shedding, symptomatic (observation only)", category="internal", evidence_tier="structural",
+        rationale="Used only to reproduce what MAL-ED's monthly stool surveillance would have detected; no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].detectable_shedding_days_asymptomatic", label="Detectable shedding, symptomless (observation only)", category="internal", evidence_tier="structural",
+        rationale="Used only to reproduce what MAL-ED's monthly stool surveillance would have detected; no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].poultry_roam_sigma_m", label="Poultry roam radius (m)", category="internal", evidence_tier="structural",
+        rationale="Metre version of the cell-based roam radius, converted with the grid's cell size so a finer grid keeps the same physical radius.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].ruminant_roam_sigma_m", label="Ruminant roam radius (m)", category="internal", evidence_tier="structural",
+        rationale="Metre version of the cell-based roam radius, converted with the grid's cell size so a finer grid keeps the same physical radius.",
+    ),
+    ParamMeta(
+        path="steering_parameters.social_interaction_radius_m", label="Social-visit radius (m)", category="internal", evidence_tier="structural",
+        rationale="Metre version of social_interaction_radius, converted with the grid's cell size so a finer grid keeps the same physical radius.",
+    ),
+    ParamMeta(
+        path="water.reach_block_m", label="Surface-water reach size (m)", category="internal", evidence_tier="structural",
+        rationale="Metre version of reach_block_cells, converted with the grid's cell size.",
+    ),
+    ParamMeta(
+        path="water.river_min_width_m", label="Minimum river width (m)", category="internal", evidence_tier="structural",
+        rationale="Metre version of river_min_width_cells, converted with the grid's cell size.",
+    ),
+    ParamMeta(
+        path="illness_mechanics.onset_before_transmission", label="Illness onset decided before transmission", category="internal", evidence_tier="structural",
+        rationale="Decide a newly infectious child's illness before the day's transmission, so its infectiousness reflects whether it is ill.",
+    ),
+    ParamMeta(
+        path="spatial_creation_args.household_placement", label="Household placement", category="internal", evidence_tier="structural",
+        rationale="'uniform' (one household per random residence cell, original) or 'population' (cells in proportion to GHS-POP population).",
+    ),
+    ParamMeta(
+        path="spatial_creation_args.population_epoch", label="Population layer epoch", category="internal", evidence_tier="structural",
+        rationale="GHS-POP epoch (2020, 2025 or 2030) of the population layer used for household placement.",
+    ),
+    ParamMeta(
+        path="observation.surveillance_start_months", label="First surveillance month", category="internal", evidence_tier="structural",
+        rationale="MAL-ED surveillance design for the observation layer (experiments/observation.py); analysis only, no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="observation.surveillance_end_months", label="Last surveillance month", category="internal", evidence_tier="structural",
+        rationale="MAL-ED surveillance design for the observation layer (experiments/observation.py); analysis only, no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="observation.diarrhoeal_stool_tested_prob", label="Diarrhoeal stools tested", category="internal", evidence_tier="structural",
+        rationale="MAL-ED surveillance design for the observation layer (experiments/observation.py); analysis only, no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="observation.shedding_duration_shape", label="Shedding duration shape", category="internal", evidence_tier="structural",
+        rationale="MAL-ED surveillance design for the observation layer (experiments/observation.py); analysis only, no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="observation.consecutive_gap_months", label="Consecutive-detection gap", category="internal", evidence_tier="structural",
+        rationale="MAL-ED surveillance design for the observation layer (experiments/observation.py); analysis only, no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="observation.incubation_shedding_days", label="Incubation shedding window", category="internal", evidence_tier="structural",
+        rationale="MAL-ED surveillance design for the observation layer (experiments/observation.py); analysis only, no effect on the simulation.",
+    ),
+    ParamMeta(
+        path="observation.rng_seed_offset", label="Observation RNG seed offset", category="internal", evidence_tier="structural",
+        rationale="MAL-ED surveillance design for the observation layer (experiments/observation.py); analysis only, no effect on the simulation.",
+    ),
+    ParamMeta(
         path="pathogens[campy].importation_rate", label="Imported infection rate", category="internal",
         evidence_tier="structural",
         rationale="0: campylobacter's food-borne background route already plays this role.",

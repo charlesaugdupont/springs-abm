@@ -1,0 +1,87 @@
+{
+  "version": "settlement-grid-v1",
+  "domain_sha256": "56bcd78e56566ab550abaff7cc22fb51a2172ae4945b6f082a1eb001378eadec",
+  "cell_size_m": 25.0,
+  "surroundings_m": 1000.0,
+  "poi_layers": {
+    "place_of_worship": {
+      "amenity": [
+        "place_of_worship"
+      ]
+    },
+    "school": {
+      "amenity": [
+        "school",
+        "kindergarten"
+      ]
+    },
+    "marketplace": {
+      "amenity": [
+        "marketplace"
+      ]
+    },
+    "health_facility": {
+      "amenity": [
+        "hospital",
+        "clinic",
+        "doctors",
+        "pharmacy"
+      ],
+      "healthcare": true
+    },
+    "osm_water_point": {
+      "amenity": [
+        "drinking_water",
+        "water_point"
+      ],
+      "man_made": [
+        "water_well",
+        "water_tap",
+        "water_works"
+      ]
+    }
+  },
+  "natural_water_tags": {
+    "natural": "water",
+    "waterway": [
+      "river",
+      "canal",
+      "stream"
+    ]
+  },
+  "waterway_half_width_m": {
+    "river": 30.0,
+    "canal": 5.0,
+    "stream": 2.5
+  },
+  "grid_id": "6855dd54618c",
+  "rows": 188,
+  "cols": 332,
+  "bounds": [
+    0.07686577492023322,
+    6.076256282670429,
+    0.0002258556269941694,
+    0.00022609293323927866
+  ],
+  "created_utc": "2026-10-20T14:45:28Z",
+  "osmnx_version": "2.1.0",
+  "counts": {
+    "natural_water_features": 14,
+    "water_cells": 6225,
+    "buildings": 4580,
+    "cells_with_buildings": 4551,
+    "settlement_cells": 14352,
+    "residence_cells": 14017,
+    "place_of_worship_features": 8,
+    "school_features": 10,
+    "marketplace_features": 1,
+    "health_facility_features": 5,
+    "osm_water_point_features": 0,
+    "place_of_worship_cells": 8,
+    "school_cells": 10,
+    "marketplace_cells": 1,
+    "health_facility_cells": 5,
+    "osm_water_point_cells": 0,
+    "sampling_points": 9
+  }
+}

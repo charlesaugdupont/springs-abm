@@ -31,8 +31,10 @@ def test_config_defaults_match_the_cited_literature():
     assert cfg.exposure_period == 7                      # ~7-day incubation (range 2-10)
     assert cfg.recovery_rate == pytest.approx(0.0476)    # ~21-day mean shedding
     assert 1 / cfg.recovery_rate == pytest.approx(21, abs=0.1)
-    assert cfg.symptomatic_fraction == pytest.approx(0.180)  # MAL-ED: 245 / 1364
+    # symptomatic_fraction is calibrated (campaign v3); its age profile and the
+    # illness protection from prior infections are literature values
     assert cfg.symptomatic_fraction_age_profile is not None  # MAL-ED Suppl. Table 5
+    assert cfg.symptomatic_reduction_per_prior_infection == pytest.approx(0.48)  # Rogawski McQuade 2020
     assert cfg.duration_scale == 1.0                     # MAL-ED: no longer than rota/campy
     assert cfg.treatment_clears_infection_prob == 0.0    # ORS/zinc do not stop shedding
     assert cfg.immunity_decay_per_infection == pytest.approx(0.29)  # 69% after 4 infections

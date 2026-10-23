@@ -34,6 +34,14 @@ class EnvironmentFactory:
             self.grid_tensor = data['grid']
             self.grid_bounds = data['bounds']
             self.property_to_index = {v: k for k, v in data['property_map'].item().items()}
+            # Optional GHS-POP population layers, one per epoch, kept beside
+            # the grid so that grid.npz itself never changes
+            # (scripts/add_population_layer.py).
+            self.population: dict[int, np.ndarray] = {}
+            pop_path = os.path.join("grids", self.config.grid_id, "population.npz")
+            if Path(pop_path).exists():
+                pop = np.load(pop_path)
+                self.population = {int(k.split("_")[-1]): pop[k] for k in pop.files if k.startswith("population_")}
 
             self.grid_environment = GridEnvironment(
                 grid_tensor=torch.from_numpy(self.grid_tensor).to(self.device),
@@ -69,8 +77,42 @@ class EnvironmentFactory:
         if len(valid_cells) == 0:
             raise ValueError("No valid residence cells found in the grid.")
 
-        # Assign each household to a random valid residence cell
-        assigned_cell_indices = np.random.choice(len(valid_cells), num_households, replace=False)
+        placement = getattr(self.config, "household_placement", "uniform")
+        if placement == "population":
+            # Cells in proportion to resident population (GHS-POP), restricted
+            # to residence cells; drawn with replacement, so dense cells hold
+            # several households - as compounds do.
+            epoch = int(getattr(self.config, "population_epoch", 2025))
+            if epoch not in getattr(self, "population", {}):
+                raise ValueError(
+                    f"household_placement='population' needs grids/{self.config.grid_id}/population.npz "
+                    f"with epoch {epoch} (scripts/add_population_layer.py); found epochs "
+                    f"{sorted(getattr(self, 'population', {}))}."
+                )
+            pop = self.population[epoch]
+            weights = pop[valid_cells[:, 0], valid_cells[:, 1]].astype(np.float64)
+            weights[~np.isfinite(weights) | (weights < 0)] = 0.0
+            if weights.sum() <= 0:
+                raise ValueError("Population layer has no population on residence cells.")
+            # Proportional allocation: each cell receives the whole number
+            # of households its population share implies, and the remaining
+            # households go to distinct cells drawn in proportion to the
+            # fractional parts. Unlike independent draws with replacement
+            # (which crowd ~half of all households into shared cells, up to
+            # 6 in one), households share a cell only where density requires
+            # it - at most ~3 in the densest 25 m cells of Akuse.
+            expected = num_households * weights / weights.sum()
+            counts = np.floor(expected).astype(np.int64)
+            remainder = int(num_households - counts.sum())
+            if remainder > 0:
+                frac = expected - counts
+                extra = np.random.choice(len(valid_cells), remainder, replace=False, p=frac / frac.sum())
+                counts[extra] += 1
+            assigned_cell_indices = np.repeat(np.arange(len(valid_cells)), counts)
+            np.random.shuffle(assigned_cell_indices)
+        else:
+            # Assign each household to a random valid residence cell
+            assigned_cell_indices = np.random.choice(len(valid_cells), num_households, replace=False)
         household_coords = valid_cells[assigned_cell_indices] # Shape: (num_households, 2) [r, c]
 
         # Assign the cell coordinates to all agents based on their household

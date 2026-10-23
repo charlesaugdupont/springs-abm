@@ -56,10 +56,33 @@ class ChildIllnessSystem(System):
         # Per pathogen, the episode_log index of each agent's currently open
         # episode (-1 if none). Lazily allocated on the first update().
         self._open_episode: dict[str, torch.Tensor] = {}
+        # Every child infection's one decision point - the day it became
+        # infectious and whether it produced an episode - per pathogen, for
+        # the MAL-ED observation layer (experiments/observation.py). Chunks of
+        # (agent_idx, birth_day, symptomatic) tensors with their day; pure
+        # bookkeeping, no RNG. See get_infection_log().
+        self._infection_log: dict[str, list[tuple[int, torch.Tensor, torch.Tensor, torch.Tensor]]] = {}
+        # Timestep whose episode onsets begin_day() already processed, so that
+        # update() does not process them twice.
+        self._onsets_done_for: int | None = None
 
     # ------------------------------------------------------------------
     # Main update
     # ------------------------------------------------------------------
+
+    def begin_day(self, agent_state: AgentState, timestep: int):
+        """Episode onsets for the day, BEFORE the day's transmission.
+
+        Used when IllnessMechanicsConfig.onset_before_transmission is True
+        (called from sveir_step right after disease progression), so that a
+        newly infectious child's infectiousness already reflects whether it
+        is ill (PathogenConfig.asymptomatic_relative_infectiousness). update()
+        then skips steps 0-1 for this timestep.
+        """
+        self._current_timestep = timestep
+        self._close_ended_episodes(agent_state)
+        self._start_new_episodes(agent_state)
+        self._onsets_done_for = timestep
 
     def update(self, agent_state: AgentState, **kwargs):
         """
@@ -67,14 +90,18 @@ class ChildIllnessSystem(System):
         that compartment statuses reflect the current day's transitions.
         """
         self._current_timestep = kwargs.get("timestep", self._current_timestep + 1)
+        if self._onsets_done_for != self._current_timestep:
+            # 0. Close the log entries of episodes that ended since the last
+            #    update (naturally, or cured by care-seeking after it). Must
+            #    run before step 1, which may open a new episode for the same
+            #    agent.
+            self._close_ended_episodes(agent_state)
+            self._start_new_episodes(agent_state)
+        self._progress_episodes(agent_state)
 
+    def _start_new_episodes(self, agent_state: AgentState):
         illness_cfg = self.config.illness_mechanics
         is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
-
-        # 0. Close the log entries of episodes that ended since the last
-        #    update (naturally, or cured by care-seeking after it). Must run
-        #    before step 1, which may open a new episode for the same agent.
-        self._close_ended_episodes(agent_state)
 
         # ------------------------------------------------------------------
         # 1. Initialise illness for children who are infectious with a
@@ -121,7 +148,9 @@ class ChildIllnessSystem(System):
                 symptomatic = episode_candidates
                 cand_idx = episode_candidates.nonzero(as_tuple=True)[0]
                 frac = symptomatic_probability(
-                    p_config, agent_state.ndata[AgentPropertyKeys.AGE][cand_idx]
+                    p_config, agent_state.ndata[AgentPropertyKeys.AGE][cand_idx],
+                    # infections before the current one
+                    infection_count[cand_idx] - 1,
                 )
                 if frac is not None:
                     draws = torch.rand(len(cand_idx), device=agent_state.device)
@@ -133,6 +162,7 @@ class ChildIllnessSystem(System):
                     self._initialize_illness(
                         agent_state, symptomatic, pathogen_name, illness_cfg, p_config
                     )
+                self._log_infections(agent_state, pathogen_name, episode_candidates, symptomatic)
                 # Mark the infection as having had its one chance of becoming an
                 # episode for EVERY candidate, symptomatic or not - otherwise an
                 # infection that lost the symptomatic draw would be re-rolled on
@@ -142,6 +172,8 @@ class ChildIllnessSystem(System):
                 if last_key in agent_state.ndata:
                     agent_state.ndata[last_key][episode_candidates] = infection_count[episode_candidates]
 
+    def _progress_episodes(self, agent_state: AgentState):
+        is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
         # ------------------------------------------------------------------
         # 2. Progress every active episode and apply the combined daily
         #    health impact (concurrent infections compound the toll).
@@ -248,6 +280,9 @@ class ChildIllnessSystem(System):
         agent_indices = mask.nonzero(as_tuple=True)[0]
         agent_state.ndata[severity_key][agent_indices] = new_severity
         agent_state.ndata[duration_key][agent_indices] = new_duration
+        sym_key = AgentPropertyKeys.symptomatic_infection(pathogen_name)
+        if sym_key in agent_state.ndata:
+            agent_state.ndata[sym_key][agent_indices] = True
 
         # --- Episode logging ---
         open_idx = self._open_episode_tensor(agent_state, pathogen_name)
@@ -263,6 +298,34 @@ class ChildIllnessSystem(System):
                 'age_months':        float(ages[i]),
                 'realized_duration': None,
             })
+
+    def _log_infections(self, agent_state: AgentState, pathogen_name: str,
+                        candidates: torch.Tensor, symptomatic: torch.Tensor):
+        idx = candidates.nonzero(as_tuple=True)[0]
+        if idx.numel() == 0:
+            return
+        birth = agent_state.ndata[AgentPropertyKeys.BIRTH_DAY][idx] \
+            if AgentPropertyKeys.BIRTH_DAY in agent_state.ndata else torch.full_like(idx, -1)
+        self._infection_log.setdefault(pathogen_name, []).append(
+            (self._current_timestep, idx.clone(), birth.clone(), symptomatic[idx].clone())
+        )
+
+    def get_infection_log(self, pathogen_name: str) -> dict[str, "np.ndarray"]:
+        """Every child infection of this pathogen that became infectious:
+        arrays agent_idx, birth_day, day (first infectious day) and
+        symptomatic (whether it produced an episode). A slot's occupant is
+        identified by (agent_idx, birth_day)."""
+        import numpy as np
+        chunks = self._infection_log.get(pathogen_name, [])
+        if not chunks:
+            empty = np.zeros(0, dtype=np.int64)
+            return {"agent_idx": empty, "birth_day": empty, "day": empty, "symptomatic": empty.astype(bool)}
+        return {
+            "agent_idx": np.concatenate([c[1].cpu().numpy() for c in chunks]).astype(np.int64),
+            "birth_day": np.concatenate([c[2].cpu().numpy() for c in chunks]).astype(np.int64),
+            "day": np.concatenate([np.full(len(c[1]), c[0], dtype=np.int64) for c in chunks]),
+            "symptomatic": np.concatenate([c[3].cpu().numpy() for c in chunks]).astype(bool),
+        }
 
     def _open_episode_tensor(self, agent_state: AgentState, pathogen_name: str) -> torch.Tensor:
         t = self._open_episode.get(pathogen_name)
@@ -308,21 +371,31 @@ class ChildIllnessSystem(System):
                 open_idx[agent_idx] = -1
 
 
-def symptomatic_probability(p_config, ages_months: torch.Tensor) -> torch.Tensor | float | None:
+def symptomatic_probability(p_config, ages_months: torch.Tensor,
+                            prior_infections: torch.Tensor | None = None) -> torch.Tensor | float | None:
     """P(symptomatic episode | infection) for children of the given ages.
 
     symptomatic_fraction, multiplied by the age profile's multiplier for each
     child's band when PathogenConfig.symptomatic_fraction_age_profile is set,
-    clamped to [0, 1]. Each profile band is (upper_age_months, multiplier); a
-    child of age a falls in the first band with a <= upper_age_months, and
-    children older than the last upper edge take the last band.
+    and by exp(-symptomatic_reduction_per_prior_infection * prior_infections)
+    when that is non-zero, clamped to [0, 1]. Each profile band is
+    (upper_age_months, multiplier); a child of age a falls in the first band
+    with a <= upper_age_months, and children older than the last upper edge
+    take the last band.
 
     Returns None when the probability is exactly 1 for every child (the caller
     then skips the Bernoulli draw, consuming no RNG), a float when it does not
-    depend on age, or a per-child tensor otherwise.
+    depend on age or history, or a per-child tensor otherwise.
     """
     frac = float(getattr(p_config, "symptomatic_fraction", 1.0))
     profile = getattr(p_config, "symptomatic_fraction_age_profile", None)
+    lam = float(getattr(p_config, "symptomatic_reduction_per_prior_infection", 0.0) or 0.0)
+    if lam > 0.0 and prior_infections is not None:
+        base = symptomatic_probability(p_config, ages_months)     # age part (history-free)
+        if base is None:
+            base = 1.0
+        factor = torch.exp(-lam * prior_infections.clamp(min=0).float())
+        return (base * factor).clamp(0.0, 1.0)
     if not profile:
         return None if frac >= 1.0 else frac
     probs = torch.tensor(

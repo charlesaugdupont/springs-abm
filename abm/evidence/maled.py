@@ -32,6 +32,17 @@ throughout, because:
     definition counts each positive stool separately and therefore yields
     higher infection rates and LOWER symptomatic proportions.
 
+DETECTED, NOT TRUE, INFECTIONS (2026-10-20). Every infection count here is
+what monthly stool surveillance at MAL-ED's Ct cut-off DETECTED, and most
+symptomless rotavirus infections were not detected: MAL-ED's own rotavirus
+paper found 38% of children ever stool-positive by 24 months while serology
+showed >80% exposed by 7 months (Mohan et al. 2017, J Infect Dis
+216:305-16), and denser cohorts find ~1 infection per child-year (Gladstone
+et al. 2011; abm/evidence/rotavirus_cohorts.py). So these values are targets
+for the model AS OBSERVED by experiments/observation.py, which replays
+MAL-ED's sampling on the model's infections - not for the model's true
+infection counts, and the symptomatic fractions are per DETECTED infection.
+
 Scope cautions - read before using these as targets
 ---------------------------------------------------
 * AGE: 0-24 months only. Nothing here constrains children aged 2-5 years.
@@ -276,3 +287,110 @@ def prior_infection_rate_ratio(pathogen: str, age_lo_months: int, age_hi_months:
         if lo >= age_lo_months and hi <= age_hi_months:
             n0 += a; m0 += am; n1 += b; m1 += bm
     return (n1 / m1) / (n0 / m0)
+
+
+# ---------------------------------------------------------------------------
+# Supplementary Table 1 - infections under the two unique-infection
+# definitions (algorithm attribution): (count, infant-months).
+# The crude/consecutive ratio measures how often MAL-ED's monthly samples
+# caught the SAME infection twice, i.e. how long it stays detectable at the
+# Ct cut-off relative to the sampling interval - the quantity that
+# identifies PathogenConfig.detectable_shedding_days_* in the observation
+# layer (experiments/observation.py).
+# ---------------------------------------------------------------------------
+INFECTIONS_CRUDE_VS_CONSECUTIVE = {
+    #           crude                consecutive detections
+    "rota":   ((751, 24_661.9),     (734, 24_228.0)),
+    "campy":  ((3_831, 36_158.3),   (2_938, 33_524.7)),
+    "crypto": ((1_575, 36_586.5),   (1_364, 35_513.8)),
+}
+
+
+def crude_to_consecutive_ratio(pathogen: str) -> float:
+    """MAL-ED infections counted per positive stool / counted as runs of
+    consecutive positives (rota 1.023, campy 1.304, crypto 1.155)."""
+    (crude, _), (consec, _) = INFECTIONS_CRUDE_VS_CONSECUTIVE[pathogen]
+    return crude / consec
+
+
+# ---------------------------------------------------------------------------
+# Supplementary Table 6 - pathogen-attributable diarrhoea / infections by
+# 6-month band and infection history (algorithm attribution, consecutive
+# detections): per band ((n, N) with no prior infection, (n, N) with >= 1).
+# Detected reinfections are about as often symptomatic as detected first
+# infections - not evidence against disease-specific immunity (Velazquez
+# 1996; Rogawski McQuade 2020) but a property of DETECTION: symptomatic
+# infections are caught by their diarrhoeal stool, symptomless ones mostly
+# are not, so detected infections of either history are dominated by
+# symptomatic ones. Reproduced, like Table 3, through the observation layer.
+# ---------------------------------------------------------------------------
+ATTRIBUTABLE_BY_HISTORY = {
+    "rota":   (((101, 176), (8, 11)),  ((155, 221), (47, 59)),  ((70, 103), (41, 63)),  ((20, 46), (30, 55))),
+    "campy":  (((86, 426), (19, 62)),  ((109, 534), (95, 503)), ((31, 178), (96, 653)), ((8, 64), (58, 518))),
+    "crypto": (((18, 77), (0, 3)),     ((48, 283), (18, 54)),   ((56, 347), (28, 158)), ((40, 246), (37, 196))),
+}
+
+
+def attributable_fraction_by_history(pathogen: str, prior: bool, age_lo_months: int = 0,
+                                     age_hi_months: int = 24) -> float:
+    """P(attributable diarrhoea | detected infection) pooled over the 6-month
+    bands within [age_lo, age_hi), for children with (prior=True) or without
+    a previous detected infection."""
+    n = d = 0
+    for (lo, hi), (naive, prev) in zip(AGE_BANDS_6MO, ATTRIBUTABLE_BY_HISTORY[pathogen]):
+        if lo >= age_lo_months and hi <= age_hi_months:
+            a, b = prev if prior else naive
+            n += a; d += b
+    return n / d
+
+
+def naive_rate(pathogen: str, age_lo_months: int, age_hi_months: int) -> float:
+    """Infections per child-year among children with no previous DETECTED
+    infection, pooled over the 3-month bands within [age_lo, age_hi)
+    (Supplementary Table 3)."""
+    n = m = 0.0
+    for (lo, hi), ((a, am), _) in zip(AGE_BANDS_3MO, INFECTIONS_BY_PRIOR_HISTORY[pathogen]):
+        if lo >= age_lo_months and hi <= age_hi_months:
+            n += a; m += am
+    return n / m * 12.0
+
+
+def infection_rate(pathogen: str, age_lo_months: int, age_hi_months: int) -> float:
+    """Infections per child-year, naive and previously infected children
+    together, pooled over the 3-month bands within [age_lo, age_hi)
+    (Supplementary Table 3; consistent with Table 2)."""
+    n = m = 0.0
+    for (lo, hi), ((a, am), (b, bm)) in zip(AGE_BANDS_3MO, INFECTIONS_BY_PRIOR_HISTORY[pathogen]):
+        if lo >= age_lo_months and hi <= age_hi_months:
+            n += a + b; m += am + bm
+    return n / m * 12.0
+
+
+def infant_ratio(pathogen: str) -> float:
+    """Infection rate at 0-6 months / at 6-12 months: rota 0.70, campy 0.47,
+    crypto 0.25 - how strongly early infancy is protected (maternal antibody,
+    exclusive breastfeeding, little mouthing or mobility)."""
+    return infection_rate(pathogen, 0, 6) / infection_rate(pathogen, 6, 12)
+
+
+def second_to_first_year_ratio(pathogen: str) -> float:
+    """Infection rate at 12-24 months / at 0-12 months: rota 0.56, campy
+    0.90, crypto 2.29."""
+    return infection_rate(pathogen, 12, 24) / infection_rate(pathogen, 0, 12)
+
+
+def median_age_at_first_infection_months(pathogen: str) -> float:
+    """Supplementary Table 4 median age at first infection, in months (rota
+    9.0, campy 8.0, crypto 14.4). A life-table median of the first-infection
+    distribution within 24 months, computed from Table 3's naive rates, gives
+    8.3, 7.3 and 13.8 - within 0.7 months, so the observation layer's
+    estimator (experiments/observation.py) measures the same quantity."""
+    return AGE_AT_FIRST_INFECTION_DAYS[pathogen][0] / (365.25 / 12)
+
+
+def naive_decline(pathogen: str) -> float:
+    """Naive-child infection rate at 15-24 months / at 6-12 months: rota
+    0.31, campy 0.28, crypto 1.61. For rotavirus this fall happens in
+    children with no DETECTED prior infection, so it is the signature of
+    undetected infections and their immunity (see experiments/observation.py)."""
+    return naive_rate(pathogen, 15, 24) / naive_rate(pathogen, 6, 12)

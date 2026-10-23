@@ -147,6 +147,14 @@ class AgentPropertyKeys:
         return f"first_infection_day_{pathogen_name}"
 
     @staticmethod
+    def symptomatic_infection(pathogen_name: str) -> str:
+        """True while the agent's CURRENT infection with this pathogen is one
+        that produced an illness episode (set when the episode opens, cleared
+        at the next exposure). Weights the agent's infectiousness by
+        PathogenConfig.asymptomatic_relative_infectiousness."""
+        return f"symptomatic_infection_{pathogen_name}"
+
+    @staticmethod
     def last_episode_infection(pathogen_name: str) -> str:
         """num_infections at the start of the child's most recent illness
         episode for this pathogen (-1 = no episode yet). Lets

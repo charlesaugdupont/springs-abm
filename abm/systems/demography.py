@@ -125,8 +125,10 @@ class DemographySystem(System):
             p.name: agent_state.ndata[AgentPropertyKeys.first_infection_day(p.name)][idx][born_in_sim].tolist()
             for p in self.config.pathogens
         }
+        slots = idx[born_in_sim].tolist()
         for j, b in enumerate(birth[born_in_sim].tolist()):
             self.cohort_log.append({
+                "agent_idx": int(slots[j]),
                 "birth_day": int(b),
                 "exit_day": timestep,
                 "first_infection_day": {name: int(v[j]) for name, v in firsts.items()},
@@ -149,5 +151,8 @@ class DemographySystem(System):
             nd[AgentPropertyKeys.ever_vaccinated(name)][idx] = False
             nd[AgentPropertyKeys.last_episode_infection(name)][idx] = -1
             nd[AgentPropertyKeys.first_infection_day(name)][idx] = -1
+            sym_key = AgentPropertyKeys.symptomatic_infection(name)
+            if sym_key in nd:
+                nd[sym_key][idx] = False
         if illness_system is not None:
             illness_system.censor_open_episodes(idx)

@@ -25,11 +25,34 @@ from pydantic import ConfigDict, Field, create_model
 from config import (
     CampylobacterConfig, CryptosporidiumConfig, RotavirusConfig, SVEIRCONFIG, SVEIRConfig,
 )
+from experiments.legacy import V2_OVERRIDES
 from experiments.orchestrator import get_param, set_param
 from webapp.parameter_registry import REGISTRY_BY_PATH, editable_fields
 from webapp.settings import DEFAULT_GRID_ID, MAX_AGENTS, MAX_STEPS, MIN_AGENTS, MIN_STEPS
 
 _STRUCTURAL_PATHS = ("seed", "number_agents", "step_target")
+
+
+def _webapp_defaults() -> SVEIRConfig:
+    """The model the web app runs: config.py's defaults with
+    experiments.legacy.V2_OVERRIDES applied.
+
+    config.py's defaults are calibrated for the Akuse settlement grid (grid
+    6855dd54618c, 11,476 agents placed from GHS-POP; history_matching.py
+    campaign v3). The web app still runs the original grid
+    (settings.DEFAULT_GRID_ID) at a user-chosen population, for which the
+    second-generation (v2) calibration is the consistent one, so it keeps
+    that model until it is moved to the settlement grid (a separate task:
+    basemap, population, agent-count bounds)."""
+    cfg = SVEIRCONFIG.model_copy(deep=True)
+    for path, value in V2_OVERRIDES.items():
+        set_param(cfg, path, value)
+    return cfg
+
+
+#: Base configuration of every web-app run, and the source of the form's
+#: default values (see _webapp_defaults).
+WEBAPP_DEFAULTS: SVEIRConfig = _webapp_defaults()
 
 # Fail loudly at import time if the registry's displayed slider bounds and the server's
 # actually-enforced bounds ever drift apart again (see settings.py's comment on MAX_AGENTS).
@@ -51,9 +74,9 @@ def _form_field_name(path: str) -> str:
 
 
 _field_definitions: dict[str, Any] = {
-    "seed": (int, Field(default=SVEIRCONFIG.seed, ge=0, le=2_147_483_647)),
-    "number_agents": (int, Field(default=SVEIRCONFIG.number_agents, ge=MIN_AGENTS, le=MAX_AGENTS)),
-    "step_target": (int, Field(default=SVEIRCONFIG.step_target, ge=MIN_STEPS, le=MAX_STEPS)),
+    "seed": (int, Field(default=WEBAPP_DEFAULTS.seed, ge=0, le=2_147_483_647)),
+    "number_agents": (int, Field(default=WEBAPP_DEFAULTS.number_agents, ge=MIN_AGENTS, le=MAX_AGENTS)),
+    "step_target": (int, Field(default=WEBAPP_DEFAULTS.step_target, ge=MIN_STEPS, le=MAX_STEPS)),
     "rota_enabled": (bool, Field(default=True)),
     "campy_enabled": (bool, Field(default=True)),
     "crypto_enabled": (bool, Field(default=True)),
@@ -75,13 +98,13 @@ for _meta in editable_fields():
     _form_name = _form_field_name(_meta.path)
 
     if _meta.ui_widget == "range-pair":
-        _default_lo, _default_hi = get_param(SVEIRCONFIG, _meta.path)
+        _default_lo, _default_hi = get_param(WEBAPP_DEFAULTS, _meta.path)
         _field_definitions[f"{_form_name}_min"] = (float, Field(default=float(_default_lo), ge=_meta.ui_min, le=_meta.ui_max))
         _field_definitions[f"{_form_name}_max"] = (float, Field(default=float(_default_hi), ge=_meta.ui_min, le=_meta.ui_max))
         RANGE_PAIR_TO_PATH[_form_name] = _meta.path
         continue
 
-    _default = get_param(SVEIRCONFIG, _meta.path)
+    _default = get_param(WEBAPP_DEFAULTS, _meta.path)
     if _meta.is_integer:
         _field_definitions[_form_name] = (int, Field(default=int(_default), ge=int(_meta.ui_min), le=int(_meta.ui_max)))
     else:
@@ -112,14 +135,15 @@ def build_sveir_config(form: "ScenarioFormInput") -> SVEIRConfig:
     if not any(enabled.values()):
         raise ValueError("At least one pathogen must be enabled.")
 
-    cfg = SVEIRConfig()
+    cfg = WEBAPP_DEFAULTS.model_copy(deep=True)
     cfg.seed = form.seed
     cfg.number_agents = form.number_agents
     cfg.step_target = form.step_target
     cfg.spatial_creation_args.grid_id = DEFAULT_GRID_ID  # always hardcoded - never from the client
 
+    by_name = {p.name: p for p in WEBAPP_DEFAULTS.pathogens}
     cfg.pathogens = [
-        config_cls() for name, _, config_cls in _PATHOGEN_TOGGLES if enabled[name]
+        by_name[name].model_copy(deep=True) for name, _, _ in _PATHOGEN_TOGGLES if enabled[name]
     ]
 
     active = {name for name, on in enabled.items() if on}

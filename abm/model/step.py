@@ -45,6 +45,13 @@ def sveir_step(
     for pathogen in pathogens:
         pathogen.step_progression(agent_state)
 
+    # Episode onsets for newly infectious children, before transmission, so
+    # that their infectiousness reflects whether they are ill
+    # (IllnessMechanicsConfig.onset_before_transmission; False keeps the
+    # original order, with onsets decided in ChildIllnessSystem.update).
+    if config.illness_mechanics.onset_before_transmission:
+        systems[1].begin_day(agent_state, timestep)
+
     # --- 1. PHASE 1: DAYTIME (Activity) ---
 
     # a. MOVEMENT (Go to School, Water, Social)

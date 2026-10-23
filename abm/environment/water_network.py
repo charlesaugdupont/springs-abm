@@ -242,14 +242,22 @@ class WaterNetwork:
         all_cells = np.concatenate(reach_cells) if n_reach else np.zeros((0, 2), dtype=int)
         cell_reach = np.concatenate([np.full(len(c), i) for i, c in enumerate(reach_cells)]) if n_reach else np.zeros(0, dtype=int)
         if n_reach:
-            d_cells = np.hypot(home_m[:, None, 0] - all_cells[None, :, 0] * dy,
-                               home_m[:, None, 1] - all_cells[None, :, 1] * dx)   # (H, n_cells)
             # Cells are concatenated reach by reach, so each reach is a
-            # contiguous column block.
+            # contiguous column block. Computed in blocks of households so
+            # that a fine grid (thousands of water cells) never materialises
+            # the full (households x water cells) matrix; every element is
+            # computed exactly as before.
             offsets = np.concatenate([[0], np.cumsum([len(c) for c in reach_cells])[:-1]])
-            d_reach = np.minimum.reduceat(d_cells, offsets, axis=1)
-            nearest_cell = d_cells.argmin(axis=1)
-            d_surface = d_cells.min(axis=1)
+            d_reach = np.empty((H, n_reach))
+            nearest_cell = np.empty(H, dtype=np.int64)
+            d_surface = np.empty(H)
+            cy, cx = all_cells[None, :, 0] * dy, all_cells[None, :, 1] * dx
+            for a in range(0, H, 512):
+                hm = home_m[a:a + 512]
+                d_cells = np.hypot(hm[:, None, 0] - cy, hm[:, None, 1] - cx)   # (block, n_cells)
+                d_reach[a:a + 512] = np.minimum.reduceat(d_cells, offsets, axis=1)
+                nearest_cell[a:a + 512] = d_cells.argmin(axis=1)
+                d_surface[a:a + 512] = d_cells.min(axis=1)
         else:
             d_reach = np.zeros((H, 0))
             nearest_cell = np.zeros(H, dtype=int)
@@ -382,22 +390,30 @@ class WaterNetwork:
         self.animal_loading.setdefault(name, torch.zeros(S, dtype=torch.float32))
         self.last_loading[name] = torch.zeros(S, dtype=torch.float32)
 
-    def loading(self, agent_state, name: str) -> torch.Tensor:
-        """Today's load to every real source from infectious agents' households."""
-        status = agent_state.ndata[AgentPropertyKeys.status(name)].cpu()
-        infectious = (status == Compartment.INFECTIOUS).float()
+    def loading(self, agent_state, name: str, weights: torch.Tensor | None = None) -> torch.Tensor:
+        """Today's load to every real source from infectious agents' households.
+
+        `weights` (Pathogen.infectiousness_weights) scales each infectious
+        agent's shedding - symptomless infections shed less. None counts every
+        infectious agent as 1 (the original behaviour)."""
+        if weights is None:
+            status = agent_state.ndata[AgentPropertyKeys.status(name)].cpu()
+            infectious = (status == Compartment.INFECTIOUS).float()
+        else:
+            infectious = weights.float().cpu()
         H = self.surface_kernel.shape[0]
         shed_surface = torch.zeros(H).index_add_(0, self.agent_hh, infectious * self.agent_surface_release)
         shed_ground = torch.zeros(H).index_add_(0, self.agent_hh, infectious * self.agent_ground_release)
         return shed_surface @ self.surface_kernel + shed_ground @ self.ground_kernel + self.animal_loading[name]
 
-    def advance(self, agent_state, name: str, decay_rate: float, shock: bool):
+    def advance(self, agent_state, name: str, decay_rate: float, shock: bool,
+                weights: torch.Tensor | None = None):
         """One day for one pathogen: die-off, then today's loading, then any shock."""
         c = self.concentration[name]
         S = self.num_sources
         c[:S].mul_(math.exp(-decay_rate))
         c[S].mul_(math.exp(-(decay_rate + float(self.water_cfg.piped_flush_rate))))
-        load = self.loading(agent_state, name)
+        load = self.loading(agent_state, name, weights)
         self.last_loading[name] = load
         c[:S].add_(load)
         if shock:

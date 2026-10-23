@@ -269,11 +269,12 @@ class Campylobacter(Pathogen):
         status_key = AgentPropertyKeys.status(self.name)
         hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
 
-        is_infectious = agent_state.ndata[status_key] == Compartment.INFECTIOUS
-        if not torch.any(is_infectious):
+        # Households with an infectious member, and the largest infectiousness
+        # weight among them (1 = a symptomatic member; see
+        # Pathogen.household_infectiousness).
+        infectious_hh, w_max = self.household_infectiousness(agent_state)
+        if infectious_hh is None:
             return
-
-        infectious_hh = torch.unique(hh_ids[is_infectious])
 
         is_susceptible = self.susceptible_like_mask(agent_state, respect_daily_guard=True)
         in_infectious_hh = torch.isin(hh_ids, infectious_hh)
@@ -287,6 +288,8 @@ class Campylobacter(Pathogen):
         immunity_factor = self._relative_susceptibility(agent_state, target_indices, route="fecal_oral")
 
         effective_prob = self.config.fecal_oral_prob * immunity_factor
+        if self.config.asymptomatic_relative_infectiousness < 1.0:
+            effective_prob = effective_prob * w_max[torch.searchsorted(infectious_hh, hh_ids[target_indices])]
         rand_vals = torch.rand(len(target_indices), device=self.device)
         newly_infected = rand_vals < effective_prob
 
