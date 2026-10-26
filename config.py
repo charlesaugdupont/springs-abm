@@ -88,6 +88,31 @@ class PathogenConfig(BaseModel):
                     "children (original behaviour).",
         ge=0.0, le=1.0,
     )
+    # --- Adults (every agent aged 5+; see Pathogen._relative_susceptibility) ---
+    # Holding adults at the children's plateau made them far more often
+    # infected than young children once the population was data-defined (v3
+    # validation: rotavirus 6.6 true infections per person-year at 5+, adult
+    # carriage ~10x young children's, 98% of the infectious pressure). Carriage
+    # surveys find adults carry less than young children (rotavirus antigen in
+    # symptomless people: adults ~3% vs 4.2% at 1-5 years, Endara et al. 2007,
+    # Ecuador; Cryptosporidium by qPCR in households of children without the
+    # infection: 4% of household members, median age 15, vs 8% of neighbouring
+    # under-5s, Eibach/Krumkamp et al. 2021, Ghana among four countries). Adult
+    # immunity, and adults' smaller faecal-oral exposure, are not separately
+    # identifiable, so one relative susceptibility stands for both.
+    adult_relative_susceptibility: float | None = Field(
+        None,
+        description="Relative susceptibility of every adult (agent aged 5+), on every route. None = "
+                    "immunity_floor (adults at the children's plateau, as in campaign v3).",
+        ge=0.0, le=1.0,
+    )
+    adult_infectious_duration_scale: float = Field(
+        1.0,
+        description="Multiplier on the mean infectious period of an adult's infection: an infectious "
+                    "adult recovers each day with probability min(1, recovery_rate / scale). 1.0 = as "
+                    "children.",
+        gt=0.0,
+    )
     # Susceptibility x exposure multiplier for young infants, rising linearly
     # from infant_susceptibility_at_birth at age 0 to 1 at
     # infant_susceptibility_ramp_months. Represents everything that keeps
@@ -1365,6 +1390,26 @@ class SteeringParamsSVEIR(BaseModel):
         276.0, description="Social-visit radius in metres; overrides social_interaction_radius when set. "
                            "276 m = 5 cells of the original ~55 m grid (campaign v2's value), so the "
                            "radius means the same on the 25 m settlement grid.", gt=0.0,
+    )
+    # Person-to-person co-location routes (rotavirus, Cryptosporidium
+    # community) expose an agent to every infectious person in its cell. In a
+    # home or a compound that is a handful of people; at a place of worship -
+    # OSM maps 8 for the ~11,500 people of the settlement grid, each one 25 m
+    # cell - it is 300-500, and in v3 95% of adult rotavirus infections and
+    # 40% of adult Cryptosporidium ones were acquired there. Contact surveys
+    # report nothing like it: 7.2 contacts a day (conversations of 5+ minutes;
+    # 5.1 physical), 52% of them household members, 6.1-6.7 for under-5s
+    # (le Polain de Waroux et al. 2018, rural southwest Uganda). When set, an
+    # agent's exposure to members of OTHER households in its cell is that of
+    # this many contacts drawn from them: the infectious weight among them is
+    # scaled by min(1, cap / their number). Exposure to its own household is
+    # never capped. None = everyone in the cell is a contact (original model).
+    max_contacts_per_visit: float | None = Field(
+        None,
+        description="Close contacts an agent makes with members of other households at one location "
+                    "per day phase; above it, exposure scales with the share infectious rather than "
+                    "their number. None = everyone in the cell is a contact (original model).",
+        gt=0.0,
     )
 
     # --- Care-Seeking Parameters ---

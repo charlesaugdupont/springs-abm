@@ -55,6 +55,16 @@ grid, population, parameter box, targets and output folder:
       infection-history structure, with the model's undetected infections
       anchored by the Vellore and Mexico City cohorts. Output in
       experiments/outputs/history_matching_v3. See CAMPAIGNS["v3"].
+  adult_pilot  one wave on the v3 settlement: adults' own susceptibility
+      (rotavirus, Cryptosporidium), Cryptosporidium adults' shorter
+      shedding, and the person-to-person transmission children then need,
+      against the v3 child targets plus adult : young-child carriage ratios.
+      Analysed by experiments/calibration/adult_pilot_report.py; output in
+      experiments/outputs/adult_pilot. See ADULT_PILOT_PARAMS.
+  adult_pilot_cap  the same with a cap on close contacts per place visited
+      (steering_parameters.max_contacts_per_visit), shared by both
+      pathogens; output in experiments/outputs/adult_pilot_cap. See
+      ADULT_PILOT_CAP_PARAMS.
 
 A parameter path may tie several config fields to one value ("a|b|c"): it is
 one dimension of the box, and every field is set to it.
@@ -468,6 +478,134 @@ def hm_metrics_v3(model) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Adult-transmission pilot (branch adult-transmission)
+# ---------------------------------------------------------------------------
+
+#: Validation of v3 found adults (every agent aged 5+) far more often infected
+#: than young children - rotavirus 6.6 true infections per person-year at 5+,
+#: adult carriage ~10x that of children 12-59 months, 98% of the infectious
+#: pressure - because adults sat at the children's immunity plateau and move
+#: about far more. The pilot asks whether, with adults given their own
+#: susceptibility (and Cryptosporidium adults a shorter infectious period),
+#: the model can put adult carriage where surveys find it AND still meet the
+#: child targets, which then have to be reached through transmission among
+#: and from children. Rotavirus and Cryptosporidium only (Campylobacter's
+#: adult carriage was already about half the children's, and its animal and
+#: food routes do not depend on infectious people); every other parameter at
+#: its v3 value (config.py). Rotavirus and Cryptosporidium share no parameter
+#: here, so each run is a design point for both.
+#:
+#: Ranges from four probe runs on the settlement grid (1460 days, one seed):
+#:   v3 values                     rota ratio 13.7, detected 0.26/child-yr;
+#:                                 crypto ratio 1.23, detected 0.37
+#:   rota adults 0.03, ipm 0.08    rota faded to imports (71% imported, 0.06)
+#:   rota adults 0.03, ipm 0.3     rota ratio 2.1, detected 0.46
+#:   rota adults 0.08, ipm 0.15    rota ratio 4.9, detected 0.43
+#:   crypto adults 0.06, household 0.8, community 0.03, duration 0.6:
+#:                                 ratio 0.38, detected 0.60
+#:   crypto adults 0.12, household 0.5, community 0.012, duration 0.6:
+#:                                 ratio 0.44, detected 0.41
+#: Rotavirus adults sustain their own chains once ipm x adult susceptibility
+#: exceeds ~0.003-0.009, so the box reaches far lower adult susceptibility
+#: and higher ipm than the probes.
+ADULT_PILOT_PARAMS: dict[str, tuple[float, float, str]] = {
+    # v3: adults at the floor, 0.26
+    "pathogens[rota].adult_relative_susceptibility":          (0.001, 0.26, "log"),
+    # v3: 0.0405 (admissible 0.0047-0.048); children must now carry it
+    "pathogens[rota].infection_prob_mean":                    (0.03,  1.0,  "log"),
+    # v3: adults at the floor, 0.31
+    "pathogens[crypto].adult_relative_susceptibility":        (0.01,  0.31, "log"),
+    # v3: 0.144 and 0.00271
+    "pathogens[crypto].household_transmission_prob":          (0.05,  1.0,  "log"),
+    "pathogens[crypto].community_infection_prob":             (0.001, 0.05, "log"),
+    # Mean shedding of people aged 5+ relative to young children: 1.7 vs 4.1
+    # weeks for >2 vs <2 years (Korpe et al. 2019, Clin Infect Dis 68:1073;
+    # weekly stools, 8 weeks) = 0.41; 7.0-7.2 days at 6-17 years and 16.2 days
+    # in adults vs 19.9 days in infants (Korpe et al. 2023, Clin Infect Dis
+    # 76:2178; weekly stools; 16 episodes at 6+) = 0.36 and 0.81 - weighted by
+    # Ghana's age structure (2021 census: 41.8% under 18, so about a third of
+    # those aged 5+) about 0.65.
+    "pathogens[crypto].adult_infectious_duration_scale":      (0.4,   0.85, "lin"),
+}
+
+#: Adult : young-child carriage. Adults are every agent aged 5+; children
+#: 12-59 months not in an illness episode, as a community stool survey
+#: samples them. Model values are TRUE carriage; surveys detect, and detect
+#: adults' lower-load shedding less often, so the observed ratios are if
+#: anything below the true ones - part of the model-discrepancy allowance.
+#:  rotavirus: antigen in symptomless people, adults ~3% vs 4.2% at 1-5 years
+#:    (Endara et al. 2007, Esmeraldas, Ecuador) = 0.71; household secondary
+#:    infection, adults 30+ 53% vs 67% at 0-9 years (Lopman et al. 2013,
+#:    Quininde) = 0.79. Plausible 0.4-1.1: log SD 0.25.
+#:  Cryptosporidium (qPCR): household members (median age 15) 4% vs
+#:    neighbouring children <5 8% around children without the infection
+#:    (8/215 vs 13/162; ratio 0.46, 95% CI 0.20-1.08), 13% vs 23% around
+#:    infected children (0.58, 0.41-0.82), Ghana 10% vs 19% (Eibach,
+#:    Krumkamp et al. 2021, Clin Infect Dis 72:1358). 0.5, log SD 0.30. The
+#:    Bangladeshi cohort's 5% of adults vs 35% at 1-5 years ever infected in
+#:    8 months (Korpe et al. 2023, ELISA) would be far lower; ELISA misses
+#:    low-load shedding, so it is not used.
+ADULT_CARRIAGE_TARGETS = {
+    "rota_adult_to_child_carriage_ratio_post_burnin": (0.70, 0.25),
+    "crypto_adult_to_child_carriage_ratio_post_burnin": (0.50, 0.30),
+}
+
+
+def build_targets_adult_pilot() -> list[HMTarget]:
+    out = [t for t in build_targets_v3() if t.metric.split("_")[0] in ("rota", "crypto")]
+    for m, (z, sd) in ADULT_CARRIAGE_TARGETS.items():
+        out.append(HMTarget(m, math.log(z + 0.02), sd, 0.10, "log", 0.02))
+    return out
+
+
+def adult_pilot_emulator_inputs(metric: str) -> list[str]:
+    p = metric.split("_")[0]
+    return [q for q in ADULT_PILOT_PARAMS if q.startswith(f"pathogens[{p}].")]
+
+
+#: Pilot 2 (after pilot 1, experiments/outputs/adult_pilot): Cryptosporidium
+#: passed, rotavirus failed - none of 96 runs had both adult carriage at
+#: 0.4-1.1x young children's and detected incidence in MAL-ED's site range.
+#: Below ipm x adult susceptibility ~0.007 adults were barely infected and
+#: children alone reached at most 0.22 detected infections per child-year;
+#: above it adults ran their own epidemic (carriage ratio >= 1.3, or child
+#: infections of 6-35 per child-year). Tracing v3's infections showed why: 95%
+#: of adult rotavirus infections (40% of adult Cryptosporidium) were acquired at
+#: one of the 8 OSM places of worship, each a single cell holding 300-500
+#: people on a given day, every one of them a contact of every other
+#: (steering_parameters.max_contacts_per_visit, which caps that, has the
+#: evidence). Probes with the cap (one seed each; detected incidence per
+#: child-year, MAL-ED site ranges rota 0.22-0.71, crypto 0.35-0.88):
+#:   cap 7, v3 values                rota faded (85% imported); crypto ratio 0.64, 0.23
+#:   cap 7, rota ipm 0.3; crypto household 0.3, community 0.02, duration 0.65
+#:                                   rota ratio 0.46, 0.16, 20% imported; crypto 0.49, 0.30
+#:   cap 15, same values             rota ratio 0.79, 0.34, 4% imported;
+#:                                   crypto 0.50, 0.34, household share 0.50
+#: so with the cap, adults at the children's floor may already be right; the
+#: box keeps their susceptibility free below it. The cap is shared by the two
+#: pathogens: each one's emulators take its own parameters and the cap.
+ADULT_PILOT_CAP_PARAMS: dict[str, tuple[float, float, str]] = {
+    # 7.2 contacts a day, 48% outside the household; 64% report under 10
+    # casual (<5 min) contacts (le Polain de Waroux et al. 2018) - per place
+    # visited, so a wide range
+    "steering_parameters.max_contacts_per_visit":         (3.0,   30.0, "log"),
+    "pathogens[rota].adult_relative_susceptibility":       (0.02,  0.26, "log"),
+    "pathogens[rota].infection_prob_mean":                 (0.05,  1.0,  "log"),
+    "pathogens[crypto].adult_relative_susceptibility":     (0.03,  0.31, "log"),
+    "pathogens[crypto].household_transmission_prob":       (0.05,  1.0,  "log"),
+    # the cap cuts community exposure, so higher than pilot 1
+    "pathogens[crypto].community_infection_prob":          (0.001, 0.1,  "log"),
+    "pathogens[crypto].adult_infectious_duration_scale":   (0.4,   0.85, "lin"),
+}
+ADULT_PILOT_SHARED = ["steering_parameters.max_contacts_per_visit"]
+
+
+def adult_pilot_cap_emulator_inputs(metric: str) -> list[str]:
+    p = metric.split("_")[0]
+    return ADULT_PILOT_SHARED + [q for q in ADULT_PILOT_CAP_PARAMS if q.startswith(f"pathogens[{p}].")]
+
+
+# ---------------------------------------------------------------------------
 # Campaign registry
 # ---------------------------------------------------------------------------
 
@@ -509,6 +647,14 @@ CAMPAIGNS: dict[str, Campaign] = {
                    V3_PARAMS, V3_BASE_OVERRIDES, build_targets_v3(), hm_metrics_v3, wave_fixed=dict(V3_WAVE1_FIXED),
                    first_importation_wave=2, conditional_targets=set(V3_RAMP_INDEPENDENT_TARGETS),
                    checkpoint_every=16, emulator_inputs=v3_emulator_inputs, core_design=(4, 0.5)),
+    "adult_pilot": Campaign("adult_pilot", V3_GRID_ID, V3_AGENTS, 1460,
+                            os.path.join("experiments", "outputs", "adult_pilot"), ADULT_PILOT_PARAMS,
+                            V3_BASE_OVERRIDES, build_targets_adult_pilot(), hm_metrics_v3,
+                            checkpoint_every=8, emulator_inputs=adult_pilot_emulator_inputs),
+    "adult_pilot_cap": Campaign("adult_pilot_cap", V3_GRID_ID, V3_AGENTS, 1460,
+                                os.path.join("experiments", "outputs", "adult_pilot_cap"), ADULT_PILOT_CAP_PARAMS,
+                                V3_BASE_OVERRIDES, build_targets_adult_pilot(), hm_metrics_v3,
+                                checkpoint_every=8, emulator_inputs=adult_pilot_cap_emulator_inputs),
 }
 CAMPAIGN = "v2"
 CHECKPOINT_EVERY: int | None = None

@@ -1,6 +1,7 @@
 # abm/model/initialize_model.py
 """This module contains the primary SVEIRModel class."""
 from pathlib import Path
+import numpy as np
 import torch
 from scipy.stats import qmc
 
@@ -55,6 +56,9 @@ class SVEIRModel(Model):
         # themselves (webapp, orchestrator) need no extra setup.
         self.child_days_by_age_month: list = []
         self.new_infections_by_age_month: dict[str, list] = {}
+        # Daily adult and young-child carriage per pathogen - see
+        # _record_carriage_by_group(); (re)initialised with the age records.
+        self.carriage_by_group: dict[str, list] = {}
         self._prev_num_infections: dict[str, torch.Tensor] = {}
         self._age_records_ready = False
         self.pathogens = []
@@ -343,6 +347,8 @@ class SVEIRModel(Model):
         # difference from the totals above.
         self.child_days_naive_by_age_month = {p.name: [] for p in self.pathogens}
         self.new_infections_naive_by_age_month = {p.name: [] for p in self.pathogens}
+        # Daily carriage by group - see _record_carriage_by_group().
+        self.carriage_by_group = {p.name: [] for p in self.pathogens}
         self._prev_num_infections = {
             p.name: self.graph.ndata[AgentPropertyKeys.num_infections(p.name)].clone()
             for p in self.pathogens
@@ -406,6 +412,35 @@ class SVEIRModel(Model):
                 torch.bincount(month[naive], weights=new[naive].double(), minlength=n_bins)
                 .round().long().cpu().numpy()
             )
+
+    #: Columns of each daily carriage_by_group row.
+    CARRIAGE_COLUMNS = ("n_adult", "n_adult_infectious", "n_child_12_59m_well",
+                        "n_child_12_59m_well_infectious", "weight_adult", "weight_total")
+
+    def _record_carriage_by_group(self):
+        """Appends, per pathogen, today's carriage in the two groups that
+        carriage surveys compare - adults (every agent aged 5+) and children
+        aged 12-59 months not in an illness episode (a community stool survey
+        samples people without diarrhoea) - and the infectiousness weight
+        (Pathogen.infectiousness_weights) the adults carry. One row of
+        CARRIAGE_COLUMNS per day, aligned with child_days_by_age_month.
+        Carriage is the INFECTIOUS compartment (true infection, not detection).
+
+        Pure observation: reads state, draws no random numbers.
+        """
+        nd = self.graph.ndata
+        is_child = nd[AgentPropertyKeys.IS_CHILD].bool()
+        adult = ~is_child
+        older_child = is_child & (nd[AgentPropertyKeys.AGE] >= 12.0)
+        n_adult = int(adult.sum())
+        for p in self.pathogens:
+            infectious = nd[AgentPropertyKeys.status(p.name)] == Compartment.INFECTIOUS
+            well = older_child & (nd[AgentPropertyKeys.symptom_severity(p.name)] <= 0)
+            w = p.infectiousness_weights(self.graph)
+            self.carriage_by_group[p.name].append(np.array([
+                n_adult, int((adult & infectious).sum()), int(well.sum()), int((well & infectious).sum()),
+                float(w[adult].sum()), float(w.sum()),
+            ], dtype=np.float64))
 
     def _advance_demography(self):
         """Ages everyone by a day and renews children leaving the under-5
@@ -499,6 +534,7 @@ class SVEIRModel(Model):
                 self._record_u5_prevalence(child_mask)
             # Always recorded, regardless of how step() is driven.
             self._record_age_structured_incidence()
+            self._record_carriage_by_group()
             self._advance_demography()
 
         except Exception as e:

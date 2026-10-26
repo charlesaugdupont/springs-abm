@@ -414,6 +414,43 @@ def calibration_metrics(model, burn_in_days: int = DEFAULT_BURN_IN_DAYS) -> dict
     out.update(first_infection_metrics(model))
     out.update(prior_infection_rate_ratios(model, burn_in_days=burn_in_days))
     out.update(route_fractions_post_burnin(model, burn_in_days=burn_in_days))
+    out.update(carriage_metrics(model, burn_in_days=burn_in_days))
+    return out
+
+
+def carriage_metrics(model, burn_in_days: int = DEFAULT_BURN_IN_DAYS) -> dict:
+    """Adult vs young-child carriage over simulated days >= burn_in_days, from
+    SVEIRModel.carriage_by_group (true infection, not detection):
+
+      {p}_adult_prevalence_post_burnin
+          mean daily fraction of adults (agents aged 5+) infectious
+      {p}_child_carriage_12_59m_post_burnin
+          the same among children 12-59 months not in an illness episode
+      {p}_adult_to_child_carriage_ratio_post_burnin
+          the first over the second: the model counterpart of a community
+          stool survey's adult : young-child positivity ratio
+      {p}_adult_infectious_weight_share_post_burnin
+          share of all infectiousness (Pathogen.infectiousness_weights)
+          carried by adults
+
+    NaN when there are no post-burn-in days or the denominator is zero."""
+    out: dict[str, float] = {}
+    b = int(burn_in_days)
+    nan = float("nan")
+    for p in model.pathogens:
+        rows = getattr(model, "carriage_by_group", {}).get(p.name, [])
+        keys = [f"{p.name}_{k}_post_burnin" for k in ("adult_prevalence", "child_carriage_12_59m",
+                                                       "adult_to_child_carriage_ratio",
+                                                       "adult_infectious_weight_share")]
+        if len(rows) <= b:
+            out.update({k: nan for k in keys})
+            continue
+        a = np.vstack(rows[b:]).sum(axis=0)
+        adult = a[1] / a[0] if a[0] > 0 else nan
+        child = a[3] / a[2] if a[2] > 0 else nan
+        ratio = adult / child if child > 0 else nan
+        share = a[4] / a[5] if a[5] > 0 else nan
+        out.update(dict(zip(keys, (float(adult), float(child), float(ratio), float(share)))))
     return out
 
 

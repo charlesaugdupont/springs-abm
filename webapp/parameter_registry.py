@@ -1163,6 +1163,34 @@ REGISTRY: list[ParamMeta] = [
         rationale="Used only to reproduce what MAL-ED's monthly stool surveillance would have detected; no effect on the simulation.",
     ),
     ParamMeta(
+        path="pathogens[rota].adult_relative_susceptibility", label="Adult susceptibility", category="internal", evidence_tier="assumption",
+        rationale="Relative susceptibility of every agent aged 5+. Unset, adults sit at the children's immunity plateau (campaign v3); carriage surveys find adults carry less than young children.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].adult_infectious_duration_scale", label="Adult infectious-period multiplier", category="internal", evidence_tier="assumption",
+        rationale="Multiplier on the mean infectious period of an adult's infection (1 = as children).",
+    ),
+    ParamMeta(
+        path="pathogens[campy].adult_relative_susceptibility", label="Adult susceptibility", category="internal", evidence_tier="assumption",
+        rationale="Relative susceptibility of every agent aged 5+. Unset, adults sit at the children's immunity plateau (campaign v3); carriage surveys find adults carry less than young children.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].adult_infectious_duration_scale", label="Adult infectious-period multiplier", category="internal", evidence_tier="assumption",
+        rationale="Multiplier on the mean infectious period of an adult's infection (1 = as children).",
+    ),
+    ParamMeta(
+        path="steering_parameters.max_contacts_per_visit", label="Close contacts per place visited", category="internal", evidence_tier="literature",
+        rationale="Contacts an agent makes with other households at one location per day phase; in a larger crowd exposure scales with the share infectious. Contact surveys: ~7 contacts a day, half in the household (le Polain de Waroux et al. 2018, Uganda). Unset = everyone in the cell is a contact.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].adult_relative_susceptibility", label="Adult susceptibility", category="internal", evidence_tier="assumption",
+        rationale="Relative susceptibility of every agent aged 5+. Unset, adults sit at the children's immunity plateau (campaign v3); carriage surveys find adults carry less than young children.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].adult_infectious_duration_scale", label="Adult infectious-period multiplier", category="internal", evidence_tier="assumption",
+        rationale="Multiplier on the mean infectious period of an adult's infection (1 = as children).",
+    ),
+    ParamMeta(
         path="pathogens[campy].poultry_roam_sigma_m", label="Poultry roam radius (m)", category="internal", evidence_tier="structural",
         rationale="Metre version of the cell-based roam radius, converted with the grid's cell size so a finer grid keeps the same physical radius.",
     ),

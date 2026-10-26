@@ -124,6 +124,11 @@ V2_OVERRIDES: dict = {
 for _p in ("rota", "campy", "crypto"):
     V2_OVERRIDES[f"pathogens[{_p}].asymptomatic_relative_infectiousness"] = 1.0
     V2_OVERRIDES[f"pathogens[{_p}].symptomatic_reduction_per_prior_infection"] = 0.0
+    # adults at the children's floor, with children's infectious period
+    V2_OVERRIDES[f"pathogens[{_p}].adult_relative_susceptibility"] = None
+    V2_OVERRIDES[f"pathogens[{_p}].adult_infectious_duration_scale"] = 1.0
+# everyone in a cell is a contact
+V2_OVERRIDES["steering_parameters.max_contacts_per_visit"] = None
 
 # The first-generation model predates everything V2_OVERRIDES pins as well:
 # every key LEGACY_V1_OVERRIDES does not set itself takes its v2 value, which

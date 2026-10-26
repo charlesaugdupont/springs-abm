@@ -92,7 +92,7 @@ class Pathogen(ABC):
         """Per-agent multiplier on infection probability, for every route.
 
             children: max(immunity_floor, exp(-kappa N)) * infant(age) * f
-            adults:   immunity_floor * f
+            adults:   a * f,  a = adult_relative_susceptibility, or immunity_floor if None
         (f only on environmental routes - see below)
 
         infant(age) = b + (1 - b) * min(1, age / R), with b =
@@ -108,23 +108,29 @@ class Pathogen(ABC):
         original exp(-kappa N) for every agent, computed with the same
         operations, so outputs are bit-identical.
 
-        Adults are held at the floor rather than accumulating immunity from
-        in-simulation infections: they stand for people who have long since
-        reached the plateau, and adults never leave the population, so letting
-        their susceptibility keep falling would make the model drift
-        indefinitely instead of reaching an endemic steady state.
+        Adults have a fixed susceptibility rather than accumulating immunity
+        from in-simulation infections: they stand for people who have long
+        since reached their adult level, and adults never leave the
+        population, so letting their susceptibility keep falling would make
+        the model drift indefinitely instead of reaching an endemic steady
+        state. With adult_relative_susceptibility None that level is the
+        children's floor - the original behaviour, computed with the same
+        operations.
         """
         from abm.constants import AgentPropertyKeys
         s = self._immunity_factor(agent_state, indices)
         floor = getattr(self.config, "immunity_floor", None)
+        adult = getattr(self.config, "adult_relative_susceptibility", None)
+        if adult is None:
+            adult = floor
         b = float(getattr(self.config, "infant_susceptibility_at_birth", 1.0))
         ramp = float(getattr(self.config, "infant_susceptibility_ramp_months", 0.0))
         has_ramp = ramp > 0.0 and b < 1.0
-        if floor is not None or has_ramp:
+        if adult is not None or has_ramp:
             is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD][indices].bool()
-            if floor is not None:
-                s = torch.where(is_child, torch.clamp(s, min=float(floor)),
-                                torch.full_like(s, float(floor)))
+            if adult is not None:
+                child_s = torch.clamp(s, min=float(floor)) if floor is not None else s
+                s = torch.where(is_child, child_s, torch.full_like(s, float(adult)))
             if has_ramp:
                 age = agent_state.ndata[AgentPropertyKeys.AGE][indices].float()
                 infant = b + (1.0 - b) * torch.clamp(age / ramp, max=1.0)
@@ -360,6 +366,12 @@ class Pathogen(ABC):
             agent_state.ndata[status_key][mask] = Compartment.INFECTIOUS
 
     def _infectious_to_recovered(self, agent_state: AgentState):
+        """Each infectious agent recovers today with probability recovery_rate
+        (a geometric infectious period, mean 1 / recovery_rate days), adults
+        with min(1, recovery_rate / adult_infectious_duration_scale). One
+        uniform draw per infectious agent either way, so the scale changes
+        no other agent's draw; at scale 1 the comparison is the original
+        scalar one."""
         from abm.constants import Compartment, AgentPropertyKeys
         status_key = AgentPropertyKeys.status(self.name)
         infectious_mask = agent_state.ndata[status_key] == Compartment.INFECTIOUS
@@ -367,7 +379,15 @@ class Pathogen(ABC):
             return
 
         recovery_chance = torch.rand(torch.sum(infectious_mask), device=self.device)
-        recovered_mask = recovery_chance < self.config.recovery_rate
+        scale = float(getattr(self.config, "adult_infectious_duration_scale", 1.0))
+        if scale == 1.0:
+            recovered_mask = recovery_chance < self.config.recovery_rate
+        else:
+            is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD][infectious_mask].bool()
+            rate = float(self.config.recovery_rate)
+            p = torch.where(is_child, torch.full_like(recovery_chance, rate),
+                            torch.full_like(recovery_chance, min(1.0, rate / scale)))
+            recovered_mask = recovery_chance < p
 
         agents_to_recover = infectious_mask.nonzero(as_tuple=True)[0][recovered_mask]
         agent_state.ndata[status_key][agents_to_recover] = Compartment.RECOVERED
@@ -438,6 +458,34 @@ class Pathogen(ABC):
         newly_infected = rand_vals < per_agent_prob
         return self._commit_infections(agent_state, target_indices[newly_infected], route=route)
 
+    def _capped_pressure(self, agent_state: AgentState, location_ids: torch.Tensor, num_locations: int,
+                         weights: torch.Tensor, cell_total: torch.Tensor, cap: float,
+                         exclude_same_household: bool) -> torch.Tensor:
+        """Co-location pressure with at most `cap` contacts among other
+        households (steering_parameters.max_contacts_per_visit).
+
+        Splits each agent's cell into its own household and everyone else.
+        Its own household's infectious weight (itself excluded) counts in
+        full; the others' is scaled by min(1, cap / number of others), the
+        expected infectious weight among `cap` contacts drawn from them. With
+        exclude_same_household the own-household part is dropped, as in the
+        uncapped route."""
+        from abm.constants import AgentPropertyKeys
+        hh = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID].long()
+        _, cell_hh = torch.unique(location_ids * (int(hh.max().item()) + 1) + hh, return_inverse=True)
+        n_groups = int(cell_hh.max().item()) + 1
+        ones = torch.ones_like(weights)
+        same_w = torch.zeros(n_groups, device=self.device).index_add_(0, cell_hh, weights)[cell_hh]
+        same_n = torch.zeros(n_groups, device=self.device).index_add_(0, cell_hh, ones)[cell_hh]
+        cell_n = torch.zeros(num_locations, device=self.device).index_add_(0, location_ids, ones)[location_ids]
+        other_n = cell_n - same_n
+        other_w = torch.clamp(cell_total - same_w, min=0.0)
+        scale = torch.where(other_n > cap, cap / other_n.clamp(min=1.0), ones)
+        other = other_w * scale
+        if exclude_same_household:
+            return other
+        return torch.clamp(same_w - weights, min=0.0) + other
+
     def _apply_new_infections(
         self,
         agent_state: AgentState,
@@ -490,7 +538,13 @@ class Pathogen(ABC):
             infected_per_location = torch.zeros(num_locations, device=self.device)
             infected_per_location.index_add_(0, location_ids, is_infectious)
             pressure_per_agent = infected_per_location[location_ids]
-            if exclude_same_household:
+            cap = getattr(self.global_params, "max_contacts_per_visit", None)
+            if cap is not None:
+                pressure_per_agent = self._capped_pressure(
+                    agent_state, location_ids, num_locations, is_infectious, pressure_per_agent,
+                    float(cap), exclude_same_household,
+                )
+            elif exclude_same_household:
                 # Subtract infectious agents sharing BOTH the cell and the
                 # household. That also removes the agent itself (an agent is
                 # always in its own household), so the plain self-subtraction
