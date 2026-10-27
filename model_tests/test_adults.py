@@ -19,14 +19,34 @@ def _pathogen(model, name):
     return next(p for p in model.pathogens if p.name == name)
 
 
-def test_adults_default_to_the_childrens_floor(make_model):
+def _adult_susceptibility(model, p):
+    idx = torch.arange(model.graph.num_nodes())
+    s = p._relative_susceptibility(model.graph, idx)
+    return s[~model.graph.ndata[K.IS_CHILD].bool()]
+
+
+def test_adult_susceptibility_defaults_campaign_v4(make_model):
+    # v4: rotavirus and Cryptosporidium calibrated, Campylobacter at the floor
     model = make_model(steps=1, agents=600, run=False)
+    expected = {"rota": 0.216, "campy": None, "crypto": 0.270}
+    for p in model.pathogens:
+        assert p.config.adult_relative_susceptibility == expected[p.name]
+        value = expected[p.name] if expected[p.name] is not None else p.config.immunity_floor
+        s = _adult_susceptibility(model, p)
+        assert torch.allclose(s, torch.full_like(s, float(value)))
+    assert _pathogen(model, "crypto").config.adult_infectious_duration_scale == 0.65
+    assert model.config.steering_parameters.max_contacts_per_visit == 3.5
+
+
+def test_v3_overrides_put_adults_back_at_the_childrens_floor(make_model):
+    from experiments.legacy import V3_OVERRIDES
+    model = make_model(steps=1, agents=600, run=False, overrides=dict(V3_OVERRIDES))
     for p in model.pathogens:
         assert p.config.adult_relative_susceptibility is None
-        idx = torch.arange(model.graph.num_nodes())
-        s = p._relative_susceptibility(model.graph, idx)
-        adult = ~model.graph.ndata[K.IS_CHILD].bool()
-        assert torch.allclose(s[adult], torch.full_like(s[adult], float(p.config.immunity_floor)))
+        assert p.config.adult_infectious_duration_scale == 1.0
+        s = _adult_susceptibility(model, p)
+        assert torch.allclose(s, torch.full_like(s, float(p.config.immunity_floor)))
+    assert model.config.steering_parameters.max_contacts_per_visit is None
 
 
 def test_adult_susceptibility_sets_adults_and_leaves_children_alone(make_model):
@@ -168,8 +188,9 @@ def test_a_cap_above_the_crowd_is_the_original_rule(make_model):
 
 
 def test_the_cap_cuts_crowd_transmission(make_model):
+    off = {"steering_parameters.max_contacts_per_visit": None}
     on = {"steering_parameters.max_contacts_per_visit": 5.0}
-    a = make_model(steps=60, agents=1500)
+    a = make_model(steps=60, agents=1500, overrides=off)
     b = make_model(steps=60, agents=1500, overrides=on)
     n = lambda m: int(m.graph.ndata[K.num_infections("rota")][~m.graph.ndata[K.IS_CHILD].bool()].sum())
     assert n(b) < n(a)

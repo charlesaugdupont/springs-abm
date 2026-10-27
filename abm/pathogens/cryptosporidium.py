@@ -12,7 +12,7 @@ implementation targets is therefore
     household person-to-person > community person-to-person > waterborne > zoonotic
 
 See CryptosporidiumConfig in config.py for the full citation list behind that
-ordering (Krumkamp et al. 2020 is the key study: contact-network tracing in
+ordering (Krumkamp et al. 2021 is the key study: contact-network tracing in
 Gabon, Ghana, Madagascar and Tanzania found elevated infection risk among
 household members (RR 3.6) and neighbouring children (RR 2.9) but not among
 animal contacts (RR 1.2, n.s.)).
@@ -164,7 +164,7 @@ class Cryptosporidium(Pathogen):
         household holding at least one infectious member. The probability is
         anchored on measured household secondary attack rates rather than being
         a free parameter - see CryptosporidiumConfig.household_transmission_prob
-        (Korpe et al. 2018: 8-week SAR 35.8% urban / 7.8% rural, vs 0% in
+        (Korpe et al. 2019: 8-week SAR 35.8% urban / 7.8% rural, vs 0% in
         control households).
         """
         hh_ids = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
@@ -199,7 +199,7 @@ class Cryptosporidium(Pathogen):
     ):
         """Co-location transmission at the daytime activity location.
 
-        Carries the neighbouring-children signal in Krumkamp et al. 2020
+        Carries the neighbouring-children signal in Krumkamp et al. 2021
         (RR 2.9; 23% prevalence among neighbouring children under 5 - the
         highest of any contact group sampled, consistent with a large
         asymptomatic community reservoir).

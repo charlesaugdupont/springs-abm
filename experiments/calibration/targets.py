@@ -207,12 +207,12 @@ LEGACY_CRYPTO_TARGETS = {
     # carriage, inconsistent with these 15-35% figures (see the caveat in the
     # first-generation notes, preserved in git history). Unresolved.
     "crypto_peak_u5_prevalence": (0.05, 0.25),
-    # Krumkamp et al. 2020: no elevated risk of positive animal contacts
+    # Krumkamp et al. 2021: no elevated risk of positive animal contacts
     # around positive index children (RR 1.2, 95% CI 0.8-1.9); GEMS: 92% of
     # C. parvum isolates anthroponotic (IIc); Eibach et al. 2015 (Ghana):
     # dominant gp60 subtypes all anthroponotic. Deliberately low, non-zero.
     "crypto_zoonotic_fraction": (0.02, 0.15),
-    # Korpe et al. 2018: 8-week household secondary attack rates 35.8%
+    # Korpe et al. 2019: 8-week household secondary attack rates 35.8%
     # (urban) and 7.8% (rural); Newman et al. 1994: secondary cases in 58% of
     # Brazilian households; Krumkamp's household RR (3.6) exceeds the
     # neighbouring-children RR (2.9).

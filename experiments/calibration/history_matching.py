@@ -88,7 +88,7 @@ from scipy.stats import qmc
 
 from abm.evidence import maled, rotavirus_cohorts
 from experiments.calibration import targets as T
-from experiments.legacy import V2_OVERRIDES
+from experiments.legacy import V2_OVERRIDES, V3_OVERRIDES
 from experiments.metrics import calibration_metrics, care_seeking_metrics
 from experiments.observation import observe
 from experiments.orchestrator import SweepSpec, run_sweep
@@ -695,12 +695,27 @@ V4_PARAMS: dict[str, tuple[float, float, str]] = {
 
 #: Plausible adult : young-child carriage (ADULT_CARRIAGE_TARGETS): rotavirus
 #: 0.4-1.1 (Endara et al. 2007; Lopman et al. 2013), Cryptosporidium 0.2-1.0
-#: (Eibach, Krumkamp et al. 2021: 0.46, 95% CI 0.20-1.08). Required in the
+#: (Krumkamp et al. 2021: 0.46, 95% CI 0.20-1.08). Required in the
 #: final selection, as the MAL-ED site ranges are.
 V4_CARRIAGE_RANGES = {
     "rota_adult_to_child_carriage_ratio_post_burnin": (0.4, 1.1),
     "crypto_adult_to_child_carriage_ratio_post_burnin": (0.2, 1.0),
 }
+
+
+#: Route shares that are not targets but are required of the default (from
+#: the wave-3 selection on). Nothing in v4 constrained rotavirus's routes, and
+#: with the contact cap removing the crowd transmission, the waterborne route
+#: filled the gap: 34% of rotavirus infections in verify_v4 e0, 60-68% in the
+#: first wave-3 candidates (v3: 0.2%). Rotavirus spreads mainly by direct
+#: faecal-oral contact (PAHO), with similar rates in high- and low-income
+#: settings, and hygiene and sanitation improvements reduce it far less than
+#: bacterial or parasitic diarrhoea (Parashar et al. 2006, Emerg Infect Dis
+#: 12:304). The 10% bound - a minor route - is a judgement; no published
+#: estimate exists. Rotavirus's own targets do not need the water route: in
+#: waves 1-3, runs with at most 5% waterborne fit them as well (best
+#: rotavirus-only max I 1.51) as runs with more.
+V4_ROUTE_RANGES = {"rota_water_fraction_post_burnin": (0.0, 0.10)}
 
 
 def build_targets_v4() -> list[HMTarget]:
@@ -753,17 +768,19 @@ CAMPAIGNS: dict[str, Campaign] = {
     "v2": Campaign("v2", GRID_ID, AGENTS, STEPS, OUT_DIR, dict(PARAMS), {**V2_OVERRIDES, **BASE_OVERRIDES},
                    TARGETS_HM, hm_metrics, FIRST_CURRENT_WAVE, set(TREATMENT_DEPENDENT),
                    dict(WAVE3_FIXED), FIRST_IMPORTATION_WAVE, conditional_targets=set(ROTA_INDEPENDENT_TARGETS)),
+    # v3's and the pilots' runs used v3's defaults, since replaced by v4's;
+    # experiments.legacy.V3_OVERRIDES pins them, so these still reproduce.
     "v3": Campaign("v3", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_v3"),
-                   V3_PARAMS, V3_BASE_OVERRIDES, build_targets_v3(), hm_metrics_v3, wave_fixed=dict(V3_WAVE1_FIXED),
+                   V3_PARAMS, {**V3_OVERRIDES, **V3_BASE_OVERRIDES}, build_targets_v3(), hm_metrics_v3, wave_fixed=dict(V3_WAVE1_FIXED),
                    first_importation_wave=2, conditional_targets=set(V3_RAMP_INDEPENDENT_TARGETS),
                    checkpoint_every=16, emulator_inputs=v3_emulator_inputs, core_design=(4, 0.5)),
     "adult_pilot": Campaign("adult_pilot", V3_GRID_ID, V3_AGENTS, 1460,
                             os.path.join("experiments", "outputs", "adult_pilot"), ADULT_PILOT_PARAMS,
-                            V3_BASE_OVERRIDES, build_targets_adult_pilot(), hm_metrics_v3,
+                            {**V3_OVERRIDES, **V3_BASE_OVERRIDES}, build_targets_adult_pilot(), hm_metrics_v3,
                             checkpoint_every=8, emulator_inputs=adult_pilot_emulator_inputs),
     "adult_pilot_cap": Campaign("adult_pilot_cap", V3_GRID_ID, V3_AGENTS, 1460,
                                 os.path.join("experiments", "outputs", "adult_pilot_cap"), ADULT_PILOT_CAP_PARAMS,
-                                V3_BASE_OVERRIDES, build_targets_adult_pilot(), hm_metrics_v3,
+                                {**V3_OVERRIDES, **V3_BASE_OVERRIDES}, build_targets_adult_pilot(), hm_metrics_v3,
                                 checkpoint_every=8, emulator_inputs=adult_pilot_cap_emulator_inputs),
     "v4": Campaign("v4", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_v4"),
                    V4_PARAMS, V4_BASE_OVERRIDES, build_targets_v4(), hm_metrics_v3,
@@ -1196,13 +1213,20 @@ AUX_IMPORTED = "rota_imported_fraction_post_burnin"
 def fit_imported_emulator(df: pd.DataFrame, summary: pd.DataFrame):
     """GP of the replicate-mean rotavirus imported fraction (linear scale);
     on the rotavirus inputs only when the campaign restricts emulator inputs."""
+    return fit_aux_emulator(df, summary, AUX_IMPORTED)
+
+
+def fit_aux_emulator(df: pd.DataFrame, summary: pd.DataFrame, metric: str):
+    """GP of the replicate mean of an output that is not a calibration target
+    (linear scale), on that pathogen's inputs when the campaign restricts
+    emulator inputs - for constraints on outputs MAL-ED does not measure."""
     s = summary.copy()
-    s[AUX_IMPORTED] = s["gsa.design_id"].map(df.groupby("gsa.design_id")[AUX_IMPORTED].mean())
-    t = HMTarget(AUX_IMPORTED, 0.0, 1.0, 0.0, "lin")
+    s[metric] = s["gsa.design_id"].map(df.groupby("gsa.design_id")[metric].mean())
+    t = HMTarget(metric, 0.0, 1.0, 0.0, "lin")
     if EMULATOR_INPUTS is None:
         return _fit_one(s, t)
     X, y = _training_data(s, t)
-    cols = [PATHS.index(p) for p in EMULATOR_INPUTS(AUX_IMPORTED)]
+    cols = [PATHS.index(p) for p in EMULATOR_INPUTS(metric)]
     gp = _fit_gp(X[:, cols], y)
     return None if gp is None else SubsetGP(gp, cols)
 
@@ -1220,7 +1244,7 @@ def select_candidates(n: int = 3, seed: int = 11, n_candidates: int = 300_000,
                       refocus_from_wave: int | None = None, fixed: dict | None = None,
                       constraint: Callable | None = None, adjusted: list[dict] | None = None,
                       suffix: str = "", output_ranges: dict | None = None,
-                      ratio_ranges: dict | None = None) -> list[dict]:
+                      ratio_ranges: dict | None = None, aux_ranges: dict | None = None) -> list[dict]:
     """Default candidates: a regularised best fit within the emulated NROY.
 
     The admissible set is the emulated NROY (max_j I_j < CUTOFF) with the
@@ -1265,7 +1289,9 @@ def select_candidates(n: int = 3, seed: int = 11, n_candidates: int = 300_000,
     output_ranges {target metric: (lo, hi)} additionally requires the
     emulated value of those targets (back on the natural scale) to lie in
     [lo, hi]; ratio_ranges {name: (numerator metric, denominator metric, lo,
-    hi)} the same for the ratio of two emulated targets.
+    hi)} the same for the ratio of two emulated targets; aux_ranges {metric:
+    (lo, hi)} the same for outputs that are not targets, each emulated by
+    fit_aux_emulator.
     """
     df = load_all_waves()
     summary = summarise(df)
@@ -1273,6 +1299,7 @@ def select_candidates(n: int = 3, seed: int = 11, n_candidates: int = 300_000,
         summary = summary[summary["wave"] >= refocus_from_wave]
     ems = fit_emulators(summary, n_jobs=n_jobs)
     gp_imp = fit_imported_emulator(df, summary)
+    gp_aux = {m: fit_aux_emulator(df, summary, m) for m in (aux_ranges or {})}
     rng = np.random.default_rng(seed)
     U = qmc.LatinHypercube(d=len(PATHS), seed=seed).random(n_candidates)
     fixed = fixed or {}
@@ -1306,6 +1333,9 @@ def select_candidates(n: int = 3, seed: int = 11, n_candidates: int = 300_000,
         for num, den, lo, hi in (ratio_ranges or {}).values():
             r = natural(num) / np.maximum(natural(den), 1e-9)
             ok_ &= (r >= lo) & (r <= hi)
+        for metric, (lo, hi) in (aux_ranges or {}).items():
+            v = _predict_chunked(gp_aux[metric], X)
+            ok_ &= (v >= lo) & (v <= hi)
         return I, imp, ok_
 
     I, imp, ok = admissible(U)
@@ -1351,7 +1381,8 @@ def select_candidates(n: int = 3, seed: int = 11, n_candidates: int = 300_000,
     out = []
     for i, (k, row) in enumerate(zip(picked, values)):
         print(f"\ncandidate e{i}: objective {obj_all[k]:.2f} (sum I^2 {(I_all[k] ** 2).sum():.2f}), "
-              f"emulated max I {I_all[k].max():.2f}, imported fraction {imp_all[k]:.3f}")
+              f"emulated max I {I_all[k].max():.2f}, imported fraction {imp_all[k]:.3f}"
+              + "".join(f", {m} {float(gp_aux[m].predict(allc[k:k + 1])[0]):.3f}" for m in gp_aux))
         for t, Ij in zip(TARGETS_HM, I_all[k]):
             mu = ems[t.metric].predict(allc[k:k + 1])[0]
             val = np.exp(mu) - t.eps if t.transform == "log" else mu
@@ -1448,6 +1479,8 @@ def main():
     ap.add_argument("--attributable-in-site-range", action="store_true",
                     help="with --literature: also require P(attributable | detected infection) within "
                          "MAL-ED's site range (V3_ATTRIBUTABLE_FRACTION_SITE_RANGES)")
+    ap.add_argument("--route-ranges", action="store_true",
+                    help="v4 --select: also require V4_ROUTE_RANGES (rotavirus at most 10%% waterborne)")
     ap.add_argument("--campaign", choices=sorted(CAMPAIGNS), default="v2",
                     help="grid, parameter box, targets and output folder (see module docstring)")
     args = ap.parse_args()
@@ -1464,11 +1497,15 @@ def main():
             # V4_BASE_OVERRIDES), illness-causing infections detectable at
             # least as long, detected incidence and P(attributable | detected)
             # inside MAL-ED's site ranges - plus adult : child carriage in its
-            # plausible range; the 3 best simulated points as well
+            # plausible range, and (from the wave-3 selection on) rotavirus
+            # mostly person-to-person (V4_ROUTE_RANGES)
             select_candidates(centrality_weight=args.centrality_weight, n_jobs=args.workers,
-                              n_simulated=3, refocus_from_wave=2, constraint=v3_physical_constraint,
+                              n_simulated=0 if args.route_ranges else 3, refocus_from_wave=2,
+                              constraint=v3_physical_constraint,
                               output_ranges={**V3_INCIDENCE_SITE_RANGES, **V4_CARRIAGE_RANGES},
-                              ratio_ranges=V3_ATTRIBUTABLE_FRACTION_SITE_RANGES)
+                              ratio_ranges=V3_ATTRIBUTABLE_FRACTION_SITE_RANGES,
+                              aux_ranges=V4_ROUTE_RANGES if args.route_ranges else None,
+                              suffix="_routes" if args.route_ranges else "")
         elif args.literature:
             # literature values held (V3_LITERATURE_FIXED), illness-causing
             # infections detectable at least as long, and the earlier best

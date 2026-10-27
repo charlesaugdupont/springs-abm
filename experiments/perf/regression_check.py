@@ -67,7 +67,7 @@ GOLDEN_PATH = os.path.join("experiments", "outputs", "perf", "golden.pt")
 _TMP_ROOT = os.path.join("experiments", "outputs", "perf", "_tmp")
 
 
-from experiments.legacy import LEGACY_V1_OVERRIDES, V2_OVERRIDES  # noqa: E402  (see experiments/legacy.py)
+from experiments.legacy import LEGACY_V1_OVERRIDES, V2_OVERRIDES, V3_OVERRIDES  # noqa: E402  (see experiments/legacy.py)
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +261,9 @@ def main():
     parser.add_argument("--v2", action="store_true",
                         help="Apply experiments.legacy.V2_OVERRIDES: reproduce the second-generation "
                              "model (the v2 calibration, as committed in 40fb731).")
+    parser.add_argument("--v3", action="store_true",
+                        help="Apply experiments.legacy.V3_OVERRIDES: reproduce the third-generation "
+                             "model (the v3 calibration, as committed in ff3e83b).")
     parser.add_argument("--set", action="append", default=[], metavar="PATH=VALUE",
                         help="Extra config override (orchestrator dot-path; VALUE parsed as JSON, "
                              "else taken as a string), applied after --legacy-v1. Repeatable. E.g. "
@@ -270,6 +273,8 @@ def main():
     overrides = dict(LEGACY_V1_OVERRIDES) if args.legacy_v1 else {}
     if args.v2:
         overrides.update(V2_OVERRIDES)
+    if args.v3:
+        overrides.update(V3_OVERRIDES)
     for item in args.set:
         path, _, raw = item.partition("=")
         try:

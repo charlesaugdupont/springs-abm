@@ -121,7 +121,7 @@ DEFAULT_GRID_ID = "7d9ce7c720a6"
 # Each lower bound is 0 where turning the route OFF is a meaningful hypothesis
 # (matching how run_calibration.py's campylobacter bounds were set) -
 # household is the exception: its floor is the RURAL household secondary
-# attack rate from Korpe et al. 2018 (7.8% over 8 weeks => p ~ 0.004), because
+# attack rate from Korpe et al. 2019 (7.8% over 8 weeks => p ~ 0.004), because
 # a measured household route is not a hypothesis this model should be free to
 # discard, and its ceiling is the urban SAR (35.8% => p ~ 0.021).
 #

@@ -603,7 +603,7 @@ REGISTRY: list[ParamMeta] = [
         ui_min=0.0, ui_max=0.08,
         rationale="Daily chance a susceptible household member is infected when someone in their "
                   "household is infectious. A main route for this pathogen. Anchored on measured "
-                  "household secondary attack rates (Korpe et al. 2018: 35.8% urban, 7.8% rural "
+                  "household secondary attack rates (Korpe et al. 2019: 35.8% urban, 7.8% rural "
                   "over 8 weeks) and history-matched against MAL-ED incidence and a 30-60% "
                   "household share of infections.",
     ),
@@ -614,7 +614,7 @@ REGISTRY: list[ParamMeta] = [
         rationale="Per-contact chance of infection from each co-located infectious person outside "
                   "the household - schools, worship, water points, social visits. Carries the "
                   "neighbouring-children transmission signal found in rural sub-Saharan Africa "
-                  "(Krumkamp et al. 2020). History-matched with the other transmission parameters.",
+                  "(Krumkamp et al. 2021). History-matched with the other transmission parameters.",
     ),
     ParamMeta(
         path="pathogens[crypto].dose_response_r", label="Dose-response rate (r)",

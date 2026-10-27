@@ -136,3 +136,45 @@ V2_OVERRIDES["steering_parameters.max_contacts_per_visit"] = None
 # shown byte-identical (before the v3 defaults were adopted).
 for _k, _v in V2_OVERRIDES.items():
     LEGACY_V1_OVERRIDES.setdefault(_k, _v)
+
+#: The third-generation model: campaign v3 (2026-10-23, commit ff3e83b), the
+#: settlement grid scored through the MAL-ED observation layer. Campaign v4
+#: replaced these defaults; pinning them keeps the v3 campaign, the
+#: adult-transmission pilots (which held every non-pilot parameter at v3's
+#: values) and regression_check --v3 reproducible byte for byte. Only
+#: parameters v4 changed are listed; everything else is still at v3's value.
+V3_OVERRIDES: dict = {
+    "pathogens[rota].infection_prob_mean": 0.0405,
+    "pathogens[rota].water_dose_scale": 0.00437,
+    "pathogens[rota].importation_rate": 0.000357,
+    "pathogens[rota].symptomatic_fraction": 0.467,
+    "pathogens[rota].infant_susceptibility_at_birth": 0.32,
+    "pathogens[rota].infant_susceptibility_ramp_months": 7.96,
+    "pathogens[rota].detectable_shedding_days_symptomatic": 5.84,
+    "pathogens[rota].detectable_shedding_days_asymptomatic": 3.75,
+    "pathogens[campy].human_animal_interaction_rate": 0.00117,
+    "pathogens[campy].fecal_oral_prob": 0.00174,
+    "pathogens[campy].food_borne_prob": 0.000427,
+    "pathogens[campy].symptomatic_fraction": 0.344,
+    "pathogens[campy].infant_susceptibility_at_birth": 0.402,
+    "pathogens[campy].infant_susceptibility_ramp_months": 5.06,
+    "pathogens[campy].detectable_shedding_days_symptomatic": 14.1,
+    "pathogens[campy].detectable_shedding_days_asymptomatic": 39.5,
+    "pathogens[crypto].household_transmission_prob": 0.144,
+    "pathogens[crypto].community_infection_prob": 0.00271,
+    "pathogens[crypto].water_dose_scale": 0.408,
+    "pathogens[crypto].zoonotic_interaction_rate": 0.0236,
+    "pathogens[crypto].symptomatic_fraction": 0.132,
+    "pathogens[crypto].infant_susceptibility_at_birth": 0.0127,
+    "pathogens[crypto].infant_susceptibility_ramp_months": 15.3,
+    "pathogens[crypto].detectable_shedding_days_symptomatic": 11.4,
+    "pathogens[crypto].detectable_shedding_days_asymptomatic": 7.81,
+    "steering_parameters.household_exposure_sdlog": 0.906,
+    # everyone in a cell is a contact
+    "steering_parameters.max_contacts_per_visit": None,
+}
+for _p in ("rota", "campy", "crypto"):
+    V3_OVERRIDES[f"pathogens[{_p}].asymptomatic_relative_infectiousness"] = 0.201
+    # adults at the children's floor, with children's infectious period
+    V3_OVERRIDES[f"pathogens[{_p}].adult_relative_susceptibility"] = None
+    V3_OVERRIDES[f"pathogens[{_p}].adult_infectious_duration_scale"] = 1.0

@@ -14,15 +14,17 @@ reports, next to the MAL-ED values:
   * route mixes, the imported fraction, carriage prevalence, adult share of
     infections and the care-seeking/economic outputs
 
-With --campaign v3 (the default) it runs the settlement grid (11,476 agents,
-GHS-POP households) and adds the MAL-ED observation layer, so the detected
-age curve, age at first detection and P(attributable | detected infection)
-are compared like for like with MAL-ED, next to the true values; --campaign
-v2 runs the original grid with experiments.legacy.V2_OVERRIDES (4000 agents).
+With --campaign v4 (the default) or v3 it runs the settlement grid (11,476
+agents, GHS-POP households) and adds the MAL-ED observation layer, so the
+detected age curve, age at first detection and P(attributable | detected
+infection) are compared like for like with MAL-ED, next to the true values,
+and reports adult vs young-child carriage; v3 runs with
+experiments.legacy.V3_OVERRIDES. --campaign v2 runs the original grid with
+experiments.legacy.V2_OVERRIDES (4000 agents).
 
 Usage:
     python -m experiments.calibration.validate_calibration --reps 8 --workers 8
-    python -m experiments.calibration.validate_calibration --campaign v2 --reps 8
+    python -m experiments.calibration.validate_calibration --campaign v3 --reps 8
 """
 from __future__ import annotations
 
@@ -35,7 +37,7 @@ import pandas as pd
 
 from abm.constants import AgentPropertyKeys
 from abm.evidence import maled
-from experiments.legacy import V2_OVERRIDES
+from experiments.legacy import V2_OVERRIDES, V3_OVERRIDES
 from experiments.metrics import calibration_metrics, care_seeking_metrics, wellbeing_metrics
 from experiments.observation import observe
 from experiments.orchestrator import SweepSpec, run_sweep
@@ -48,10 +50,11 @@ CAMPAIGNS = {
 GRID_ID, OUT_DIR = CAMPAIGNS["v2"][0], CAMPAIGNS["v2"][3]
 
 
-def _v3_campaign():
-    from experiments.calibration.history_matching import V3_AGENTS, V3_BASE_OVERRIDES, V3_GRID_ID
-    return (V3_GRID_ID, V3_AGENTS, dict(V3_BASE_OVERRIDES),
-            os.path.join("experiments", "outputs", "calibration_validation_v3"))
+def _settlement_campaign(name: str):
+    """(grid, agents, base overrides, output folder) for v3 or v4."""
+    from experiments.calibration.history_matching import V3_AGENTS, V3_BASE_OVERRIDES, V3_GRID_ID, V4_BASE_OVERRIDES
+    base = {**V3_OVERRIDES, **V3_BASE_OVERRIDES} if name == "v3" else dict(V4_BASE_OVERRIDES)
+    return (V3_GRID_ID, V3_AGENTS, base, os.path.join("experiments", "outputs", f"calibration_validation_{name}"))
 BANDS = [(0, 3), (3, 6), (6, 9), (9, 12), (12, 15), (15, 18), (18, 21), (21, 24)]
 
 
@@ -83,7 +86,7 @@ def validation_metrics_observed(model) -> dict:
 
 
 def run(reps: int, steps: int, agents: int, n_cores: int | None, campaign: str = "v2") -> pd.DataFrame:
-    grid, _, base, out_dir = CAMPAIGNS[campaign] if campaign in CAMPAIGNS else _v3_campaign()
+    grid, _, base, out_dir = CAMPAIGNS[campaign] if campaign in CAMPAIGNS else _settlement_campaign(campaign)
     spec = SweepSpec(name="validation", grid_id=grid, params=[],
                      metrics_fn=validation_metrics if campaign == "v2" else validation_metrics_observed,
                      reps=reps, steps=steps, agents=agents, output_dir=out_dir, n_cores=n_cores,
@@ -140,7 +143,17 @@ def report(df: pd.DataFrame, out_dir: str = OUT_DIR) -> dict:
             adult_rate = u5_rate * n_u5 * share / (1 - share) / (n_all - n_u5)
             lines.append(f"   infections per person-year: under-5 {u5_rate:.2f}, everyone older {adult_rate:.2f} "
                          f"({adult_rate / u5_rate:.1f}x)")
-        routes = {k: m[k] for k in m.index if k.startswith(f"{p}_") and k.endswith("_fraction_post_burnin")}
+        ratio = m.get(f"{p}_adult_to_child_carriage_ratio_post_burnin", np.nan)
+        if np.isfinite(ratio):
+            from experiments.calibration.history_matching import ADULT_CARRIAGE_TARGETS
+            tgt = ADULT_CARRIAGE_TARGETS.get(f"{p}_adult_to_child_carriage_ratio_post_burnin", (np.nan,))[0]
+            lines.append(f"   carriage (TRUE): adults {m.get(f'{p}_adult_prevalence_post_burnin', np.nan):.4f}, well "
+                         f"children 12-59 m {m.get(f'{p}_child_carriage_12_59m_post_burnin', np.nan):.4f}; ratio "
+                         f"{ratio:.2f} (sd {sd.get(f'{p}_adult_to_child_carriage_ratio_post_burnin', np.nan):.2f}; "
+                         f"target {tgt}); adults carry {m.get(f'{p}_adult_infectious_weight_share_post_burnin', np.nan):.2f} "
+                         f"of the infectiousness")
+        routes = {k: m[k] for k in m.index if k.startswith(f"{p}_") and k.endswith("_fraction_post_burnin")
+                  and "carriage" not in k}
         lines.append("   routes: " + ", ".join(f"{k[len(p)+1:-len('_fraction_post_burnin')]} {v:.2f}" for k, v in routes.items()))
         out[p] = {"model_curve": mod, "maled_curve": obs, "shape_r": r}
     lines.append(f"\ncare-seeking rate {m['episode_care_seeking_rate']:.3f} (DHS 0.692, 95% CI 0.656-0.728); "
@@ -161,10 +174,10 @@ def main():
     ap.add_argument("--steps", type=int, default=1826)
     ap.add_argument("--agents", type=int, default=None, help="default: the campaign's (v2 4000, v3 11,476)")
     ap.add_argument("--workers", type=int, default=None)
-    ap.add_argument("--campaign", choices=("v2", "v3"), default="v3")
+    ap.add_argument("--campaign", choices=("v2", "v3", "v4"), default="v4")
     ap.add_argument("--report-only", action="store_true")
     args = ap.parse_args()
-    _, agents, _, out_dir = CAMPAIGNS[args.campaign] if args.campaign in CAMPAIGNS else _v3_campaign()
+    _, agents, _, out_dir = CAMPAIGNS[args.campaign] if args.campaign in CAMPAIGNS else _settlement_campaign(args.campaign)
     if args.report_only:
         df = pd.read_parquet(os.path.join(out_dir, "validation", "results.parquet"))
     else:

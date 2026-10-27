@@ -159,12 +159,14 @@ def test_relative_susceptibility_children_adults_and_infants(make_model):
     assert s[1].item() == pytest.approx(math.exp(-k))                          # one infection
     assert s[2].item() == pytest.approx(f)                                     # plateau
     assert s[3].item() == pytest.approx(cfg.infant_susceptibility_at_birth)    # newborn
-    assert s[4].item() == pytest.approx(f)                                     # adult
+    adult_s = cfg.adult_relative_susceptibility if cfg.adult_relative_susceptibility is not None else f
+    assert s[4].item() == pytest.approx(adult_s)                               # adult (own value since v4)
 
 
 def test_original_susceptibility_is_recovered_with_features_off(make_model):
     model = make_model(steps=1, agents=600, run=False,
                        overrides={"pathogens[rota].immunity_floor": None,
+                                  "pathogens[rota].adult_relative_susceptibility": None,
                                   "pathogens[rota].infant_susceptibility_ramp_months": 0.0,
                                   "steering_parameters.household_exposure_sdlog": 0.0})
     rota = next(p for p in model.pathogens if p.name == "rota")
