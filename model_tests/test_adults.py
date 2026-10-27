@@ -183,3 +183,23 @@ def test_adult_pilot_cap_campaign_shares_the_cap():
         inputs = c.emulator_inputs(m)
         assert inputs[0] == "steering_parameters.max_contacts_per_visit"
         assert all(q.startswith(f"pathogens[{p}].") for q in inputs[1:])
+
+
+def test_v4_campaign_is_complete_and_valid():
+    import numpy as np
+    from config import SVEIRCONFIG
+    from experiments.calibration import history_matching as hm
+    from experiments.orchestrator import set_param
+    c = hm.CAMPAIGNS["v4"]
+    assert len(c.params) == 29 and len(c.targets) == 31
+    assert c.base_overrides["steering_parameters.max_contacts_per_visit"] == 3.5
+    assert all(c.base_overrides[k] == v for k, v in hm.V3_LITERATURE_FIXED.items())
+    assert not set(hm.V3_LITERATURE_FIXED) & set(c.params)
+    for t in c.targets:
+        assert set(c.emulator_inputs(t.metric)) <= set(c.params), t.metric
+    cfg = SVEIRCONFIG.model_copy(deep=True)
+    for k, v in c.base_overrides.items():
+        set_param(cfg, k, v)
+    for k, (lo, hi, _) in c.params.items():
+        for part in k.split("|"):
+            set_param(cfg, part, float(np.sqrt(lo * hi)) if lo > 0 else hi / 2)

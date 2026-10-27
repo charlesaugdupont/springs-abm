@@ -65,6 +65,10 @@ grid, population, parameter box, targets and output folder:
       (steering_parameters.max_contacts_per_visit), shared by both
       pathogens; output in experiments/outputs/adult_pilot_cap. See
       ADULT_PILOT_CAP_PARAMS.
+  v4  v3 recalibrated with the contact cap (3.5) and adults' own
+      susceptibility, against v3's targets plus the carriage ratios, with
+      v3's final selection rules from the start. Output in
+      experiments/outputs/history_matching_v4. See V4_PARAMS.
 
 A parameter path may tie several config fields to one value ("a|b|c"): it is
 one dimension of the box, and every field is set to it.
@@ -606,6 +610,112 @@ def adult_pilot_cap_emulator_inputs(metric: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Campaign v4: v3 with the contact cap and adults' own susceptibility
+# ---------------------------------------------------------------------------
+
+#: The adult-transmission pilots (experiments/outputs/adult_pilot,
+#: adult_pilot_cap; adult_pilot_report.py) found the v3 adult epidemic to be
+#: a crowd artifact, removed by capping close contacts per place visited, and
+#: verified 4 of 4 points fitting every rotavirus and Cryptosporidium target
+#: plus the adult : child carriage ratios (verify_both: max I 2.5-2.9 on 3
+#: fresh seeds, caps 3.1-19.7). v4 recalibrates everything with that
+#: structure. Held at evidence values, since the targets leave them flat:
+#:  * max_contacts_per_visit 3.5: 7.2 contacts a day, 48% outside the
+#:    household (le Polain de Waroux et al. 2018) - the cap applies to the one
+#:    place an agent goes in the day phase. Fit was indifferent over 3-30.
+#:  * Cryptosporidium adult_infectious_duration_scale 0.65: Korpe et al. 2019
+#:    (0.41, >2 vs <2 years) and 2023 (0.36 at 6-17 years, 0.81 adults),
+#:    weighted by Ghana's age structure; admissible 0.42-0.84 in the pilots.
+#:  * lambda (symptomatic_reduction_per_prior_infection) at
+#:    V3_LITERATURE_FIXED from the start, as in v3's final selection.
+V4_BASE_OVERRIDES = {
+    **V3_BASE_OVERRIDES,
+    **V3_LITERATURE_FIXED,
+    "steering_parameters.max_contacts_per_visit": 3.5,
+    "pathogens[crypto].adult_infectious_duration_scale": 0.65,
+}
+
+#: 29 dimensions. Person-to-person transmission and adult susceptibility from
+#: the pilots (at a cap of 3.5 their emulators admitted rotavirus ipm
+#: 0.43-0.99 and adults 0.13-0.26, Cryptosporidium household 0.19-0.83 and
+#: community 0.001-0.094); infant ramps, importation, water, zoonotic and the
+#: shared parameters over v3's full box, since they trade off against
+#: transmission; illness fractions at v3's admissible range (2.5-97.5%,
+#: nroy_marginals_lit_sites_attr.csv) widened by ~10%; Campylobacter - whose
+#: routes the cap and the adult changes do not touch - likewise. Cryptosporidium's
+#: infant ramp may now run to 30 months: v3 and the pilots left its second-year
+#: rise too weak (detected second : first year 1.1-1.3 vs MAL-ED 2.3).
+#:
+#: Widened after wave 2 (verify_v4: one candidate, e0, met the adoption rule -
+#: max I 2.96 on 8 seeds - but the emulator-optimal points and the
+#: admissible set pressed against the box: rotavirus ipm (a quarter of the
+#: admissible set within 0.10-0.12 of the 0.1 bound), rotavirus infant ramp
+#: (11.8 of 12 months), Cryptosporidium infant ramp (28 of 30), and the lower
+#: bounds of Cryptosporidium household transmission, water dose and zoonotic
+#: rate and of Campylobacter's infant susceptibility at birth; a stricter
+#: selection, <= 5% imported with the household share in its band, reached
+#: rho = 1, its physical bound). Waves 1-2 lie inside the widened box, so
+#: they remain training data; wave 3 is the planned last wave. Bounds:
+#: rotavirus ipm 0.1 -> 0.03, ramp 12 -> 18 months; Cryptosporidium ramp
+#: 30 -> 36 months, household 0.02 -> 0.005, water 0.01 -> 0.002, zoonotic
+#: 0.001 -> 0.0002; Campylobacter infant susceptibility at birth 0.05 -> 0.
+#: Rotavirus importation keeps its 1e-3 ceiling: the imported-fraction cap
+#: (MAX_IMPORTED_FRACTION) is what limits it, and rho cannot exceed 1.
+V4_PARAMS: dict[str, tuple[float, float, str]] = {
+    "pathogens[rota].infection_prob_mean":                        (0.03,    1.0,   "log"),
+    "pathogens[rota].adult_relative_susceptibility":              (0.05,    0.26,  "log"),
+    "pathogens[rota].water_dose_scale":                           (0.002,   0.3,   "log"),
+    "pathogens[rota].importation_rate":                           (1e-5,    1e-3,  "log"),
+    "pathogens[rota].symptomatic_fraction":                       (0.2,     0.9,   "lin"),
+    "pathogens[rota].infant_susceptibility_at_birth":             (0.05,    1.0,   "lin"),
+    "pathogens[rota].infant_susceptibility_ramp_months":          (3.0,     18.0,  "lin"),
+    "pathogens[rota].detectable_shedding_days_symptomatic":       (3.0,     21.0,  "log"),
+    "pathogens[rota].detectable_shedding_days_asymptomatic":      (0.5,     14.0,  "log"),
+    "pathogens[campy].human_animal_interaction_rate":             (0.0006,  0.015, "log"),
+    "pathogens[campy].fecal_oral_prob":                           (0.00015, 0.01,  "log"),
+    "pathogens[campy].food_borne_prob":                           (0.0003,  0.01,  "log"),
+    "pathogens[campy].symptomatic_fraction":                      (0.03,    0.4,   "log"),
+    "pathogens[campy].infant_susceptibility_at_birth":            (0.0,     1.0,   "lin"),
+    "pathogens[campy].infant_susceptibility_ramp_months":         (3.0,     14.0,  "lin"),
+    "pathogens[campy].detectable_shedding_days_symptomatic":      (3.0,     60.0,  "log"),
+    "pathogens[campy].detectable_shedding_days_asymptomatic":     (5.0,     60.0,  "log"),
+    "pathogens[crypto].household_transmission_prob":              (0.005,   1.0,   "log"),
+    "pathogens[crypto].community_infection_prob":                 (0.0005,  0.15,  "log"),
+    "pathogens[crypto].adult_relative_susceptibility":            (0.05,    0.31,  "log"),
+    "pathogens[crypto].water_dose_scale":                         (0.002,   1.0,   "log"),
+    "pathogens[crypto].zoonotic_interaction_rate":                (0.0002,  0.05,  "log"),
+    "pathogens[crypto].symptomatic_fraction":                     (0.04,    0.4,   "log"),
+    "pathogens[crypto].infant_susceptibility_at_birth":           (0.0,     0.4,   "lin"),
+    "pathogens[crypto].infant_susceptibility_ramp_months":        (6.0,     36.0,  "lin"),
+    "pathogens[crypto].detectable_shedding_days_symptomatic":     (5.0,     30.0,  "log"),
+    "pathogens[crypto].detectable_shedding_days_asymptomatic":    (3.0,     30.0,  "log"),
+    _RHO:                                                         (0.1,     1.0,   "log"),
+    "steering_parameters.household_exposure_sdlog":               (0.0,     1.5,   "lin"),
+}
+
+#: Plausible adult : young-child carriage (ADULT_CARRIAGE_TARGETS): rotavirus
+#: 0.4-1.1 (Endara et al. 2007; Lopman et al. 2013), Cryptosporidium 0.2-1.0
+#: (Eibach, Krumkamp et al. 2021: 0.46, 95% CI 0.20-1.08). Required in the
+#: final selection, as the MAL-ED site ranges are.
+V4_CARRIAGE_RANGES = {
+    "rota_adult_to_child_carriage_ratio_post_burnin": (0.4, 1.1),
+    "crypto_adult_to_child_carriage_ratio_post_burnin": (0.2, 1.0),
+}
+
+
+def build_targets_v4() -> list[HMTarget]:
+    """v3's 29 targets and the two adult : young-child carriage ratios."""
+    return build_targets_v3() + [t for t in build_targets_adult_pilot() if t.metric in ADULT_CARRIAGE_TARGETS]
+
+
+def v4_emulator_inputs(metric: str) -> list[str]:
+    if metric in V3_ALL_INPUT_TARGETS:
+        return list(V4_PARAMS)
+    p = metric.split("_")[0]
+    return [q for q in V4_PARAMS if q.startswith(f"pathogens[{p}].") and "|" not in q] + V3_SHARED_PARAMS
+
+
+# ---------------------------------------------------------------------------
 # Campaign registry
 # ---------------------------------------------------------------------------
 
@@ -655,6 +765,9 @@ CAMPAIGNS: dict[str, Campaign] = {
                                 os.path.join("experiments", "outputs", "adult_pilot_cap"), ADULT_PILOT_CAP_PARAMS,
                                 V3_BASE_OVERRIDES, build_targets_adult_pilot(), hm_metrics_v3,
                                 checkpoint_every=8, emulator_inputs=adult_pilot_cap_emulator_inputs),
+    "v4": Campaign("v4", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_v4"),
+                   V4_PARAMS, V4_BASE_OVERRIDES, build_targets_v4(), hm_metrics_v3,
+                   checkpoint_every=16, emulator_inputs=v4_emulator_inputs, core_design=(2, 0.5)),
 }
 CAMPAIGN = "v2"
 CHECKPOINT_EVERY: int | None = None
@@ -1346,6 +1459,16 @@ def main():
     if args.select:
         if args.campaign == "v2":
             select_candidates(centrality_weight=args.centrality_weight)
+        elif args.campaign == "v4":
+            # v3's final rules from the start: literature lambda (in
+            # V4_BASE_OVERRIDES), illness-causing infections detectable at
+            # least as long, detected incidence and P(attributable | detected)
+            # inside MAL-ED's site ranges - plus adult : child carriage in its
+            # plausible range; the 3 best simulated points as well
+            select_candidates(centrality_weight=args.centrality_weight, n_jobs=args.workers,
+                              n_simulated=3, refocus_from_wave=2, constraint=v3_physical_constraint,
+                              output_ranges={**V3_INCIDENCE_SITE_RANGES, **V4_CARRIAGE_RANGES},
+                              ratio_ranges=V3_ATTRIBUTABLE_FRACTION_SITE_RANGES)
         elif args.literature:
             # literature values held (V3_LITERATURE_FIXED), illness-causing
             # infections detectable at least as long, and the earlier best
