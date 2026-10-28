@@ -1372,10 +1372,12 @@ class GridCreationParams(BaseModel):
     # Where households live. "uniform": each household in a different,
     # uniformly drawn residence cell (original model) - which spreads the
     # town evenly over the whole domain, empty floodplain included.
-    # "population": cells drawn, with replacement, in proportion to the
-    # grid's GHS-POP population layer (grids/<id>/population.npz, made by
-    # scripts/add_population_layer.py) for population_epoch, restricted to
-    # residence cells; dense cells hold several households.
+    # "population": households allocated to residence cells in proportion to
+    # the grid's GHS-POP population layer (grids/<id>/population.npz, made by
+    # scripts/add_population_layer.py) for population_epoch - each cell gets
+    # the integer part of its expected number of households, and the rest go to
+    # distinct cells drawn in proportion to the fractional parts
+    # (EnvironmentFactory); dense cells hold several households.
     household_placement: str = Field(
         "population",
         description="'population' (default since campaign v3: residence cells allocated households "
