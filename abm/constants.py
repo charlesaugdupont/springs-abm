@@ -111,6 +111,18 @@ class AgentPropertyKeys:
     OWNS_POULTRY = "owns_poultry"
     OWNS_RUMINANT = "owns_ruminant"
 
+    # Household economy in cedis (EconomyConfig.model == "cedi" only; absent
+    # otherwise). Household-level values are broadcast to every member, like
+    # WEALTH. Money is 2026 GH¢ per day.
+    ECON_AGE_GROUP = "econ_age_group"            # 0 under 5, 1 aged 5-14, 2 aged 15-64, 3 aged 65+
+    WEALTH_QUINTILE = "wealth_quintile"          # 0 (lowest) .. 4 (highest), per household
+    EARNING_POTENTIAL = "earning_potential"      # GH¢/day at full health; 0 for non-earners
+    CONSUMPTION_TARGET = "consumption_target"    # household's GH¢/day consumption target
+    CASH = "cash"                                # household's cash, GH¢
+    INSURED = "insured"                          # household holds NHIS cover
+    PROVIDER = "provider"                        # usual provider: 0 public primary, 1 public hospital, 2 private, 3 drug seller
+    WORK_LOST = "work_lost"                      # share of today's working time lost (reset daily)
+
     # Dynamic keys for pathogens
     @staticmethod
     def status(pathogen_name: str) -> str:

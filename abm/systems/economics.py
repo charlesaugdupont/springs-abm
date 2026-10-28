@@ -1,4 +1,5 @@
 # abm/systems/economics.py
+import numpy as np
 import torch
 
 from .system import System
@@ -20,9 +21,33 @@ class EconomicSystem(System):
     every member. This reflects money being shared within a household, and
     avoids children — who have no income of their own — silently
     accumulating individual debt that no one can act on.
+
+    With EconomyConfig.model == "cedi" the household economy is in 2026 Ghana
+    cedis instead (_update_cedi; config.EconomyConfig): earners aged 15+ earn
+    their earning potential times their health, less any working time lost
+    to a care visit, times the household's persistent income shock (an AR(1)
+    on the log scale, from the economy's own run-time random stream, so the
+    epidemic's draws are unaffected); the household consumes its target out of income and cash,
+    with cash clipped to [0, buffer]; WEALTH becomes the care-seeking wealth
+    term W. Daily summaries (poverty, cash, by quintile) are kept in
+    `daily_records` for experiments.metrics.economy_metrics. The legacy path
+    below is unchanged.
     """
 
+    def __init__(self, config):
+        super().__init__(config)
+        self._cedi = getattr(config, "economy", None) is not None and config.economy.model == "cedi"
+        #: one dict of per-quintile arrays per day (cedi mode only)
+        self.daily_records: list[dict] = []
+        self._hh_index = None
+        self._rep = None
+        self._shock = None        # household log income shocks (cedi mode)
+        self._shock_rng = None
+
     def update(self, agent_state: AgentState, **kwargs):
+        if self._cedi:
+            self._update_cedi(agent_state)
+            return
         params = self.config.steering_parameters
         is_adult = ~agent_state.ndata[AgentPropertyKeys.IS_CHILD]
 
@@ -70,3 +95,80 @@ class EconomicSystem(System):
 
         # --- 3. Broadcast the updated pooled wealth back to every member ---
         agent_state.ndata[AgentPropertyKeys.WEALTH] = new_household_wealth[hh_index]
+
+    # ------------------------------------------------------------------
+    # Cedi economy
+    # ------------------------------------------------------------------
+
+    def _households(self, agent_state: AgentState):
+        """(agent -> household index, one representative agent per household,
+        household sizes); household membership never changes within a run."""
+        if self._hh_index is None:
+            hh = agent_state.ndata[AgentPropertyKeys.HOUSEHOLD_ID]
+            _, inv = torch.unique(hh, return_inverse=True)
+            n = int(inv.max().item()) + 1
+            rep = torch.full((n,), hh.numel(), dtype=torch.long, device=hh.device)
+            rep.scatter_reduce_(0, inv, torch.arange(hh.numel(), device=hh.device), reduce="amin")
+            self._hh_index, self._rep = inv, rep
+            self._size = torch.zeros(n, device=hh.device).index_add_(0, inv, torch.ones(hh.numel(), device=hh.device))
+        return self._hh_index, self._rep, self._size
+
+    def _income_shock(self, n_households: int):
+        """Today's multiplier exp(e_h - sd^2/2) on each household's earnings, mean 1;
+        e_h is a stationary AR(1) with SD income_shock_sd and half-life
+        income_shock_halflife_days. None when the SD is 0 (no draws)."""
+        eco = self.config.economy
+        sd = float(eco.income_shock_sd)
+        if sd <= 0.0:
+            return None
+        if self._shock is None:
+            self._shock_rng = np.random.default_rng(int(self.config.seed) + int(eco.rng_seed_offset) + 1)
+            self._shock = self._shock_rng.normal(0.0, sd, n_households)
+        else:
+            rho = 0.5 ** (1.0 / float(eco.income_shock_halflife_days))
+            self._shock = rho * self._shock + np.sqrt(1.0 - rho * rho) * sd * self._shock_rng.standard_normal(n_households)
+        return torch.as_tensor(np.exp(self._shock - 0.5 * sd * sd), dtype=torch.float32)
+
+    def _update_cedi(self, agent_state: AgentState):
+        from abm.economy.cedi import N_QUINTILES, wealth_term
+        K = AgentPropertyKeys
+        eco = self.config.economy
+        nd = agent_state.ndata
+        inv, rep, size = self._households(agent_state)
+
+        earn = nd[K.EARNING_POTENTIAL] * (1.0 - nd[K.WORK_LOST])
+        if self.config.steering_parameters.health_based_income:
+            earn = earn * nd[K.HEALTH]
+        income = torch.zeros(rep.numel(), device=earn.device).index_add_(0, inv, earn)
+        shock = self._income_shock(rep.numel())
+        if shock is not None:
+            income = income * shock.to(income.device)
+
+        cash = nd[K.CASH][rep]
+        target = nd[K.CONSUMPTION_TARGET][rep]
+        new_cash = torch.minimum(torch.clamp(cash + income - target, min=0.0), float(eco.buffer_days) * target)
+        consumption = cash + income - new_cash
+
+        nd[K.CASH] = new_cash[inv]
+        nd[K.WEALTH] = wealth_term(new_cash, target, eco.wealth_scale_days)[inv]
+        nd[K.WORK_LOST] = torch.zeros_like(nd[K.WORK_LOST])
+
+        # --- daily summary, by quintile (population-weighted where per person) ---
+        q = nd[K.WEALTH_QUINTILE][rep]
+        per_capita = consumption / size
+
+        def by_q(values):
+            return torch.zeros(N_QUINTILES, dtype=torch.float64).index_add_(0, q.cpu(), values.double().cpu())
+
+        self.daily_records.append({
+            "households": by_q(torch.ones_like(size)),
+            "persons": by_q(size),
+            "poor_persons": by_q(size * (per_capita < eco.poverty_line_daily)),
+            "extreme_poor_persons": by_q(size * (per_capita < eco.extreme_poverty_line_daily)),
+            "below_target_households": by_q((consumption < target * (1.0 - 1e-6)).float()),
+            "zero_cash_households": by_q((new_cash <= 0.0).float()),
+            "cash": by_q(new_cash),
+            "cash_days": by_q(new_cash / torch.clamp(target, min=1e-9)),
+            "w": by_q(wealth_term(new_cash, target, eco.wealth_scale_days)),
+            "consumption_per_capita_x_persons": by_q(per_capita * size),
+        })

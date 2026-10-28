@@ -136,6 +136,71 @@ def care_seeking_metrics(model) -> dict:
     }
 
 
+def economy_metrics(model, burn_in_days: int | None = None) -> dict:
+    """The cedi economy's outputs (EconomyConfig.model == "cedi"; {} otherwise),
+    averaged over the days after `burn_in_days` (DEFAULT_BURN_IN_DAYS when None).
+    Keys start with "econ_"; "_q1".."_q5" are DHS wealth quintiles, lowest first.
+
+    * poverty: share of PERSONS whose household's consumption per person was
+      below the upper (extreme) line that day - per person, where GLSS's lines
+      are per adult equivalent, so this somewhat overstates GLSS-style poverty;
+    * cash: mean household cash (GH¢) and in days of the consumption target;
+      share of households with no cash, and below their consumption target;
+      mean wealth term W;
+    * care-seeking by quintile, per illness episode ending after the burn-in
+      (the DHS-comparable rate, as episode_care_seeking_rate); the share of
+      decisions in which the visit was unaffordable (a blocked household
+      decides again each day, so this overweights it) and the share of episodes
+      that ended without care after at least one unaffordable decision;
+    * consumption per person by quintile relative to its GLSS 7 level.
+    """
+    from abm.systems.economics import EconomicSystem
+    if getattr(model.config, "economy", None) is None or model.config.economy.model != "cedi":
+        return {}
+    b = DEFAULT_BURN_IN_DAYS if burn_in_days is None else int(burn_in_days)
+    eco = next(s for s in model.systems if isinstance(s, EconomicSystem))
+    care = next(s for s in model.systems if isinstance(s, CareSeekingSystem))
+    recs = eco.daily_records[b:]
+    out: dict = {}
+    if recs:
+        tot = {k: np.sum([r[k].numpy() for r in recs], axis=0) for k in recs[0]}
+        hh, per = tot["households"], tot["persons"]
+        div = lambda a, d: float(a.sum() / d.sum()) if d.sum() > 0 else float("nan")
+        out.update({
+            "econ_poverty_headcount": div(tot["poor_persons"], per),
+            "econ_extreme_poverty_headcount": div(tot["extreme_poor_persons"], per),
+            "econ_mean_cash_ghs": div(tot["cash"], hh),
+            "econ_mean_cash_days": div(tot["cash_days"], hh),
+            "econ_zero_cash_share": div(tot["zero_cash_households"], hh),
+            "econ_below_target_share": div(tot["below_target_households"], hh),
+            "econ_mean_wealth_term": div(tot["w"], hh),
+        })
+        c = model.config.economy.consumption_per_capita_daily
+        for q in range(5):
+            sl = slice(q, q + 1)
+            out[f"econ_poverty_headcount_q{q + 1}"] = div(tot["poor_persons"][sl], per[sl])
+            out[f"econ_zero_cash_share_q{q + 1}"] = div(tot["zero_cash_households"][sl], hh[sl])
+            out[f"econ_mean_wealth_term_q{q + 1}"] = div(tot["w"][sl], hh[sl])
+            out[f"econ_consumption_vs_glss_q{q + 1}"] = div(tot["consumption_per_capita_x_persons"][sl], per[sl]) / c[q]
+    crecs = care.daily_records[b:]
+    if crecs:
+        ended = np.sum([r["episodes_ended"] for r in crecs], axis=0)
+        with_care = np.sum([r["episodes_ended_with_care"] for r in crecs], axis=0)
+        dec = np.sum([r["decisions"] for r in crecs], axis=0)
+        cna = np.sum([r["could_not_afford"] for r in crecs], axis=0)
+        blocked = np.sum([r["episodes_ended_blocked"] for r in crecs], axis=0)
+        out["econ_blocked_episode_share"] = float(blocked.sum() / ended.sum()) if ended.sum() else float("nan")
+        out["econ_episode_care_seeking_rate"] = float(with_care.sum() / ended.sum()) if ended.sum() else float("nan")
+        out["econ_could_not_afford_rate"] = float(cna.sum() / dec.sum()) if dec.sum() else float("nan")
+        out["econ_episodes"] = int(ended.sum())
+        for q in range(5):
+            out[f"econ_care_seeking_rate_q{q + 1}"] = float(with_care[q] / ended[q]) if ended[q] else float("nan")
+            out[f"econ_could_not_afford_rate_q{q + 1}"] = float(cna[q] / dec[q]) if dec[q] else float("nan")
+            out[f"econ_blocked_episode_share_q{q + 1}"] = float(blocked[q] / ended[q]) if ended[q] else float("nan")
+            out[f"econ_episodes_q{q + 1}"] = int(ended[q])
+    return out
+
+
 def wellbeing_metrics(model) -> dict:
     """
     Wealth is a per-HOUSEHOLD pooled value (see EconomicSystem) duplicated

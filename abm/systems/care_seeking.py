@@ -103,6 +103,7 @@ Counters
       per-day decisions, not episodes.
 """
 
+import numpy as np
 import torch
 
 from .system import System
@@ -158,6 +159,11 @@ class CareSeekingSystem(System):
     def __init__(self, config, use_cpt: bool = True):
         super().__init__(config)
         self.use_cpt = use_cpt
+        # Household economy in cedis (EconomyConfig.model == "cedi"): real
+        # costs, cash-based affordability and wealth term, and per-quintile
+        # daily records (`daily_records`). The legacy path is unchanged.
+        self._cedi = getattr(config, "economy", None) is not None and config.economy.model == "cedi"
+        self.daily_records: list[dict] = []
         self.decisions_faced: int = 0
         self.care_sought: int = 0
         self.could_not_afford: int = 0
@@ -185,6 +191,7 @@ class CareSeekingSystem(System):
         self._was_sick_prev = None
         self._care_sought_this_episode = None
         self._treated_this_episode = None
+        self.daily_records = []
 
     @property
     def conditional_care_rate(self) -> float:
@@ -211,7 +218,11 @@ class CareSeekingSystem(System):
         child_severity = _max_active_severity(agent_state, pathogen_names)
         is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD]
 
-        self._track_episodes(child_severity, is_child)
+        if self._cedi:
+            self._track_episodes(child_severity, is_child,
+                                 quintile=agent_state.ndata[AgentPropertyKeys.WEALTH_QUINTILE])
+        else:
+            self._track_episodes(child_severity, is_child)
 
         candidate_mask = (
             (child_severity > 0.0)
@@ -256,7 +267,8 @@ class CareSeekingSystem(System):
     # Episode-level tracking (DHS-comparable metric)
     # ------------------------------------------------------------------
 
-    def _track_episodes(self, child_severity: torch.Tensor, is_child: torch.Tensor):
+    def _track_episodes(self, child_severity: torch.Tensor, is_child: torch.Tensor,
+                        quintile: torch.Tensor | None = None):
         """
         Maintains per-agent illness-episode bookkeeping for
         episode_care_seeking_rate. An episode runs from the first day
@@ -282,6 +294,25 @@ class CareSeekingSystem(System):
         resolved_mask = self._was_sick_prev & ~currently_sick
 
         self.total_episodes += int(onset_mask.sum().item())
+        if quintile is not None:
+            if getattr(self, "_blocked_this_episode", None) is None or self._blocked_this_episode.numel() != currently_sick.numel():
+                self._blocked_this_episode = torch.zeros_like(currently_sick)
+            # cedi mode: today's record, by household wealth quintile (decision
+            # counts are added to it by _parent_makes_decision_cedi)
+            from abm.economy.cedi import N_QUINTILES
+            q = quintile.long()
+            count = lambda m: torch.bincount(q[m], minlength=N_QUINTILES).tolist()
+            self.daily_records.append({
+                "episodes_started": count(onset_mask),
+                "episodes_ended": count(resolved_mask),
+                "episodes_ended_with_care": count(resolved_mask & self._care_sought_this_episode),
+                # ended without care after at least one unaffordable decision
+                "episodes_ended_blocked": count(resolved_mask & self._blocked_this_episode
+                                                & ~self._care_sought_this_episode),
+                "decisions": [0] * N_QUINTILES, "care_sought": [0] * N_QUINTILES,
+                "could_not_afford": [0] * N_QUINTILES,
+            })
+            self._blocked_this_episode[onset_mask] = False
         self._care_sought_this_episode[onset_mask] = False
         self._treated_this_episode[onset_mask] = False
         self.episodes_with_care_sought += int(
@@ -320,6 +351,9 @@ class CareSeekingSystem(System):
         parent_idx: torch.Tensor,
         child_idx: torch.Tensor,
     ):
+        if self._cedi:
+            self._parent_makes_decision_cedi(agent_state, parent_idx, child_idx)
+            return
         params = self.config.steering_parameters
 
         # Household-pooled wealth (see abm.utils.household) — not the
@@ -354,6 +388,62 @@ class CareSeekingSystem(System):
         else:
             self._apply_waiting_outcome(agent_state, parent_idx, child_idx, presenting_pathogen)
 
+    def _parent_makes_decision_cedi(
+        self,
+        agent_state: AgentState,
+        parent_idx: torch.Tensor,
+        child_idx: torch.Tensor,
+    ):
+        """The decision under the cedi economy (EconomyConfig): the out-of-pocket
+        cost of a visit to the household's usual provider (at a public facility,
+        by NHIS cover) must be payable from cash, and the CPT compares the wealth
+        term before and after paying it and losing that provider's share of the
+        parent's day of earnings. Otherwise exactly _parent_makes_decision."""
+        from abm.economy.cedi import visit_cost, wealth_term
+        K = AgentPropertyKeys
+        params = self.config.steering_parameters
+        eco = self.config.economy
+        nd = agent_state.ndata
+        q = int(nd[K.WEALTH_QUINTILE][parent_idx].item())
+        today = self.daily_records[-1]
+        today["decisions"][q] += 1
+
+        cash = float(nd[K.CASH][parent_idx].item())
+        target = float(nd[K.CONSUMPTION_TARGET][parent_idx].item())
+        parent_health = nd[K.HEALTH][parent_idx].item()
+        oop, day_fraction = visit_cost(nd, parent_idx, eco)
+        lost = float(nd[K.EARNING_POTENTIAL][parent_idx].item()) * day_fraction
+        if params.health_based_income:
+            lost *= parent_health
+
+        presenting_pathogen, child_severity = self._presenting_illness(agent_state, child_idx)
+        child_health = max(0.0, 1.0 - child_severity)
+
+        if cash < oop:
+            self.could_not_afford += 1
+            today["could_not_afford"][q] += 1
+            self._blocked_this_episode[child_idx] = True
+            self._apply_waiting_outcome(agent_state, parent_idx, child_idx, presenting_pathogen)
+            return
+
+        w = float(wealth_term(np.float64(cash), np.float64(target), eco.wealth_scale_days))
+        w_after = float(wealth_term(np.float64(cash - oop - lost), np.float64(target), eco.wealth_scale_days))
+        alpha = nd[K.ALPHA][parent_idx].item()
+        if self.use_cpt:
+            gamma = nd[K.GAMMA][parent_idx].item()
+            lam = nd[K.LAMBDA][parent_idx].item()
+            seek = self._evaluate_cpt(w, parent_health, child_health, alpha, gamma, lam, params, w_after=w_after)
+        else:
+            seek = self._evaluate_ev(w, parent_health, child_health, alpha, params, w_after=w_after)
+
+        if seek:
+            self.care_sought += 1
+            today["care_sought"][q] += 1
+            self._apply_treatment_outcome(agent_state, parent_idx, child_idx, oop_cost=oop,
+                                          lost_day_fraction=day_fraction)
+        else:
+            self._apply_waiting_outcome(agent_state, parent_idx, child_idx, presenting_pathogen)
+
     # ------------------------------------------------------------------
     # CPT evaluation
     # ------------------------------------------------------------------
@@ -362,7 +452,7 @@ class CareSeekingSystem(System):
         self,
         w: float, h_p: float, h_c: float,
         alpha: float, gamma: float, lam: float,
-        params,
+        params, w_after: float | None = None,
     ) -> bool:
         """
         Return True if CPT favours seeking care.
@@ -390,8 +480,11 @@ class CareSeekingSystem(System):
             probability) = 1 - w(worse's probability) - this "1 minus"
             form is only valid within a single domain, never across
             domains.
+
+        w_after: the wealth term after paying for the visit (cedi economy);
+        None = w - cost_of_care (legacy).
         """
-        w2 = w - params.cost_of_care
+        w2 = w - params.cost_of_care if w_after is None else w_after
 
         chw = params.child_health_weight
         ref_u = _utility(w, _h_eff(h_p, h_c, chw), alpha)
@@ -440,12 +533,12 @@ class CareSeekingSystem(System):
         self,
         w: float, h_p: float, h_c: float,
         alpha: float,
-        params,
+        params, w_after: float | None = None,
     ) -> bool:
         """
         Return True if plain expected utility favours seeking care.
         """
-        w2 = w - params.cost_of_care
+        w2 = w - params.cost_of_care if w_after is None else w_after
         chw = params.child_health_weight
 
         u_s1 = _utility(w2, _h_eff(h_p, _treated_child_health(h_c, params), chw), alpha)
@@ -471,6 +564,8 @@ class CareSeekingSystem(System):
         agent_state: AgentState,
         parent_idx: torch.Tensor,
         child_idx: torch.Tensor,
+        oop_cost: float | None = None,
+        lost_day_fraction: float = 0.0,
     ):
         """
         Deduct cost from the household's pooled wealth, log the visit, and
@@ -486,7 +581,15 @@ class CareSeekingSystem(System):
         """
         params = self.config.steering_parameters
 
-        HouseholdSystem.apply_household_wealth_delta(agent_state, parent_idx, -params.cost_of_care)
+        if oop_cost is None:
+            HouseholdSystem.apply_household_wealth_delta(agent_state, parent_idx, -params.cost_of_care)
+        else:
+            # cedi economy: pay out of pocket from cash; the parent loses part of the day
+            from abm.economy.cedi import add_household_cash
+            eco = self.config.economy
+            add_household_cash(agent_state, parent_idx, -oop_cost, eco.wealth_scale_days)
+            lost = agent_state.ndata[AgentPropertyKeys.WORK_LOST]
+            lost[parent_idx] = min(1.0, float(lost[parent_idx].item()) + float(lost_day_fraction))
         agent_state.ndata[AgentPropertyKeys.CARE_SEEKING_COUNT][parent_idx] += 1
         self._care_sought_this_episode[child_idx] = True
 

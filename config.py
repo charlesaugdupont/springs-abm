@@ -1659,6 +1659,229 @@ class SteeringParamsSVEIR(BaseModel):
                     "and fixed; see project history.",
     )
 
+
+class EconomyConfig(BaseModel):
+    """The household economy (docs/economy_design_proposal.md).
+
+    model="legacy" (default): the original dimensionless pooled wealth in [0, 1]
+    (SteeringParamsSVEIR.daily_income_rate, daily_cost_of_living, cost_of_care),
+    reproducing campaign v4 byte for byte. Nothing below is read.
+
+    model="cedi": money in 2026 Ghana cedis (GH¢) per household per day.
+      * Roles by age. Agents aged 5+ get an economic age group, 5-14, 15-64 or
+        65+, from the census shares below. The first member of every household
+        (its head, and the parent who decides on care) is aged 15+. Everyone aged
+        15+ earns. The epidemiology still treats every agent aged 5+ as one
+        "adult" group, so transmission is untouched.
+      * Wealth strata. Each household gets a fixed DHS wealth quintile (Eastern
+        Region's 2022 distribution across national quintiles), which sets its
+        earning level.
+      * Income. Earner i's full-health earning potential is y_i = ybar_q * f_h, with
+        f_h log-normal (mean 1, SD earning_spread_sdlog on the log scale), one draw
+        per household. ybar_q is set at initialisation so that quintile q's
+        households earn, in total, (1 + savings_rate) times the GLSS 7 per-capita
+        consumption of that quintile for every member. Daily income is
+        y_i * H_i (health; SteeringParamsSVEIR.health_based_income) * g_h(t), less
+        any working time lost to a care visit. g_h(t) = exp(e_h(t) - sd^2/2) is a
+        persistent household income shock: e_h follows a stationary AR(1) on the
+        log scale with SD income_shock_sd and half-life income_shock_halflife_days
+        (irregular informal and farm work, lost jobs and harvests). Without it
+        earnings never vary, every household fills its buffer and the economy is
+        inert (pilot, 2026-10-28).
+      * Spending. A household's consumption target is its full-health income
+        divided by (1 + savings_rate), so a quintile consumes GLSS 7's per-capita
+        level on average. Cash is a buffer: each day
+        cash <- clip(cash + income - target, 0, buffer_days * target). Below the
+        buffer the household saves; at the buffer it spends any excess; with no
+        cash it consumes what it earns, below target (poverty). No debt (decision
+        D5). Initial cash is uniform on [0, initial_buffer_fraction] of the buffer.
+      * Care. Each household has a usual provider for a child's diarrhoea -
+        public primary care, a public hospital, a private facility or a drug
+        seller (pharmacy, chemical or drug store, shop, market or drug peddler) -
+        drawn by quintile from where Ghanaian parents first sought care (DHS
+        2022). A visit costs that provider's out-of-pocket price (at a public
+        facility, by NHIS cover, drawn per household with insured_prob), payable
+        only from cash, plus the share of the parent's working day the visit takes
+        (GLSS 7 travel and waiting times), whose earnings the parent loses. The CPT decision is
+        unchanged, with its wealth term
+        W = clip(cash / (wealth_scale_days * target), 0, 1) - a month of needs is
+        "full" wealth - and the cost of a visit, out of pocket plus lost earnings,
+        in the same units. WEALTH holds W, so health recovery (x (1 + W)) and every
+        wealth output read it.
+
+    Initialisation draws from its own numpy generator (seed + rng_seed_offset)
+    after every draw the original model makes, so the population, its homes,
+    health, water and infection histories are those of the legacy model for the
+    same seed; the income shocks have their own run-time generator too. Care
+    decisions still draw from the global stream.
+
+    Values are 2026 GH¢. Price level 2016/17 -> 2026 x 3.7 (chained CPI, World
+    Bank / CEIC / Bank of Ghana); 2011 -> 2026 x 8.2 (2011 CPI 108.7 on 2010 =
+    100). PLACEHOLDERS to calibrate (design §4, step 4): earning_spread_sdlog,
+    savings_rate, buffer_days, income_shock_sd, income_shock_halflife_days,
+    cost_primary_insured and the time a drug-seller visit takes.
+    """
+    model: str = Field(
+        "legacy",
+        description="'legacy' (default; campaign v4's dimensionless pooled wealth) or 'cedi' "
+                    "(2026 Ghana cedis, roles by age, wealth quintiles; see EconomyConfig).",
+    )
+    rng_seed_offset: int = Field(
+        104729, description="Added to the run's seed for the economy's own initialisation stream.",
+    )
+    age_group_shares_5plus: list[float] = Field(
+        [0.225, 0.712, 0.063],
+        description="Shares of agents aged 5+ who are 5-14, 15-64 and 65+. Lower Manya Krobo, 2021 "
+                    "census (30.3% aged 0-14, 64.0% 15-64, 5.7% 65+; 0-4 about 10%), rescaled to the "
+                    "population aged 5+.",
+    )
+    quintile_shares: list[float] = Field(
+        [0.079, 0.197, 0.264, 0.281, 0.178],
+        description="Households by national DHS wealth quintile, lowest to highest: Eastern Region, "
+                    "Ghana DHS 2022 household recode, survey-weighted (1,216 households).",
+    )
+    consumption_per_capita_daily: list[float] = Field(
+        [8.8, 17.3, 26.2, 40.0, 91.1],
+        description="Per-capita consumption by quintile, GH¢ a day at 2026 prices: GLSS 7 (2016/17) "
+                    "Table 10.1, GH¢872 / 1,704 / 2,581 / 3,944 / 8,987 a year, x 3.7. GLSS quintiles "
+                    "rank consumption, the DHS strata assets (design §3.4).",
+    )
+    earning_spread_sdlog: float = Field(
+        0.5, ge=0.0,
+        description="SD (log scale) of the household earning factor within a quintile. PLACEHOLDER, to "
+                    "calibrate against poverty incidence.",
+    )
+    savings_rate: float = Field(
+        0.05, ge=0.0,
+        description="Full-health income in excess of the consumption target, as a fraction of the "
+                    "target. PLACEHOLDER.",
+    )
+    income_shock_sd: float = Field(
+        0.3, ge=0.0,
+        description="Stationary SD (log scale) of the persistent household income shock. 0 = earnings "
+                    "never vary. PLACEHOLDER, to calibrate with the visit costs against care-seeking.",
+    )
+    income_shock_halflife_days: float = Field(
+        30.0, gt=0.0,
+        description="Half-life (days) of the household income shock's AR(1) process. PLACEHOLDER.",
+    )
+    buffer_days: float = Field(
+        30.0, gt=0.0,
+        description="Cash a household holds at most, in days of its consumption target; income above it "
+                    "is spent. PLACEHOLDER.",
+    )
+    initial_buffer_fraction: float = Field(
+        1.0, ge=0.0, le=1.0,
+        description="Initial cash is uniform on [0, this] times the buffer. The burn-in removes its "
+                    "influence.",
+    )
+    wealth_scale_days: float = Field(
+        30.0, gt=0.0,
+        description="Days of consumption that count as full wealth (W = 1) in the care-seeking utility "
+                    "(design §3.6: 'can this household cover a month of needs?').",
+    )
+    provider_shares_by_quintile: list[list[float]] = Field(
+        [[0.472, 0.141, 0.019, 0.368], [0.377, 0.127, 0.024, 0.473], [0.212, 0.134, 0.040, 0.615],
+         [0.238, 0.222, 0.097, 0.443], [0.206, 0.339, 0.091, 0.364]],
+        description="Usual provider by wealth quintile (lowest first): shares of public primary care (CHPS, "
+                    "health centre, government clinic, outreach), public hospital (incl. polyclinic), private "
+                    "facility and drug seller (pharmacy or drug store, shop or market, drug peddler, "
+                    "traditional, other). Ghana DHS 2022, place first sought advice or treatment for a child "
+                    "under five with diarrhoea (h44a), survey-weighted; n = 286 / 205 / 126 / 87 / 58 "
+                    "children with care sought. The poorest use primary care most, the richest hospitals.",
+    )
+    insured_prob: float = Field(
+        0.9, ge=0.0, le=1.0,
+        description="Probability a household holds NHIS cover: DHS 2022, 93% of women in Eastern Region, "
+                    "flat by wealth (88-95%). GLSS 7's valid-card share (47.8%) is the low-cover case.",
+    )
+    cost_primary_insured: float = Field(
+        10.0, ge=0.0,
+        description="Out-of-pocket cost, GH¢, of a public primary-care visit with NHIS cover. ASSUMPTION, to "
+                    "calibrate within [0, cost_hospital_insured]: NHIS covers consultation and essential "
+                    "medicines, and CHPS compounds and health centres are mostly within walking distance.",
+    )
+    cost_hospital_insured: float = Field(
+        55.0, ge=0.0,
+        description="Out-of-pocket cost, GH¢, of a public-hospital visit with NHIS cover: transport and drugs "
+                    "bought outside (GH¢6.65 per outpatient episode in 2011, Kusi et al. 2015, x 8.2; GLSS 7 "
+                    "Table 4.8 gives GH¢12.89 for transport alone in the rural forest zone, x 3.7 = 48).",
+    )
+    cost_facility_uninsured: float = Field(
+        210.0, ge=0.0,
+        description="Out-of-pocket cost, GH¢, of a public-facility visit without cover (GH¢25.50 per outpatient "
+                    "episode in 2011, Kusi et al. 2015, x 8.2).",
+    )
+    cost_private: float = Field(
+        210.0, ge=0.0,
+        description="Out-of-pocket cost, GH¢, of a private-facility visit, insured or not. ASSUMPTION: the "
+                    "uninsured public cost.",
+    )
+    cost_drug_seller: float = Field(
+        7.5, ge=0.0,
+        description="Cost, GH¢, of ORS and zinc from a drug seller: 2 ORS sachets (GH¢1.47 each) and 10 "
+                    "zinc tablets (GH¢0.17 each) at NHIS Medicines List prices (March 2025), x 1.05 to "
+                    "2026, x 1.5 retail margin (ASSUMPTION).",
+    )
+    public_visit_day_fraction: float = Field(
+        0.36, ge=0.0, le=1.0,
+        description="Share of an 8-hour working day a public-facility visit takes; the parent loses that "
+                    "share of the day's earnings. GLSS 7: about 44 minutes' travel to and from a facility "
+                    "in Eastern Region (Table 4.9) and about 131 minutes at a public facility (Table 4.10; "
+                    "category midpoints, 240 minutes for '181+').",
+    )
+    private_visit_day_fraction: float = Field(
+        0.29, ge=0.0, le=1.0,
+        description="Same for a private facility: about 44 minutes' travel and 97 minutes at the facility "
+                    "(GLSS 7 Tables 4.9-4.10).",
+    )
+    drug_seller_visit_day_fraction: float = Field(
+        0.1, ge=0.0, le=1.0,
+        description="Share of the parent's working day a visit to a drug seller takes. ASSUMPTION.",
+    )
+    poverty_line_daily: float = Field(
+        17.9, ge=0.0,
+        description="Upper poverty line, GH¢ per person a day (GLSS 7: GH¢1,760.80 a year per adult "
+                    "equivalent in 2016/17, x 3.7). Output threshold only.",
+    )
+    extreme_poverty_line_daily: float = Field(
+        10.0, ge=0.0,
+        description="Extreme (food) poverty line, GH¢ per person a day (GLSS 7: GH¢982.10 a year, x 3.7). "
+                    "Output threshold only.",
+    )
+    model_config = ConfigDict(validate_default=True, validate_assignment=True)
+
+    @field_validator("model")
+    @classmethod
+    def _check_model(cls, v):
+        if v not in ("legacy", "cedi"):
+            raise ValueError("economy.model must be 'legacy' or 'cedi'")
+        return v
+
+    @field_validator("age_group_shares_5plus", "quintile_shares")
+    @classmethod
+    def _check_shares(cls, v, info):
+        n = 3 if info.field_name == "age_group_shares_5plus" else 5
+        # rounded published shares may sum to 0.999; they are normalised where used
+        if len(v) != n or any(x < 0 for x in v) or abs(sum(v) - 1.0) > 0.01:
+            raise ValueError(f"{info.field_name}: {n} non-negative shares summing to 1")
+        return v
+
+    @field_validator("provider_shares_by_quintile")
+    @classmethod
+    def _check_providers(cls, v):
+        if len(v) != 5 or any(len(r) != 4 or any(x < 0 for x in r) or abs(sum(r) - 1.0) > 0.01 for r in v):
+            raise ValueError("provider_shares_by_quintile: 5 rows of 4 non-negative shares summing to 1")
+        return v
+
+    @field_validator("consumption_per_capita_daily")
+    @classmethod
+    def _check_consumption(cls, v):
+        if len(v) != 5 or any(x <= 0 for x in v):
+            raise ValueError("consumption_per_capita_daily: 5 positive values, lowest quintile first")
+        return v
+
+
 class SVEIRConfig(BaseModel):
     """Main configuration class for the SVEIR model."""
     model_identifier: str = Field("sveir_model", description="Internal run identifier (not user-configurable).")
@@ -1687,7 +1910,10 @@ class SVEIRConfig(BaseModel):
         3.2, description="Mean household size (Poisson-distributed). Empirically sourced from Ghana census/DHS-MICS-style survey data."
     )
     child_probability: float = Field(
-        0.145, description="Probability a non-first household member is a child. Empirically sourced, same survey data as household size."
+        0.145, description="Probability a non-first household member is a child under five. The first "
+                           "member is always aged 5+, so the realised under-five share is "
+                           "0.145 x 2.2 / 3.2 = 0.10, close to the about 10% estimated for Lower "
+                           "Manya Krobo from the 2021 census (docs/economy_design_proposal.md §3.2)."
     )
 
     # Parameters for Agent Personas
@@ -1699,6 +1925,7 @@ class SVEIRConfig(BaseModel):
     demography: DemographyConfig = Field(default_factory=DemographyConfig, description="Ageing, under-5 turnover and age-dependent activity.")
     water: WaterConfig = Field(default_factory=WaterConfig, description="Household water sources, sanitation and the catchment contamination model.")
     observation: ObservationConfig = Field(default_factory=ObservationConfig, description="MAL-ED surveillance design for the observation layer (analysis only).")
+    economy: EconomyConfig = Field(default_factory=EconomyConfig, description="Household economy: 'legacy' dimensionless wealth (default) or 2026 Ghana cedis.")
 
     # Illness mechanics
     illness_mechanics: IllnessMechanicsConfig = Field(default_factory=IllnessMechanicsConfig, description="Illness severity/duration mechanics parameters.")

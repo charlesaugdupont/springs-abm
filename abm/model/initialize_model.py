@@ -177,6 +177,14 @@ class SVEIRModel(Model):
         agent_factory = AgentFactory(self.config, self.agent_personas)
         agent_factory.initialize_agent_properties(self.graph, self.grid_environment)
 
+        # 3b. Household economy in cedis (EconomyConfig.model == "cedi"): roles
+        # by age, wealth quintiles, earnings, cash. Its own random stream, so the
+        # population above is the legacy model's for the same seed.
+        self.economy_summary = None
+        if getattr(self.config, "economy", None) is not None and self.config.economy.model == "cedi":
+            from abm.economy import cedi
+            self.economy_summary = cedi.initialise(self.graph, self.config)
+
         # 4. Finalize Graph (move to compute device)
         self.graph.to(self.config.device)
 

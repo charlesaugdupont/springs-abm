@@ -69,6 +69,11 @@ grid, population, parameter box, targets and output folder:
       susceptibility, against v3's targets plus the carriage ratios, with
       v3's final selection rules from the start. Output in
       experiments/outputs/history_matching_v4. See V4_PARAMS.
+  econ  the household economy in cedis (economy.model = "cedi") on the v4
+      epidemiology: six economic parameters against DHS 2022 care-seeking by
+      wealth quintile. Run the waves with --criterion max (five targets, all
+      must fit). Verification also reports the v4 targets (econ_epi_check).
+      Output in experiments/outputs/history_matching_econ. See ECON_PARAMS.
 
 A parameter path may tie several config fields to one value ("a|b|c"): it is
 one dimension of the box, and every field is set to it.
@@ -731,6 +736,80 @@ def v4_emulator_inputs(metric: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Campaign econ: the cedi household economy, epidemiology fixed at v4
+# ---------------------------------------------------------------------------
+
+#: The economy in Ghana cedis (config.EconomyConfig, docs/economy_design_proposal.md
+#: §7b) on the v4 epidemiology. Only economic parameters vary; every
+#: epidemiological parameter stays at its v4 default (config.py) with v4's base
+#: settings (vaccination off, as in the v4 calibration).
+ECON_BASE_OVERRIDES = {**V4_BASE_OVERRIDES, "economy.model": "cedi"}
+
+#: Six dimensions; the rest of EconomyConfig is set from data (GLSS 7, DHS 2022,
+#: NHIS Medicines List) or held at its stated assumption. Ranges from the pilots
+#: (§7b): shock SD 0.15-0.3 put care-seeking at 0.90-0.74, so the box reaches
+#: lower; the half-life spans a week to half a year (irregular work to a bad
+#: season); the buffer a week to three months of consumption; the savings
+#: margin 0-15%; the earning spread within a quintile 0.2-0.8 (log SD); the
+#: insured primary-care cost from free to the hospital cost (GH¢55).
+ECON_PARAMS: dict[str, tuple[float, float, str]] = {
+    "economy.income_shock_sd": (0.1, 0.6, "lin"),
+    "economy.income_shock_halflife_days": (7.0, 180.0, "log"),
+    "economy.buffer_days": (7.0, 90.0, "log"),
+    "economy.savings_rate": (0.0, 0.15, "lin"),
+    "economy.earning_spread_sdlog": (0.2, 0.8, "lin"),
+    "economy.cost_primary_insured": (0.0, 55.0, "lin"),
+}
+
+#: Care-seeking for a child under five with diarrhoea in the two weeks before the
+#: survey, by national wealth quintile: Ghana DHS 2022 (children's recode, any
+#: source of advice or treatment), survey-weighted, 95% cluster-bootstrap
+#: intervals (Claude outputs/economy/dhs_tables.py); n = 458 / 300 / 209 / 150 / 90
+#: children with diarrhoea. SD = interval width / 3.92; model discrepancy 0.03 as
+#: for the earlier single care-seeking target. Compared with the model's
+#: per-episode rate in each household quintile (economy_metrics). The gradient
+#: is flat: the mechanism by which richer parents can afford care more easily
+#: has to be offset by where they go and what it costs (D4, D8).
+ECON_CARE_TARGETS = {1: (0.630, 0.587, 0.670), 2: (0.663, 0.593, 0.715), 3: (0.550, 0.463, 0.633),
+                     4: (0.547, 0.456, 0.622), 5: (0.633, 0.514, 0.749)}
+
+
+def build_targets_econ() -> list[HMTarget]:
+    return [HMTarget(f"econ_care_seeking_rate_q{q}", z, (hi - lo) / 3.92, 0.03, "lin")
+            for q, (z, lo, hi) in ECON_CARE_TARGETS.items()]
+
+
+def hm_metrics_econ(model) -> dict:
+    """The economy's outputs, the overall care-seeking rate, and the v4
+    epidemiological metrics (true infections, routes and the observation
+    layer), so that verification can show the epidemiology has not moved."""
+    from experiments.metrics import economy_metrics
+    out = calibration_metrics(model)
+    out.update(observe(model))
+    out.update(care_seeking_metrics(model))
+    out.update(economy_metrics(model))
+    return out
+
+
+def econ_epi_check(df: pd.DataFrame) -> pd.DataFrame:
+    """For verification runs of the econ campaign: each v4 target's seed mean
+    and its implausibility (as in the v4 verification), next to the v4 default's
+    own fit (docs/calibration_v4_adults.md §6), so that a change in the
+    epidemiology from the economy shows."""
+    rows = []
+    for t in build_targets_v4():
+        if t.metric not in df:
+            continue
+        y = t.tx(df[t.metric].to_numpy(dtype=float))
+        y = y[np.isfinite(y)]
+        if not y.size:
+            continue
+        I = abs(y.mean() - t.z) / np.sqrt(t.sd_obs ** 2 + t.sd_md ** 2 + (y.var(ddof=1) / len(y) if len(y) > 1 else 0.0))
+        rows.append({"target": t.metric, "model": float(np.nanmean(df[t.metric])), "I": float(I)})
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
 # Campaign registry
 # ---------------------------------------------------------------------------
 
@@ -785,6 +864,9 @@ CAMPAIGNS: dict[str, Campaign] = {
     "v4": Campaign("v4", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_v4"),
                    V4_PARAMS, V4_BASE_OVERRIDES, build_targets_v4(), hm_metrics_v3,
                    checkpoint_every=16, emulator_inputs=v4_emulator_inputs, core_design=(2, 0.5)),
+    "econ": Campaign("econ", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_econ"),
+                     ECON_PARAMS, ECON_BASE_OVERRIDES, build_targets_econ(), hm_metrics_econ,
+                     checkpoint_every=16),
 }
 CAMPAIGN = "v2"
 CHECKPOINT_EVERY: int | None = None
@@ -1447,6 +1529,16 @@ def verify(reps: int, n_cores: int | None, design_ids: list[str] | None = None, 
     ).reset_index()
     v = v.merge(stab, on="gsa.design_id", how="left")
     v.to_csv(os.path.join(OUT_DIR, f"{tag}_implausibility.csv"), index=False)
+    if CAMPAIGN == "econ":
+        # the epidemiology should not have moved: the v4 targets at each verified point
+        for design_id, g in df.groupby("gsa.design_id"):
+            chk = econ_epi_check(g)
+            chk.to_csv(os.path.join(OUT_DIR, f"{tag}_{design_id}_v4_targets.csv"), index=False)
+            print(f"\n{design_id}: v4 targets, worst I {chk['I'].max():.2f} "
+                  f"({chk.loc[chk['I'].idxmax(), 'target']}); over 3: {int((chk['I'] > 3).sum())}")
+        econ_cols = [c for c in df.columns if c.startswith("econ_") and not c.endswith(("_q1", "_q2", "_q3", "_q4", "_q5"))]
+        with pd.option_context("display.max_columns", None, "display.width", 250):
+            print(df.groupby("gsa.design_id")[econ_cols].mean().T)
     show = (["gsa.design_id", "I_max", "I_second", "rota_fadeout_reps", "rota_infections_cv",
              "crypto_infections_cv", "rota_imported_fraction"] + [t.metric + "__raw" for t in TARGETS_HM])
     with pd.option_context("display.max_columns", None, "display.width", 250):
@@ -1506,6 +1598,9 @@ def main():
                               ratio_ranges=V3_ATTRIBUTABLE_FRACTION_SITE_RANGES,
                               aux_ranges=V4_ROUTE_RANGES if args.route_ranges else None,
                               suffix="_routes" if args.route_ranges else "")
+        elif args.campaign == "econ":
+            select_candidates(centrality_weight=args.centrality_weight, n_jobs=args.workers,
+                              n_simulated=2, refocus_from_wave=None)
         elif args.literature:
             # literature values held (V3_LITERATURE_FIXED), illness-causing
             # infections detectable at least as long, and the earlier best
