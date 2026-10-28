@@ -52,13 +52,13 @@ This mixed-prospect structure (gain vs. loss in the seek prospect) makes
 loss aversion (lambda) genuinely operative: loss-averse parents discount
 the recovery gain heavily, suppressing care-seeking relative to EV.
 
-The Prelec probability weighting function distorts both probabilities,
+The Tversky-Kahneman (1992) probability weighting function distorts both probabilities,
 creating additional divergence from EV especially at intermediate costs.
 
 EV mode (use_cpt=False)
 -----------------------
 Same extended utility function and same reference point, but with objective
-probabilities (no Prelec weighting) and a linear value function (no
+probabilities (no probability weighting) and a linear value function (no
 curvature, lambda = 1). This is the rational expected-utility baseline.
 
 Wealth
@@ -150,8 +150,8 @@ class CareSeekingSystem(System):
     ----------
     config : SVEIRConfig
     use_cpt : bool, default True
-        When True the full CPT decision rule is used (Prelec probability
-        weighting, asymmetric value function, per-agent loss aversion lambda).
+        When True the full CPT decision rule is used (Tversky-Kahneman
+        probability weighting, asymmetric value function, per-agent loss aversion lambda).
         When False a plain expected-utility rule is used instead.
     """
 

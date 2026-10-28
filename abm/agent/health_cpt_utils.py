@@ -8,11 +8,14 @@ import torch
 
 def probability_weighting(p: float, gamma: float) -> float:
     """
-    Prelec (1998) probability weighting function.
+    Tversky & Kahneman (1992) one-parameter probability weighting function:
+
+        w(p) = p^gamma / (p^gamma + (1 - p)^gamma)^(1 / gamma)
 
     Maps an objective probability p ∈ [0, 1] to a decision weight.
     gamma < 1 produces the typical inverse-S shape (overweighting of small
-    probabilities, underweighting of large ones).
+    probabilities, underweighting of large ones). (Not Prelec's 1998 form,
+    w(p) = exp(-(-ln p)^gamma), as earlier docstrings said.)
     """
     if p <= 0.0:
         return 0.0

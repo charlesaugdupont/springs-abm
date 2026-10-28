@@ -50,9 +50,13 @@ The four routes
    Co-location pressure at the agent's daytime activity location, using the
    same machinery as rotavirus H2H, so schools, places of worship, water
    points and social visits all mix the population.
-   Deliberately DAY-only: at night every household occupies its own
-   residence cell, so a co-location route evaluated in the night phase would
-   be a second, duplicate household route.
+   Deliberately DAY-only. It was written when every household had a residence
+   cell of its own, so that a night-phase co-location route would have
+   duplicated the household route. On the settlement grid about half of all
+   households share a cell with another household. There is therefore no
+   between-household Cryptosporidium transmission at night among households
+   sharing a cell, whereas rotavirus's night-phase co-location route does
+   include them (capped by steering_parameters.max_contacts_per_visit).
 
 3. Waterborne (DAY phase; infectious agents shed at the source they visit,
    susceptible visitors ingest a dose) plus a household channel for water
