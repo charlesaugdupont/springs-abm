@@ -129,6 +129,16 @@ class EconomicSystem(System):
             self._shock = rho * self._shock + np.sqrt(1.0 - rho * rho) * sd * self._shock_rng.standard_normal(n_households)
         return torch.as_tensor(np.exp(self._shock - 0.5 * sd * sd), dtype=torch.float32)
 
+    def _facility_cost(self, nd, rep):
+        """Each household's out-of-pocket cost of a public-hospital visit (cached)."""
+        if getattr(self, "_facility_cost_cache", None) is None:
+            eco = self.config.economy
+            insured = nd[AgentPropertyKeys.INSURED][rep]
+            self._facility_cost_cache = torch.where(
+                insured, torch.full(insured.shape, float(eco.cost_hospital_insured)),
+                torch.full(insured.shape, float(eco.cost_facility_uninsured))).to(nd[AgentPropertyKeys.CASH].device)
+        return self._facility_cost_cache
+
     def _update_cedi(self, agent_state: AgentState):
         from abm.economy.cedi import N_QUINTILES, wealth_term
         K = AgentPropertyKeys
@@ -146,7 +156,7 @@ class EconomicSystem(System):
 
         cash = nd[K.CASH][rep]
         target = nd[K.CONSUMPTION_TARGET][rep]
-        new_cash = torch.minimum(torch.clamp(cash + income - target, min=0.0), float(eco.buffer_days) * target)
+        new_cash = torch.minimum(torch.clamp(cash + income - target, min=0.0), nd[K.CASH_CAP][rep])
         consumption = cash + income - new_cash
 
         nd[K.CASH] = new_cash[inv]
@@ -167,6 +177,9 @@ class EconomicSystem(System):
             "extreme_poor_persons": by_q(size * (per_capita < eco.extreme_poverty_line_daily)),
             "below_target_households": by_q((consumption < target * (1.0 - 1e-6)).float()),
             "zero_cash_households": by_q((new_cash <= 0.0).float()),
+            # could not pay today for a public-hospital visit at its NHIS status (the
+            # model's analogue of DHS's "getting money for treatment is a big problem")
+            "cannot_pay_facility_households": by_q((new_cash < self._facility_cost(nd, rep)).float()),
             "cash": by_q(new_cash),
             "cash_days": by_q(new_cash / torch.clamp(target, min=1e-9)),
             "w": by_q(wealth_term(new_cash, target, eco.wealth_scale_days)),

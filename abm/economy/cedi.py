@@ -100,7 +100,12 @@ def initialise(agent_state, config) -> dict:
     target = np.bincount(inv, weights=y, minlength=n_hh) / (1.0 + s)
 
     insured = rng.random(n_hh) < float(eco.insured_prob)
-    cash = rng.random(n_hh) * float(eco.initial_buffer_fraction) * float(eco.buffer_days) * target
+    # buffer: days of consumption, growing with consumption per person when the elasticity > 0
+    c_ref = float(c[N_QUINTILES // 2])
+    per_person = target / size
+    buffer_days = float(eco.buffer_days) * (per_person / c_ref) ** float(eco.buffer_wealth_elasticity)
+    cap = buffer_days * target
+    cash = rng.random(n_hh) * float(eco.initial_buffer_fraction) * cap
     w = wealth_term(cash, target, eco.wealth_scale_days)
     shares = np.asarray(eco.provider_shares_by_quintile, dtype=np.float64)
     shares = shares / shares.sum(axis=1, keepdims=True)
@@ -115,6 +120,7 @@ def initialise(agent_state, config) -> dict:
     put(K.EARNING_POTENTIAL, y, torch.float32)
     put(K.CONSUMPTION_TARGET, target[inv], torch.float32)
     put(K.CASH, cash[inv], torch.float32)
+    put(K.CASH_CAP, cap[inv], torch.float32)
     put(K.INSURED, insured[inv], torch.bool)
     put(K.PROVIDER, provider[inv], torch.int64)
     put(K.WORK_LOST, np.zeros(len(hh)), torch.float32)
@@ -125,6 +131,8 @@ def initialise(agent_state, config) -> dict:
         "earning_level_by_quintile": ybar.tolist(),
         "households_by_quintile": np.bincount(quintile, minlength=N_QUINTILES).tolist(),
         "earners_per_household": float(earners_hh.mean()),
+        "buffer_days_by_quintile": [float(np.average(buffer_days[quintile == k], weights=None))
+                                    if np.any(quintile == k) else float("nan") for k in range(N_QUINTILES)],
         "provider_shares": (np.bincount(provider, minlength=N_PROVIDERS) / n_hh).tolist(),
         "age_group_shares_5plus": [float((group[~is_child] == g).mean()) for g in (AGE_5_14, AGE_15_64, AGE_65_PLUS)],
     }

@@ -1291,6 +1291,10 @@ REGISTRY: list[ParamMeta] = [
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
+        path="economy.buffer_wealth_elasticity", label="Wealth elasticity of the cash buffer", category="internal", evidence_tier="calibrated",
+        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+    ),
+    ParamMeta(
         path="economy.initial_buffer_fraction", label="Initial cash", category="internal", evidence_tier="assumption",
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),

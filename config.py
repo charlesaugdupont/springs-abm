@@ -1691,10 +1691,12 @@ class EconomyConfig(BaseModel):
       * Spending. A household's consumption target is its full-health income
         divided by (1 + savings_rate), so a quintile consumes GLSS 7's per-capita
         level on average. Cash is a buffer: each day
-        cash <- clip(cash + income - target, 0, buffer_days * target). Below the
-        buffer the household saves; at the buffer it spends any excess; with no
-        cash it consumes what it earns, below target (poverty). No debt (decision
-        D5). Initial cash is uniform on [0, initial_buffer_fraction] of the buffer.
+        cash <- clip(cash + income - target, 0, buffer_h * target), with
+        buffer_h = buffer_days * (c_h / c_ref)^buffer_wealth_elasticity days, so that
+        poorer households can hold fewer days of cash. Below the buffer the
+        household saves; at the buffer it spends any excess; with no cash it
+        consumes what it earns, below target (poverty). No debt (decision D5).
+        Initial cash is uniform on [0, initial_buffer_fraction] of the buffer.
       * Care. Each household has a usual provider for a child's diarrhoea -
         public primary care, a public hospital, a private facility or a drug
         seller (pharmacy, chemical or drug store, shop, market or drug peddler) -
@@ -1769,6 +1771,14 @@ class EconomyConfig(BaseModel):
         30.0, gt=0.0,
         description="Cash a household holds at most, in days of its consumption target; income above it "
                     "is spent. PLACEHOLDER.",
+    )
+    buffer_wealth_elasticity: float = Field(
+        0.0, ge=0.0,
+        description="How the cash buffer grows with wealth: household h holds at most buffer_days x "
+                    "(c_h / c_ref)^elasticity days of its consumption target, c_h its consumption target per "
+                    "person and c_ref the middle quintile's GLSS level. 0 = the same number of days for "
+                    "every household (scale-free). Calibrated against the DHS 2022 wealth gradient in "
+                    "'getting money for treatment is a big problem' (63% poorest, 25% richest).",
     )
     initial_buffer_fraction: float = Field(
         1.0, ge=0.0, le=1.0,

@@ -74,6 +74,11 @@ grid, population, parameter box, targets and output folder:
       wealth quintile. Run the waves with --criterion max (five targets, all
       must fit). Verification also reports the v4 targets (econ_epi_check).
       Output in experiments/outputs/history_matching_econ. See ECON_PARAMS.
+  econ2  econ plus the cash buffer's wealth elasticity, with DHS 2022's wealth
+      gradient in "getting money for treatment is a big problem" as five more
+      targets (econ's wave 1 matched care-seeking only through cash shortage
+      equal in every quintile). Output in
+      experiments/outputs/history_matching_econ2. See ECON2_PARAMS.
 
 A parameter path may tie several config fields to one value ("a|b|c"): it is
 one dimension of the box, and every field is set to it.
@@ -779,6 +784,35 @@ def build_targets_econ() -> list[HMTarget]:
             for q, (z, lo, hi) in ECON_CARE_TARGETS.items()]
 
 
+#: Campaign econ2 (2026-10-29): wave 1 of "econ" fitted the care-seeking targets
+#: only by leaving ~23% of households without cash in EVERY quintile, because
+#: buffers and shocks scale with each household's own consumption. DHS 2022 shows
+#: the money barrier falling steeply with wealth, so econ2 adds the buffer's
+#: wealth elasticity and that gradient as targets.
+ECON2_PARAMS: dict[str, tuple[float, float, str]] = {
+    **ECON_PARAMS,
+    "economy.buffer_wealth_elasticity": (0.0, 1.5, "lin"),
+}
+
+#: Women 15-49 for whom "getting money needed for treatment" is a big problem in
+#: getting medical help for themselves (v467c), by national wealth quintile:
+#: Ghana DHS 2022, survey-weighted, 95% cluster-bootstrap intervals
+#: (n = 3,666 / 3,366 / 3,008 / 2,686 / 2,288). Compared with the share of
+#: household-days on which the household could not pay for a public-hospital
+#: visit at its NHIS status. The mapping is loose (a perceived problem for the
+#: woman's own care against an actual shortfall on a given day), so the model
+#: discrepancy allowance is wide, 0.10: the targets constrain the gradient more
+#: than the level.
+ECON2_MONEY_TARGETS = {1: (0.626, 0.590, 0.663), 2: (0.571, 0.541, 0.599), 3: (0.473, 0.447, 0.499),
+                       4: (0.392, 0.364, 0.420), 5: (0.246, 0.221, 0.271)}
+
+
+def build_targets_econ2() -> list[HMTarget]:
+    return build_targets_econ() + [
+        HMTarget(f"econ_cannot_pay_facility_share_q{q}", z, (hi - lo) / 3.92, 0.10, "lin")
+        for q, (z, lo, hi) in ECON2_MONEY_TARGETS.items()]
+
+
 def hm_metrics_econ(model) -> dict:
     """The economy's outputs, the overall care-seeking rate, and the v4
     epidemiological metrics (true infections, routes and the observation
@@ -867,6 +901,9 @@ CAMPAIGNS: dict[str, Campaign] = {
     "econ": Campaign("econ", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_econ"),
                      ECON_PARAMS, ECON_BASE_OVERRIDES, build_targets_econ(), hm_metrics_econ,
                      checkpoint_every=16),
+    "econ2": Campaign("econ2", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_econ2"),
+                      ECON2_PARAMS, ECON_BASE_OVERRIDES, build_targets_econ2(), hm_metrics_econ,
+                      checkpoint_every=16),
 }
 CAMPAIGN = "v2"
 CHECKPOINT_EVERY: int | None = None
@@ -1529,7 +1566,7 @@ def verify(reps: int, n_cores: int | None, design_ids: list[str] | None = None, 
     ).reset_index()
     v = v.merge(stab, on="gsa.design_id", how="left")
     v.to_csv(os.path.join(OUT_DIR, f"{tag}_implausibility.csv"), index=False)
-    if CAMPAIGN == "econ":
+    if CAMPAIGN in ("econ", "econ2"):
         # the epidemiology should not have moved: the v4 targets at each verified point
         for design_id, g in df.groupby("gsa.design_id"):
             chk = econ_epi_check(g)
@@ -1598,7 +1635,7 @@ def main():
                               ratio_ranges=V3_ATTRIBUTABLE_FRACTION_SITE_RANGES,
                               aux_ranges=V4_ROUTE_RANGES if args.route_ranges else None,
                               suffix="_routes" if args.route_ranges else "")
-        elif args.campaign == "econ":
+        elif args.campaign in ("econ", "econ2"):
             select_candidates(centrality_weight=args.centrality_weight, n_jobs=args.workers,
                               n_simulated=2, refocus_from_wave=None)
         elif args.literature:

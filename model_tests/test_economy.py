@@ -104,6 +104,8 @@ def _economy_state(cash, target, potential, health, work_lost, household):
     st.ndata[K.WORK_LOST] = torch.tensor(work_lost, dtype=torch.float32)
     st.ndata[K.WEALTH_QUINTILE] = torch.zeros(len(household), dtype=torch.int64)
     st.ndata[K.WEALTH] = torch.zeros(len(household))
+    st.ndata[K.CASH_CAP] = SVEIRCONFIG.economy.buffer_days * st.ndata[K.CONSUMPTION_TARGET]
+    st.ndata[K.INSURED] = torch.ones(len(household), dtype=torch.bool)
     return st
 
 
@@ -251,3 +253,29 @@ def test_econ_campaign_is_wired():
         assert path.startswith("economy.") and lo < hi and scale in ("lin", "log")
         set_param(cfg, path, lo)          # a real, valid config field
         set_param(cfg, path, hi)
+
+
+def test_buffer_grows_with_wealth_only_when_asked(make_model):
+    flat = make_model(run=False, agents=3000, overrides=CEDI)
+    nd = flat.graph.ndata
+    assert torch.allclose(nd[K.CASH_CAP], flat.config.economy.buffer_days * nd[K.CONSUMPTION_TARGET], rtol=1e-5)
+    steep = make_model(run=False, agents=3000, overrides={**CEDI, "economy.buffer_wealth_elasticity": 1.0})
+    nd = steep.graph.ndata
+    hh, first, inv = np.unique(nd[K.HOUSEHOLD_ID].numpy(), return_index=True, return_inverse=True)
+    size = np.bincount(inv)
+    per_person = nd[K.CONSUMPTION_TARGET].numpy()[first] / size
+    days = nd[K.CASH_CAP].numpy()[first] / nd[K.CONSUMPTION_TARGET].numpy()[first]
+    c_ref = steep.config.economy.consumption_per_capita_daily[2]
+    assert np.allclose(days, steep.config.economy.buffer_days * per_person / c_ref, rtol=1e-4)
+    assert torch.all(nd[K.CASH] <= nd[K.CASH_CAP] + 1e-3)
+
+
+def test_econ2_campaign_adds_the_money_gradient():
+    from experiments.calibration import history_matching as hm
+    c = hm.CAMPAIGNS["econ2"]
+    assert "economy.buffer_wealth_elasticity" in c.params and len(c.params) == 7
+    metrics = [t.metric for t in c.targets]
+    assert metrics[:5] == [f"econ_care_seeking_rate_q{q}" for q in range(1, 6)]
+    assert metrics[5:] == [f"econ_cannot_pay_facility_share_q{q}" for q in range(1, 6)]
+    zs = [t.z for t in c.targets[5:]]
+    assert zs == sorted(zs, reverse=True), "the money barrier falls with wealth"

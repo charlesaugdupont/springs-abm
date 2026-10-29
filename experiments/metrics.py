@@ -145,7 +145,9 @@ def economy_metrics(model, burn_in_days: int | None = None) -> dict:
       below the upper (extreme) line that day - per person, where GLSS's lines
       are per adult equivalent, so this somewhat overstates GLSS-style poverty;
     * cash: mean household cash (GH¢) and in days of the consumption target;
-      share of households with no cash, and below their consumption target;
+      share of households with no cash, below their consumption target, and
+      unable to pay for a public-hospital visit that day (at their NHIS status;
+      the analogue of DHS's "getting money for treatment is a big problem");
       mean wealth term W;
     * care-seeking by quintile, per illness episode ending after the burn-in
       (the DHS-comparable rate, as episode_care_seeking_rate); the share of
@@ -172,6 +174,7 @@ def economy_metrics(model, burn_in_days: int | None = None) -> dict:
             "econ_mean_cash_ghs": div(tot["cash"], hh),
             "econ_mean_cash_days": div(tot["cash_days"], hh),
             "econ_zero_cash_share": div(tot["zero_cash_households"], hh),
+            "econ_cannot_pay_facility_share": div(tot["cannot_pay_facility_households"], hh),
             "econ_below_target_share": div(tot["below_target_households"], hh),
             "econ_mean_wealth_term": div(tot["w"], hh),
         })
@@ -180,6 +183,7 @@ def economy_metrics(model, burn_in_days: int | None = None) -> dict:
             sl = slice(q, q + 1)
             out[f"econ_poverty_headcount_q{q + 1}"] = div(tot["poor_persons"][sl], per[sl])
             out[f"econ_zero_cash_share_q{q + 1}"] = div(tot["zero_cash_households"][sl], hh[sl])
+            out[f"econ_cannot_pay_facility_share_q{q + 1}"] = div(tot["cannot_pay_facility_households"][sl], hh[sl])
             out[f"econ_mean_wealth_term_q{q + 1}"] = div(tot["w"][sl], hh[sl])
             out[f"econ_consumption_vs_glss_q{q + 1}"] = div(tot["consumption_per_capita_x_persons"][sl], per[sl]) / c[q]
     crecs = care.daily_records[b:]

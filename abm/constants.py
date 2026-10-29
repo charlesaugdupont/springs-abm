@@ -119,6 +119,7 @@ class AgentPropertyKeys:
     EARNING_POTENTIAL = "earning_potential"      # GH¢/day at full health; 0 for non-earners
     CONSUMPTION_TARGET = "consumption_target"    # household's GH¢/day consumption target
     CASH = "cash"                                # household's cash, GH¢
+    CASH_CAP = "cash_cap"                        # most cash the household holds (its buffer), GH¢
     INSURED = "insured"                          # household holds NHIS cover
     PROVIDER = "provider"                        # usual provider: 0 public primary, 1 public hospital, 2 private, 3 drug seller
     WORK_LOST = "work_lost"                      # share of today's working time lost (reset daily)
