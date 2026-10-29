@@ -279,3 +279,13 @@ def test_econ2_campaign_adds_the_money_gradient():
     assert metrics[5:] == [f"econ_cannot_pay_facility_share_q{q}" for q in range(1, 6)]
     zs = [t.z for t in c.targets[5:]]
     assert zs == sorted(zs, reverse=True), "the money barrier falls with wealth"
+
+
+def test_cedi_defaults_are_the_econ2_calibration():
+    """Candidate e0 of campaign econ2 at 3 significant figures (2026-10-29); the
+    economy model itself stays 'legacy' by default."""
+    eco = SVEIRCONFIG.economy
+    assert eco.model == "legacy"
+    assert (eco.income_shock_sd, eco.income_shock_halflife_days, eco.buffer_days, eco.savings_rate,
+            eco.earning_spread_sdlog, eco.cost_primary_insured, eco.buffer_wealth_elasticity) == \
+        (0.6, 7.0, 9.94, 0.00875, 0.38, 0.0, 0.0)

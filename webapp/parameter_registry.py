@@ -1271,23 +1271,23 @@ REGISTRY: list[ParamMeta] = [
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
-        path="economy.earning_spread_sdlog", label="Earning spread within a quintile", category="internal", evidence_tier="assumption",
+        path="economy.earning_spread_sdlog", label="Earning spread within a quintile", category="internal", evidence_tier="calibrated",
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
-        path="economy.savings_rate", label="Savings margin", category="internal", evidence_tier="assumption",
+        path="economy.savings_rate", label="Savings margin", category="internal", evidence_tier="calibrated",
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
-        path="economy.income_shock_sd", label="Income shock SD", category="internal", evidence_tier="assumption",
+        path="economy.income_shock_sd", label="Income shock SD", category="internal", evidence_tier="calibrated",
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
-        path="economy.income_shock_halflife_days", label="Income shock half-life", category="internal", evidence_tier="assumption",
+        path="economy.income_shock_halflife_days", label="Income shock half-life", category="internal", evidence_tier="calibrated",
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
-        path="economy.buffer_days", label="Cash buffer", category="internal", evidence_tier="assumption",
+        path="economy.buffer_days", label="Cash buffer", category="internal", evidence_tier="calibrated",
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
@@ -1307,7 +1307,7 @@ REGISTRY: list[ParamMeta] = [
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
-        path="economy.cost_primary_insured", label="Primary-care visit cost, insured", category="internal", evidence_tier="assumption",
+        path="economy.cost_primary_insured", label="Primary-care visit cost, insured", category="internal", evidence_tier="calibrated",
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(

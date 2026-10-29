@@ -1719,9 +1719,30 @@ class EconomyConfig(BaseModel):
 
     Values are 2026 GH¢. Price level 2016/17 -> 2026 x 3.7 (chained CPI, World
     Bank / CEIC / Bank of Ghana); 2011 -> 2026 x 8.2 (2011 CPI 108.7 on 2010 =
-    100). PLACEHOLDERS to calibrate (design §4, step 4): earning_spread_sdlog,
-    savings_rate, buffer_days, income_shock_sd, income_shock_halflife_days,
-    cost_primary_insured and the time a drug-seller visit takes.
+    100).
+
+    CALIBRATION (campaign econ2, 2026-10-29; docs/economy_design_proposal.md
+    §7b): with the epidemiology at v4, seven parameters - income_shock_sd,
+    income_shock_halflife_days, buffer_days, savings_rate, earning_spread_sdlog,
+    cost_primary_insured, buffer_wealth_elasticity - were history-matched (2
+    waves x 150 points x 2 seeds) against ten DHS 2022 targets by wealth
+    quintile: care-seeking for child diarrhoea (63 / 66 / 55 / 55 / 63%) and
+    women's "getting money for treatment is a big problem" (63 / 57 / 47 / 39 /
+    25%; compared with household-days unable to pay for a hospital visit, model
+    discrepancy 0.10). The defaults are candidate e0 at 3 significant figures:
+    on 8 seeds not used in calibration every target lies within 1.33 SD
+    (care-seeking 0.59 / 0.63 / 0.61 / 0.57 / 0.58; cannot pay 0.53 / 0.44 /
+    0.40 / 0.37 / 0.34, flatter than DHS), and the 31 v4 epidemiological targets
+    move by a few percent at most. Four values sit at the edge of the box - the
+    largest shock SD (0.6), the shortest half-life (7 days), free insured primary
+    care, no wealth elasticity - so the best fit may lie beyond it. The fit
+    implies short, volatile earnings (irregular daily work), small cash buffers
+    (about 4 days on average) and on any day about 30% of households, in every
+    quintile, without cash; 26-32% of episodes go without care because a visit
+    was unaffordable. Poverty (a check, not a target) comes out at 37% of
+    persons below the upper line, against 23.4% nationally in GLSS 7 (per person
+    here, per adult equivalent there). The time a drug-seller visit takes (0.1
+    of a day) and the private-facility cost remain assumptions.
     """
     model: str = Field(
         "legacy",
@@ -1749,36 +1770,38 @@ class EconomyConfig(BaseModel):
                     "rank consumption, the DHS strata assets (design §3.4).",
     )
     earning_spread_sdlog: float = Field(
-        0.5, ge=0.0,
-        description="SD (log scale) of the household earning factor within a quintile. PLACEHOLDER, to "
-                    "calibrate against poverty incidence.",
+        0.38, ge=0.0,
+        description="SD (log scale) of the household earning factor within a quintile. Calibrated "
+                    "(econ2): 0.38.",
     )
     savings_rate: float = Field(
-        0.05, ge=0.0,
+        0.00875, ge=0.0,
         description="Full-health income in excess of the consumption target, as a fraction of the "
-                    "target. PLACEHOLDER.",
+                    "target. Calibrated (econ2): 0.00875.",
     )
     income_shock_sd: float = Field(
-        0.3, ge=0.0,
+        0.6, ge=0.0,
         description="Stationary SD (log scale) of the persistent household income shock. 0 = earnings "
-                    "never vary. PLACEHOLDER, to calibrate with the visit costs against care-seeking.",
+                    "never vary. Calibrated (econ2): 0.6, the upper bound of the search box.",
     )
     income_shock_halflife_days: float = Field(
-        30.0, gt=0.0,
-        description="Half-life (days) of the household income shock's AR(1) process. PLACEHOLDER.",
+        7.0, gt=0.0,
+        description="Half-life (days) of the household income shock's AR(1) process. Calibrated (econ2): "
+                    "7 days, the lower bound of the search box.",
     )
     buffer_days: float = Field(
-        30.0, gt=0.0,
+        9.94, gt=0.0,
         description="Cash a household holds at most, in days of its consumption target; income above it "
-                    "is spent. PLACEHOLDER.",
+                    "is spent. Calibrated (econ2): 9.94.",
     )
     buffer_wealth_elasticity: float = Field(
         0.0, ge=0.0,
         description="How the cash buffer grows with wealth: household h holds at most buffer_days x "
                     "(c_h / c_ref)^elasticity days of its consumption target, c_h its consumption target per "
                     "person and c_ref the middle quintile's GLSS level. 0 = the same number of days for "
-                    "every household (scale-free). Calibrated against the DHS 2022 wealth gradient in "
-                    "'getting money for treatment is a big problem' (63% poorest, 25% richest).",
+                    "every household (scale-free). Calibrated (econ2) against the DHS 2022 wealth gradient "
+                    "in 'getting money for treatment is a big problem' (63% poorest, 25% richest): 0, the "
+                    "lower bound - the gradient comes from fixed visit costs against small budgets instead.",
     )
     initial_buffer_fraction: float = Field(
         1.0, ge=0.0, le=1.0,
@@ -1806,10 +1829,10 @@ class EconomyConfig(BaseModel):
                     "flat by wealth (88-95%). GLSS 7's valid-card share (47.8%) is the low-cover case.",
     )
     cost_primary_insured: float = Field(
-        10.0, ge=0.0,
-        description="Out-of-pocket cost, GH¢, of a public primary-care visit with NHIS cover. ASSUMPTION, to "
-                    "calibrate within [0, cost_hospital_insured]: NHIS covers consultation and essential "
-                    "medicines, and CHPS compounds and health centres are mostly within walking distance.",
+        0.0, ge=0.0,
+        description="Out-of-pocket cost, GH¢, of a public primary-care visit with NHIS cover: NHIS covers "
+                    "consultation and essential medicines, and CHPS compounds and health centres are mostly "
+                    "within walking distance. Calibrated (econ2) within [0, 55]: 0, the lower bound.",
     )
     cost_hospital_insured: float = Field(
         55.0, ge=0.0,
