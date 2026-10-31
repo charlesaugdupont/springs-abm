@@ -180,7 +180,8 @@ def test_a_visit_costs_cash_and_working_time(make_model):
     assert cs.care_sought == 1
     oop, day_fraction = cedi.visit_cost(nd, parent, eco)
     assert float(nd[K.CASH][parent]) == pytest.approx(5000.0 - oop)
-    assert float(nd[K.WORK_LOST][parent]) == pytest.approx(day_fraction)
+    # the visit's time on top of the day's caring time (L3)
+    assert float(nd[K.WORK_LOST][parent]) == pytest.approx(min(1.0, eco.carer_day_fraction + day_fraction))
 
 
 def test_visit_cost_by_provider_and_cover():
@@ -289,3 +290,74 @@ def test_cedi_defaults_are_the_econ2_calibration():
     assert (eco.income_shock_sd, eco.income_shock_halflife_days, eco.buffer_days, eco.savings_rate,
             eco.earning_spread_sdlog, eco.cost_primary_insured, eco.buffer_wealth_elasticity) == \
         (0.6, 7.0, 9.94, 0.00875, 0.38, 0.0, 0.0)
+
+
+# --- caring time (link L3; EconomyConfig.carer_day_fraction) ---------------------------------------
+
+def _carers_of_sick_children(model):
+    nd = model.graph.ndata
+    from abm.systems.care_seeking import _max_active_severity
+    sick = (_max_active_severity(model.graph, [p.name for p in model.config.pathogens]) > 0) & nd[K.IS_CHILD].bool()
+    hh = nd[K.HOUSEHOLD_ID]
+    return nd[K.IS_PARENT].bool() & torch.isin(hh, torch.unique(hh[sick]))
+
+
+def test_caring_time_can_be_switched_off(make_model):
+    model, cs, parent, _ = _sick_child_case(make_model, cash=1.0)   # the visit is unaffordable
+    model.config.economy.carer_day_fraction = 0.0
+    cs.update(model.graph)
+    assert float(model.graph.ndata[K.WORK_LOST].abs().sum()) == 0.0
+    assert cs.daily_records[-1]["carer_days"] == [0.0] * 5
+
+
+def test_a_sick_child_costs_the_parent_working_time(make_model):
+    model, cs, parent, _ = _sick_child_case(make_model, cash=1.0)
+    model.config.economy.carer_day_fraction = 0.4
+    carers = _carers_of_sick_children(model)
+    assert bool(carers[parent])
+    cs.update(model.graph)
+    lost = model.graph.ndata[K.WORK_LOST]
+    assert torch.allclose(lost[carers], torch.full((int(carers.sum()),), 0.4))
+    assert float(lost[~carers].abs().sum()) == 0.0, "only the carers of ill children lose time"
+    assert sum(cs.daily_records[-1]["carer_days"]) == pytest.approx(0.4 * int(carers.sum()), rel=1e-5)
+
+
+def test_caring_and_visit_time_add_up_to_a_day_at_most(make_model):
+    model, cs, parent, child = _sick_child_case(make_model, cash=5000.0)
+    model.config.economy.carer_day_fraction = 0.9
+    nd = model.graph.ndata
+    nd[K.ALPHA][parent] = 0.1
+    model.config.steering_parameters.natural_worsening_prob = 1.0
+    cs.update(model.graph)
+    assert cs.care_sought == 1
+    assert float(nd[K.WORK_LOST][parent]) == pytest.approx(1.0)
+    q = int(nd[K.WEALTH_QUINTILE][parent])
+    rec = cs.daily_records[-1]
+    assert rec["first_visits"][q] == 1 and rec["sick_days_to_first_visit"][q] == 1.0
+    assert rec["carer_days_to_first_visit"][q] == pytest.approx(1.0, rel=1e-6), "0.9 caring + 0.1 of the visit"
+
+
+def test_caring_time_metrics(make_model):
+    f = 0.5
+    model = make_model(steps=120, agents=2000, overrides={**CEDI, "economy.carer_day_fraction": f})
+    m = economy_metrics(model, burn_in_days=10)
+    assert m["econ_carer_days_per_episode"] > 0
+    assert np.isfinite(m["econ_sick_days_to_first_visit"])
+    eco = model.config.economy
+    for name in ("first_visit", "first_facility_visit"):
+        s, c = m[f"econ_sick_days_to_{name}"], m[f"econ_carer_days_to_{name}"]
+        if not np.isfinite(s):   # no first visit of that kind in a short run
+            continue
+        assert s >= 1.0
+        assert f * s - 1e-6 <= c <= f * s + max(eco.public_visit_day_fraction, eco.private_visit_day_fraction) + 1e-6
+    off = economy_metrics(make_model(steps=60, agents=1500, overrides={**CEDI, "economy.carer_day_fraction": 0.0}),
+                          burn_in_days=10)
+    assert off["econ_carer_days_per_episode"] == 0.0
+
+
+def test_caring_time_default_and_the_econ_campaigns():
+    """0.34 from GEMS's African sites (2026-10-31); econ and econ2 ran without it."""
+    from experiments.calibration import history_matching as hm
+    assert SVEIRCONFIG.economy.carer_day_fraction == 0.34
+    for name in ("econ", "econ2"):
+        assert hm.CAMPAIGNS[name].base_overrides["economy.carer_day_fraction"] == 0.0

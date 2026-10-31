@@ -154,7 +154,11 @@ def economy_metrics(model, burn_in_days: int | None = None) -> dict:
       decisions in which the visit was unaffordable (a blocked household
       decides again each day, so this overweights it) and the share of episodes
       that ended without care after at least one unaffordable decision;
-    * consumption per person by quintile relative to its GLSS 7 level.
+    * consumption per person by quintile relative to its GLSS 7 level;
+    * caring time (EconomyConfig.carer_day_fraction): carer-days lost per
+      episode, and the days ill and carer-days lost up to and including an
+      episode's first visit (all providers, and facilities only - GEMS's
+      measure, Zimmermann et al. 2019).
     """
     from abm.systems.economics import EconomicSystem
     if getattr(model.config, "economy", None) is None or model.config.economy.model != "cedi":
@@ -197,6 +201,16 @@ def economy_metrics(model, burn_in_days: int | None = None) -> dict:
         out["econ_episode_care_seeking_rate"] = float(with_care.sum() / ended.sum()) if ended.sum() else float("nan")
         out["econ_could_not_afford_rate"] = float(cna.sum() / dec.sum()) if dec.sum() else float("nan")
         out["econ_episodes"] = int(ended.sum())
+        # caring time (L3): carer-days lost per episode, and up to and including each
+        # episode's first visit (any provider; facilities only, as GEMS enrolled)
+        if "carer_days" in crecs[0]:
+            tot = lambda k: float(np.sum([r[k] for r in crecs]))
+            started = tot("episodes_started")
+            out["econ_carer_days_per_episode"] = tot("carer_days") / started if started else float("nan")
+            for name, n_key in (("first_visit", "first_visits"), ("first_facility_visit", "first_facility_visits")):
+                n = tot(n_key)
+                out[f"econ_sick_days_to_{name}"] = tot(f"sick_days_to_{name}") / n if n else float("nan")
+                out[f"econ_carer_days_to_{name}"] = tot(f"carer_days_to_{name}") / n if n else float("nan")
         for q in range(5):
             out[f"econ_care_seeking_rate_q{q + 1}"] = float(with_care[q] / ended[q]) if ended[q] else float("nan")
             out[f"econ_could_not_afford_rate_q{q + 1}"] = float(cna[q] / dec[q]) if dec[q] else float("nan")

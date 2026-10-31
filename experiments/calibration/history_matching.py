@@ -747,8 +747,10 @@ def v4_emulator_inputs(metric: str) -> list[str]:
 #: The economy in Ghana cedis (config.EconomyConfig, docs/economy_design_proposal.md
 #: §7b) on the v4 epidemiology. Only economic parameters vary; every
 #: epidemiological parameter stays at its v4 default (config.py) with v4's base
-#: settings (vaccination off, as in the v4 calibration).
-ECON_BASE_OVERRIDES = {**V4_BASE_OVERRIDES, "economy.model": "cedi"}
+#: settings (vaccination off, as in the v4 calibration). Both campaigns ran
+#: before caring time (L3, economy.carer_day_fraction) was built, so it is held
+#: off here to keep them reproducible.
+ECON_BASE_OVERRIDES = {**V4_BASE_OVERRIDES, "economy.model": "cedi", "economy.carer_day_fraction": 0.0}
 
 #: Six dimensions; the rest of EconomyConfig is set from data (GLSS 7, DHS 2022,
 #: NHIS Medicines List) or held at its stated assumption. Ranges from the pilots

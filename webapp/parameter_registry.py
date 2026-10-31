@@ -1343,6 +1343,10 @@ REGISTRY: list[ParamMeta] = [
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
+        path="economy.carer_day_fraction", label="Working time a parent loses per day a child is ill", category="internal", evidence_tier="literature",
+        rationale="Cedi household economy, caring time (link L3; config.EconomyConfig; docs/economy_design_proposal.md): GEMS, four African sites (Zimmermann et al. 2019). Not used by the web app, which runs the legacy economy.",
+    ),
+    ParamMeta(
         path="economy.poverty_line_daily", label="Upper poverty line", category="internal", evidence_tier="literature",
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),

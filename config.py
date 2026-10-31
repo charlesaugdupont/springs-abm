@@ -1710,6 +1710,12 @@ class EconomyConfig(BaseModel):
         "full" wealth - and the cost of a visit, out of pocket plus lost earnings,
         in the same units. WEALTH holds W, so health recovery (x (1 + W)) and every
         wealth output read it.
+      * Caring time (L3). On every day a child under five is ill, the parent
+        loses carer_day_fraction of the day's earnings, whether or not care is
+        sought (0 = off). It is not part of the care decision: most of those
+        days are lost either way (effective treatment shortens an episode by
+        about half a day, a treated Campylobacter episode by up to 1.8 days, and
+        the parent does not anticipate it).
 
     Initialisation draws from its own numpy generator (seed + rng_seed_offset)
     after every draw the original model makes, so the population, its homes,
@@ -1743,6 +1749,12 @@ class EconomyConfig(BaseModel):
     persons below the upper line, against 23.4% nationally in GLSS 7 (per person
     here, per adult equivalent there). The time a drug-seller visit takes (0.1
     of a day) and the private-facility cost remain assumptions.
+
+    CARING TIME (L3, 2026-10-31; design §7b): carer_day_fraction = 0.34, from
+    GEMS's four African sites, was added after econ2 (which ran without it).
+    On the econ2 verification seeds every econ2 target stays within 1.33 SD and
+    the v4 targets are unchanged (the same single Cryptosporidium miss); the
+    economy hardly moves (an episode costs about half a day of household income).
     """
     model: str = Field(
         "legacy",
@@ -1871,6 +1883,20 @@ class EconomyConfig(BaseModel):
     drug_seller_visit_day_fraction: float = Field(
         0.1, ge=0.0, le=1.0,
         description="Share of the parent's working day a visit to a drug seller takes. ASSUMPTION.",
+    )
+    carer_day_fraction: float = Field(
+        0.34, ge=0.0, le=1.0,
+        description="Caring time (link L3): share of a working day the parent loses on every day a child "
+                    "under five in the household is ill, whether or not care is sought (one carer per "
+                    "household, however many children are ill; a visit's time comes on top, up to a whole "
+                    "day). 0 = off (campaigns econ and econ2). 0.34 from GEMS (Zimmermann et al. 2019, Open "
+                    "Forum Infect Dis 6:ofz150): carers of children brought to a facility had lost 1.28 "
+                    "working days by the end of the visit day at the 4 African sites (Gambia 1.0, Mali 0.1, "
+                    "Mozambique 1.6, Kenya 2.4; 0.8 over all 7 sites) after about 2.8 days of diarrhoea; "
+                    "less the visit's own time (0.36 of a day) that is about a third of each day ill "
+                    "(0.16 over all 7 sites). Cost-of-illness models assume a whole day (1.0) per day of "
+                    "illness (Baral et al. 2020, from Lamberti et al. 2012's episode durations). No Ghana "
+                    "measurement (design data gap G3).",
     )
     poverty_line_daily: float = Field(
         17.9, ge=0.0,

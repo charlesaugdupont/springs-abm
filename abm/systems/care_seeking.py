@@ -191,6 +191,9 @@ class CareSeekingSystem(System):
         self._was_sick_prev = None
         self._care_sought_this_episode = None
         self._treated_this_episode = None
+        self._blocked_this_episode = None
+        self._pre_visit_sick_days = None
+        self._pre_visit_carer_days = None
         self.daily_records = []
 
     @property
@@ -221,6 +224,7 @@ class CareSeekingSystem(System):
         if self._cedi:
             self._track_episodes(child_severity, is_child,
                                  quintile=agent_state.ndata[AgentPropertyKeys.WEALTH_QUINTILE])
+            self._caring_time(agent_state, child_severity, is_child)
         else:
             self._track_episodes(child_severity, is_child)
 
@@ -311,8 +315,21 @@ class CareSeekingSystem(System):
                                                 & ~self._care_sought_this_episode),
                 "decisions": [0] * N_QUINTILES, "care_sought": [0] * N_QUINTILES,
                 "could_not_afford": [0] * N_QUINTILES,
+                # caring time (L3): carer-days lost today; and, at each episode's first
+                # visit, the days ill and carer-days lost up to and including it
+                "carer_days": [0.0] * N_QUINTILES,
+                "first_visits": [0] * N_QUINTILES, "first_facility_visits": [0] * N_QUINTILES,
+                "sick_days_to_first_visit": [0.0] * N_QUINTILES,
+                "carer_days_to_first_visit": [0.0] * N_QUINTILES,
+                "sick_days_to_first_facility_visit": [0.0] * N_QUINTILES,
+                "carer_days_to_first_facility_visit": [0.0] * N_QUINTILES,
             })
             self._blocked_this_episode[onset_mask] = False
+            if getattr(self, "_pre_visit_sick_days", None) is None or self._pre_visit_sick_days.numel() != currently_sick.numel():
+                self._pre_visit_sick_days = torch.zeros(currently_sick.shape, dtype=torch.float64)
+                self._pre_visit_carer_days = torch.zeros(currently_sick.shape, dtype=torch.float64)
+            self._pre_visit_sick_days[onset_mask] = 0.0
+            self._pre_visit_carer_days[onset_mask] = 0.0
         self._care_sought_this_episode[onset_mask] = False
         self._treated_this_episode[onset_mask] = False
         self.episodes_with_care_sought += int(
@@ -320,6 +337,52 @@ class CareSeekingSystem(System):
         )
 
         self._was_sick_prev = currently_sick
+
+    def _caring_time(self, agent_state: AgentState, child_severity: torch.Tensor, is_child: torch.Tensor):
+        """Caring time (link L3; EconomyConfig.carer_day_fraction): on every day a
+        child under five is ill, the household's parent - its first member, who
+        also decides on care - loses that share of the day's earnings
+        (WORK_LOST, read and reset by the EconomicSystem later the same day),
+        whether or not care is sought, and once however many children are ill.
+        Also counts each episode's days ill, and the carer-days the episode cost,
+        until its first visit (the GEMS-comparable measure). Draws no random
+        numbers, so carer_day_fraction = 0 leaves the run unchanged."""
+        from abm.economy.cedi import N_QUINTILES
+        K = AgentPropertyKeys
+        nd = agent_state.ndata
+        sick = (child_severity > 0.0) & is_child
+        before_visit = sick & ~self._care_sought_this_episode
+        self._pre_visit_sick_days[before_visit] += 1.0
+        f = float(self.config.economy.carer_day_fraction)
+        if f <= 0.0 or not torch.any(sick):
+            return
+        hh = nd[K.HOUSEHOLD_ID]
+        carers = nd[K.IS_PARENT].bool() & torch.isin(hh, torch.unique(hh[sick]))
+        lost = nd[K.WORK_LOST]
+        added = torch.clamp(lost[carers] + f, max=1.0) - lost[carers]
+        lost[carers] = lost[carers] + added
+        self._pre_visit_carer_days[before_visit] += f
+        q = nd[K.WEALTH_QUINTILE][carers].long()
+        self.daily_records[-1]["carer_days"] = torch.zeros(N_QUINTILES, dtype=torch.float64).index_add_(
+            0, q, added.double()).tolist()
+
+    def _record_first_visit(self, agent_state: AgentState, parent_idx, child_idx, visit_lost_days: float):
+        """At an episode's first visit: its days ill and carer-days lost so far,
+        including the visit day and the visit's own time (cedi mode)."""
+        from abm.economy.cedi import DRUG_SELLER
+        K = AgentPropertyKeys
+        nd = agent_state.ndata
+        q = int(nd[K.WEALTH_QUINTILE][parent_idx].item())
+        sick_days = float(self._pre_visit_sick_days[child_idx].item())
+        carer_days = float(self._pre_visit_carer_days[child_idx].item()) + visit_lost_days
+        today = self.daily_records[-1]
+        today["first_visits"][q] += 1
+        today["sick_days_to_first_visit"][q] += sick_days
+        today["carer_days_to_first_visit"][q] += carer_days
+        if int(nd[K.PROVIDER][parent_idx].item()) != DRUG_SELLER:
+            today["first_facility_visits"][q] += 1
+            today["sick_days_to_first_facility_visit"][q] += sick_days
+            today["carer_days_to_first_facility_visit"][q] += carer_days
 
     # ------------------------------------------------------------------
     # Presenting-illness lookup
@@ -589,7 +652,11 @@ class CareSeekingSystem(System):
             eco = self.config.economy
             add_household_cash(agent_state, parent_idx, -oop_cost, eco.wealth_scale_days)
             lost = agent_state.ndata[AgentPropertyKeys.WORK_LOST]
-            lost[parent_idx] = min(1.0, float(lost[parent_idx].item()) + float(lost_day_fraction))
+            before = float(lost[parent_idx].item())
+            lost[parent_idx] = min(1.0, before + float(lost_day_fraction))
+            if not bool(self._care_sought_this_episode[child_idx]):
+                self._record_first_visit(agent_state, parent_idx, child_idx,
+                                         float(lost[parent_idx].item()) - before)
         agent_state.ndata[AgentPropertyKeys.CARE_SEEKING_COUNT][parent_idx] += 1
         self._care_sought_this_episode[child_idx] = True
 
