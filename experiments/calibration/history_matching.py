@@ -748,9 +748,11 @@ def v4_emulator_inputs(metric: str) -> list[str]:
 #: §7b) on the v4 epidemiology. Only economic parameters vary; every
 #: epidemiological parameter stays at its v4 default (config.py) with v4's base
 #: settings (vaccination off, as in the v4 calibration). Both campaigns ran
-#: before caring time (L3, economy.carer_day_fraction) was built, so it is held
-#: off here to keep them reproducible.
-ECON_BASE_OVERRIDES = {**V4_BASE_OVERRIDES, "economy.model": "cedi", "economy.carer_day_fraction": 0.0}
+#: before caring time (L3, economy.carer_day_fraction) and water and sanitation
+#: by wealth (L1, economy.wash_by_quintile) were built, so both are held off
+#: here to keep them reproducible.
+ECON_BASE_OVERRIDES = {**V4_BASE_OVERRIDES, "economy.model": "cedi", "economy.carer_day_fraction": 0.0,
+                       "economy.wash_by_quintile": False}
 
 #: Six dimensions; the rest of EconomyConfig is set from data (GLSS 7, DHS 2022,
 #: NHIS Medicines List) or held at its stated assumption. Ranges from the pilots

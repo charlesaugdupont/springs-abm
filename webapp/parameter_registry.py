@@ -1347,6 +1347,18 @@ REGISTRY: list[ParamMeta] = [
         rationale="Cedi household economy, caring time (link L3; config.EconomyConfig; docs/economy_design_proposal.md): GEMS, four African sites (Zimmermann et al. 2019). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
+        path="economy.wash_by_quintile", label="Water and sanitation follow household wealth", category="internal", evidence_tier="literature",
+        rationale="Cedi household economy, link L1 (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+    ),
+    ParamMeta(
+        path="economy.water_source_by_quintile", label="Drinking-water source by wealth quintile", category="internal", evidence_tier="literature",
+        rationale="DHS 2022 Eastern Region, raked to the local Akuse shares (link L1; docs/economy_design_proposal.md §3.5). Not used by the web app.",
+    ),
+    ParamMeta(
+        path="economy.sanitation_by_quintile", label="Sanitation by wealth quintile", category="internal", evidence_tier="literature",
+        rationale="DHS 2022 Eastern Region, raked to the local Akuse shares (link L1; docs/economy_design_proposal.md §3.5). Not used by the web app.",
+    ),
+    ParamMeta(
         path="economy.poverty_line_daily", label="Upper poverty line", category="internal", evidence_tier="literature",
         rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
     ),

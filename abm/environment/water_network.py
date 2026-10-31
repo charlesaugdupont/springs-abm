@@ -354,6 +354,26 @@ class WaterNetwork:
         net.ground_kernel[:, n_reach:] = torch.from_numpy(gk).float()
 
         # --- per-agent release weights ---
+        net.agent_hh = agent_hh.cpu()
+        net.water_cfg = water_cfg
+        net.set_household_sanitation(net.hh_sanitation, agent_state.ndata[AgentPropertyKeys.IS_CHILD])
+
+        dil = torch.ones(S + 2, dtype=torch.float32)
+        dil[:S][net.source_kind == RIVER] = float(water_cfg.river_dilution)
+        dil[S + 1] = 0.0
+        net.dilution = dil
+        net._n_reach = n_reach
+        return net
+
+    def set_household_sanitation(self, hh_sanitation: torch.Tensor, is_child: torch.Tensor) -> None:
+        """Sets each household's sanitation type (SAN_*, one per household in
+        household order) and the per-agent release weights that follow from it:
+        an adult releases at its household's sanitation weight; a child's stools
+        are also disposed of unsafely (as open defecation) with probability
+        child_stool_unsafe_frac. Used by build, and by the cedi economy when
+        sanitation follows wealth (EconomyConfig.wash_by_quintile)."""
+        water_cfg = self.water_cfg
+        self.hh_sanitation = hh_sanitation
         surface_w = torch.tensor([
             water_cfg.surface_release_improved_onsite, water_cfg.surface_release_sewer,
             water_cfg.surface_release_unimproved, water_cfg.surface_release_open_defecation,
@@ -362,23 +382,14 @@ class WaterNetwork:
             water_cfg.ground_release_improved_onsite, water_cfg.ground_release_sewer,
             water_cfg.ground_release_unimproved, water_cfg.ground_release_open_defecation,
         ], dtype=torch.float32)
-        san_agent = net.hh_sanitation[agent_hh]
-        is_child = agent_state.ndata[AgentPropertyKeys.IS_CHILD].bool().cpu()
+        san_agent = self.hh_sanitation[self.agent_hh]
+        is_child = is_child.bool().cpu()
         u = float(water_cfg.child_stool_unsafe_frac)
         rs, rg = surface_w[san_agent], ground_w[san_agent]
-        net.agent_surface_release = torch.where(
+        self.agent_surface_release = torch.where(
             is_child, u * water_cfg.surface_release_open_defecation + (1 - u) * rs, rs)
-        net.agent_ground_release = torch.where(
+        self.agent_ground_release = torch.where(
             is_child, u * water_cfg.ground_release_open_defecation + (1 - u) * rg, rg)
-        net.agent_hh = agent_hh.cpu()
-
-        dil = torch.ones(S + 2, dtype=torch.float32)
-        dil[:S][net.source_kind == RIVER] = float(water_cfg.river_dilution)
-        dil[S + 1] = 0.0
-        net.dilution = dil
-        net.water_cfg = water_cfg
-        net._n_reach = n_reach
-        return net
 
     # ------------------------------------------------------------------
     # Per-pathogen state

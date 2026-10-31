@@ -56,14 +56,26 @@ def _age_groups(rng: np.random.Generator, is_child: np.ndarray, is_head: np.ndar
     return group
 
 
-def initialise(agent_state, config) -> dict:
+def initialise(agent_state, config, water_network=None) -> dict:
     """Gives every agent and household its economic attributes (cedi mode).
 
     Call after AgentFactory.initialize_agent_properties. Draws only from its
     own generator (config.seed + economy.rng_seed_offset). Returns a summary
     of the realised economy (per-quintile earning levels etc.) for reporting.
+
+    With economy.wash_by_quintile (link L1), call after the catchment water
+    network is built and pass it: each household's quintile is drawn given its
+    drinking-water source, P(q | source) proportional to quintile_shares[q] x
+    water_source_by_quintile[q][source], from the same uniforms the independent
+    draw uses (so every later draw is unchanged), and after every other draw its
+    sanitation is redrawn from sanitation_by_quintile and written back to the
+    network with its release weights.
     """
     eco = config.economy
+    wash = bool(getattr(eco, "wash_by_quintile", False))
+    if wash and water_network is None:
+        raise ValueError("economy.wash_by_quintile needs the catchment water model (water.model='catchment', "
+                         "spatial=True): the quintile is drawn given the household's water source")
     rng = np.random.default_rng(int(config.seed) + int(eco.rng_seed_offset))
     nd = agent_state.ndata
     device = nd[K.HOUSEHOLD_ID].device
@@ -83,7 +95,19 @@ def initialise(agent_state, config) -> dict:
     group = _age_groups(rng, is_child, is_head, tuple(a_shares / a_shares.sum()))
     earner = group >= AGE_15_64
     q_shares = np.asarray(eco.quintile_shares, dtype=np.float64)
-    quintile = rng.choice(N_QUINTILES, size=n_hh, p=q_shares / q_shares.sum())
+    if wash:
+        # P(q | source): Bayes on the raked table; the same n_hh uniforms as Generator.choice
+        src_q = np.asarray(eco.water_source_by_quintile, dtype=np.float64)
+        src_q = src_q / src_q.sum(axis=1, keepdims=True)
+        source = water_network.hh_type.cpu().numpy()
+        if len(source) != n_hh:
+            raise ValueError("water network and economy disagree on the number of households")
+        post = (q_shares / q_shares.sum())[None, :] * src_q[:, source].T          # (n_hh, 5)
+        cdf = np.cumsum(post / post.sum(axis=1, keepdims=True), axis=1)
+        u = rng.random(n_hh)
+        quintile = (cdf[:, :-1] <= u[:, None]).sum(axis=1)
+    else:
+        quintile = rng.choice(N_QUINTILES, size=n_hh, p=q_shares / q_shares.sum())
 
     # Earning level per quintile: the quintile's total full-health income is
     # (1 + s) x GLSS per-capita consumption x its population.
@@ -112,6 +136,19 @@ def initialise(agent_state, config) -> dict:
     cum = np.cumsum(shares, axis=1)[quintile]
     provider = (rng.random(n_hh)[:, None] > cum[:, :-1]).sum(axis=1)
 
+    wash_summary = {}
+    if wash:
+        san_q = np.asarray(eco.sanitation_by_quintile, dtype=np.float64)
+        san_q = san_q / san_q.sum(axis=1, keepdims=True)
+        sanitation = (rng.random(n_hh)[:, None] > np.cumsum(san_q, axis=1)[quintile][:, :-1]).sum(axis=1)
+        water_network.set_household_sanitation(torch.as_tensor(sanitation, dtype=torch.long), nd[K.IS_CHILD])
+        wash_summary = {
+            "water_source_by_quintile": [(np.bincount(source[quintile == k], minlength=4) / max(1, int((quintile == k).sum()))).tolist()
+                                         for k in range(N_QUINTILES)],
+            "sanitation_by_quintile": [(np.bincount(sanitation[quintile == k], minlength=4) / max(1, int((quintile == k).sum()))).tolist()
+                                       for k in range(N_QUINTILES)],
+        }
+
     def put(key, values, dtype):
         nd[key] = torch.as_tensor(values, dtype=dtype).to(device)
 
@@ -135,6 +172,7 @@ def initialise(agent_state, config) -> dict:
                                     if np.any(quintile == k) else float("nan") for k in range(N_QUINTILES)],
         "provider_shares": (np.bincount(provider, minlength=N_PROVIDERS) / n_hh).tolist(),
         "age_group_shares_5plus": [float((group[~is_child] == g).mean()) for g in (AGE_5_14, AGE_15_64, AGE_65_PLUS)],
+        **wash_summary,
     }
 
 

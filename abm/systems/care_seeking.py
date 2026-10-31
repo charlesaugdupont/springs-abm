@@ -164,6 +164,11 @@ class CareSeekingSystem(System):
         # daily records (`daily_records`). The legacy path is unchanged.
         self._cedi = getattr(config, "economy", None) is not None and config.economy.model == "cedi"
         self.daily_records: list[dict] = []
+        #: each agent's household drinking-water source type (water_network.HH_*), set
+        #: by the model under the catchment water model, for outputs by source (cedi mode)
+        self.agent_water_source: torch.Tensor | None = None
+        self._day: int = 0
+        self._last_ill_day: torch.Tensor | None = None
         self.decisions_faced: int = 0
         self.care_sought: int = 0
         self.could_not_afford: int = 0
@@ -194,6 +199,9 @@ class CareSeekingSystem(System):
         self._blocked_this_episode = None
         self._pre_visit_sick_days = None
         self._pre_visit_carer_days = None
+        self._day = 0
+        self._last_ill_day = None
+        self._sick_yesterday = None
         self.daily_records = []
 
     @property
@@ -225,6 +233,7 @@ class CareSeekingSystem(System):
             self._track_episodes(child_severity, is_child,
                                  quintile=agent_state.ndata[AgentPropertyKeys.WEALTH_QUINTILE])
             self._caring_time(agent_state, child_severity, is_child)
+            self._recent_illness(agent_state, child_severity, is_child)
         else:
             self._track_episodes(child_severity, is_child)
 
@@ -365,6 +374,40 @@ class CareSeekingSystem(System):
         q = nd[K.WEALTH_QUINTILE][carers].long()
         self.daily_records[-1]["carer_days"] = torch.zeros(N_QUINTILES, dtype=torch.float64).index_add_(
             0, q, added.double()).tolist()
+
+    def _recent_illness(self, agent_state: AgentState, child_severity: torch.Tensor, is_child: torch.Tensor):
+        """DHS-style outputs (cedi mode): today's children under five, and those
+        ill on any of the last 14 days (DHS: diarrhoea in the two weeks before the
+        interview), by wealth quintile; and, when the household water source is
+        known, children and illness onsets by source. An agent slot reused for a
+        newborn (DemographySystem) starts with no recent illness. No random draws."""
+        from abm.economy.cedi import N_QUINTILES
+        K = AgentPropertyKeys
+        nd = agent_state.ndata
+        sick = (child_severity > 0.0) & is_child
+        n = sick.numel()
+        if self._last_ill_day is None or self._last_ill_day.numel() != n:
+            self._last_ill_day = torch.full((n,), -10**9, dtype=torch.long)
+            self._birth_day_seen = nd[K.BIRTH_DAY].clone() if K.BIRTH_DAY in nd else None
+        if self._birth_day_seen is not None:
+            reborn = nd[K.BIRTH_DAY] != self._birth_day_seen
+            self._last_ill_day[reborn] = -10**9
+            self._birth_day_seen = nd[K.BIRTH_DAY].clone()
+        self._last_ill_day[sick] = self._day
+        recent = is_child & (self._day - self._last_ill_day < 14)
+        q = nd[K.WEALTH_QUINTILE].long()
+        today = self.daily_records[-1]
+        today["children"] = torch.bincount(q[is_child], minlength=N_QUINTILES).tolist()
+        today["ill_last_14_days"] = torch.bincount(q[recent], minlength=N_QUINTILES).tolist()
+        if self.agent_water_source is not None:
+            w = self.agent_water_source
+            prev = getattr(self, "_sick_yesterday", None)
+            onset = sick & ~(prev if prev is not None and prev.numel() == n else torch.zeros_like(sick))
+            today["children_by_source"] = torch.bincount(w[is_child], minlength=4).tolist()
+            today["episodes_started_by_source"] = torch.bincount(w[onset], minlength=4).tolist()
+            today["ill_last_14_days_by_source"] = torch.bincount(w[recent], minlength=4).tolist()
+        self._sick_yesterday = sick
+        self._day += 1
 
     def _record_first_visit(self, agent_state: AgentState, parent_idx, child_idx, visit_lost_days: float):
         """At an episode's first visit: its days ill and carer-days lost so far,

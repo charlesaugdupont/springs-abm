@@ -180,8 +180,13 @@ class SVEIRModel(Model):
         # 3b. Household economy in cedis (EconomyConfig.model == "cedi"): roles
         # by age, wealth quintiles, earnings, cash. Its own random stream, so the
         # population above is the legacy model's for the same seed.
+        # With water and sanitation by wealth (economy.wash_by_quintile, link
+        # L1) it runs after the water network is built (step 7b), since the
+        # quintile is drawn given the household's water source.
         self.economy_summary = None
-        if getattr(self.config, "economy", None) is not None and self.config.economy.model == "cedi":
+        cedi_economy = getattr(self.config, "economy", None) is not None and self.config.economy.model == "cedi"
+        wash_by_quintile = cedi_economy and bool(self.config.economy.wash_by_quintile)
+        if cedi_economy and not wash_by_quintile:
             from abm.economy import cedi
             self.economy_summary = cedi.initialise(self.graph, self.config)
 
@@ -218,6 +223,19 @@ class SVEIRModel(Model):
                 for pathogen in self.pathogens:
                     if getattr(pathogen, "WATERBORNE", False):
                         pathogen.init_water_reservoir(self.grid_environment)
+
+        # 7b. Household economy with water and sanitation by wealth (link L1).
+        if wash_by_quintile:
+            from abm.economy import cedi
+            network = getattr(self.grid_environment, "water_network", None) if self.grid_environment is not None else None
+            self.economy_summary = cedi.initialise(self.graph, self.config, water_network=network)
+        # The cedi economy's outputs by drinking-water source (catchment model only).
+        if cedi_economy and getattr(self.grid_environment, "water_network", None) is not None:
+            from abm.systems.care_seeking import CareSeekingSystem
+            network = self.grid_environment.water_network
+            for system in self.systems:
+                if isinstance(system, CareSeekingSystem):
+                    system.agent_water_source = network.hh_type[network.agent_hh].clone()
 
         # 8. Age-structured incidence bookkeeping (no RNG; pure observation).
         self._init_age_structured_records()

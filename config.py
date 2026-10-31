@@ -1710,6 +1710,12 @@ class EconomyConfig(BaseModel):
         "full" wealth - and the cost of a visit, out of pocket plus lost earnings,
         in the same units. WEALTH holds W, so health recovery (x (1 + W)) and every
         wealth output read it.
+      * Water and sanitation by wealth (L1; wash_by_quintile, on by default).
+        The water model assigns drinking-water sources as before (local shares,
+        surface and ground users near those sources); the quintile is then
+        drawn given the source, and sanitation given the quintile, so that
+        poverty, open defecation and surface-water use cluster in the same
+        households, near the canals, with the overall shares unchanged.
       * Caring time (L3). On every day a child under five is ill, the parent
         loses carer_day_fraction of the day's earnings, whether or not care is
         sought (0 = off). It is not part of the care decision: most of those
@@ -1755,6 +1761,13 @@ class EconomyConfig(BaseModel):
     On the econ2 verification seeds every econ2 target stays within 1.33 SD and
     the v4 targets are unchanged (the same single Cryptosporidium miss); the
     economy hardly moves (an episode costs about half a day of household income).
+
+    WATER AND SANITATION BY WEALTH (L1, 2026-10-31; design §7b): on by default
+    after a pilot on the same seeds in which no v4 or econ2 target moved by more
+    than 0.8 SD. Because the v4 water routes are small (rotavirus 3%,
+    Cryptosporidium 0.7% of infections; Campylobacter has none), illness hardly
+    differs by quintile or water source, unlike DHS's gradient - a question for
+    v5.
     """
     model: str = Field(
         "legacy",
@@ -1898,6 +1911,31 @@ class EconomyConfig(BaseModel):
                     "illness (Baral et al. 2020, from Lamberti et al. 2012's episode durations). No Ghana "
                     "measurement (design data gap G3).",
     )
+    wash_by_quintile: bool = Field(
+        True,
+        description="Water and sanitation by wealth (link L1). True (default since 2026-10-31): the "
+                    "household's wealth quintile is drawn given its drinking-water source (itself assigned "
+                    "by the water model, by distance), from quintile_shares x water_source_by_quintile, and "
+                    "its sanitation is then redrawn from sanitation_by_quintile. Needs the catchment water "
+                    "model. False: the quintile is drawn independently of water and sanitation, as in "
+                    "campaigns econ and econ2.",
+    )
+    water_source_by_quintile: list[list[float]] = Field(
+        [[0.1153, 0.8388, 0.0449, 0.0011], [0.5976, 0.2770, 0.1077, 0.0178], [0.7881, 0.0932, 0.0703, 0.0484],
+         [0.7259, 0.0406, 0.0470, 0.1864], [0.5927, 0.0, 0.0247, 0.3826]],
+        description="P(primary drinking-water source | wealth quintile), lowest quintile first; columns piped, "
+                    "surface, ground, packaged (WaterConfig's order). Eastern Region's gradient (DHS 2022 "
+                    "household recode, survey-weighted, 1,216 households; springs, rainwater and tankers "
+                    "counted as ground) raked to quintile_shares and to WaterConfig's local Akuse shares "
+                    "(design §3.5), so those shares are kept on average.",
+    )
+    sanitation_by_quintile: list[list[float]] = Field(
+        [[0.1448, 0.0, 0.2645, 0.5907], [0.5066, 0.0, 0.2922, 0.2012], [0.5565, 0.1866, 0.2050, 0.0518],
+         [0.6901, 0.1743, 0.1114, 0.0242], [0.5327, 0.4461, 0.0213, 0.0]],
+        description="P(sanitation | wealth quintile), lowest quintile first; columns improved on-site, sewer, "
+                    "unimproved, open defecation (WaterConfig's order). Same sources and raking as "
+                    "water_source_by_quintile.",
+    )
     poverty_line_daily: float = Field(
         17.9, ge=0.0,
         description="Upper poverty line, GH¢ per person a day (GLSS 7: GH¢1,760.80 a year per adult "
@@ -1926,11 +1964,11 @@ class EconomyConfig(BaseModel):
             raise ValueError(f"{info.field_name}: {n} non-negative shares summing to 1")
         return v
 
-    @field_validator("provider_shares_by_quintile")
+    @field_validator("provider_shares_by_quintile", "water_source_by_quintile", "sanitation_by_quintile")
     @classmethod
-    def _check_providers(cls, v):
+    def _check_providers(cls, v, info):
         if len(v) != 5 or any(len(r) != 4 or any(x < 0 for x in r) or abs(sum(r) - 1.0) > 0.01 for r in v):
-            raise ValueError("provider_shares_by_quintile: 5 rows of 4 non-negative shares summing to 1")
+            raise ValueError(f"{info.field_name}: 5 rows of 4 non-negative shares summing to 1")
         return v
 
     @field_validator("consumption_per_capita_daily")

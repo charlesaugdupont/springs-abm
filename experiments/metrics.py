@@ -158,7 +158,11 @@ def economy_metrics(model, burn_in_days: int | None = None) -> dict:
     * caring time (EconomyConfig.carer_day_fraction): carer-days lost per
       episode, and the days ill and carer-days lost up to and including an
       episode's first visit (all providers, and facilities only - GEMS's
-      measure, Zimmermann et al. 2019).
+      measure, Zimmermann et al. 2019);
+    * DHS-style two-week prevalence of illness among children under five (ill on
+      any of the last 14 days; the three pathogens only, so below DHS's all-cause
+      diarrhoea) and illness episodes per child-year, by quintile and, under the
+      catchment water model, by the household's drinking-water source.
     """
     from abm.systems.economics import EconomicSystem
     if getattr(model.config, "economy", None) is None or model.config.economy.model != "cedi":
@@ -211,6 +215,23 @@ def economy_metrics(model, burn_in_days: int | None = None) -> dict:
                 n = tot(n_key)
                 out[f"econ_sick_days_to_{name}"] = tot(f"sick_days_to_{name}") / n if n else float("nan")
                 out[f"econ_carer_days_to_{name}"] = tot(f"carer_days_to_{name}") / n if n else float("nan")
+        # DHS-style diarrhoea (any of the three pathogens' illness) in the last two weeks, and
+        # illness episodes per child-year, by wealth quintile and by drinking-water source
+        if "children" in crecs[0]:
+            arr = lambda k: np.sum([r[k] for r in crecs], axis=0).astype(float)
+            ch, ill, onsets = arr("children"), arr("ill_last_14_days"), arr("episodes_started")
+            ratio = lambda a, b: float(a / b) if b > 0 else float("nan")
+            out["econ_diarrhoea_2wk_prevalence"] = ratio(ill.sum(), ch.sum())
+            out["econ_episodes_per_child_year"] = ratio(365.0 * onsets.sum(), ch.sum())
+            for q in range(5):
+                out[f"econ_diarrhoea_2wk_prevalence_q{q + 1}"] = ratio(ill[q], ch[q])
+                out[f"econ_episodes_per_child_year_q{q + 1}"] = ratio(365.0 * onsets[q], ch[q])
+            if "children_by_source" in crecs[0]:
+                chs, ills, ons = arr("children_by_source"), arr("ill_last_14_days_by_source"), arr("episodes_started_by_source")
+                for k, name in enumerate(("piped", "surface", "ground", "packaged")):
+                    out[f"econ_diarrhoea_2wk_prevalence_{name}"] = ratio(ills[k], chs[k])
+                    out[f"econ_episodes_per_child_year_{name}"] = ratio(365.0 * ons[k], chs[k])
+                    out[f"econ_child_share_{name}"] = ratio(chs[k], chs.sum())
         for q in range(5):
             out[f"econ_care_seeking_rate_q{q + 1}"] = float(with_care[q] / ended[q]) if ended[q] else float("nan")
             out[f"econ_could_not_afford_rate_q{q + 1}"] = float(cna[q] / dec[q]) if dec[q] else float("nan")

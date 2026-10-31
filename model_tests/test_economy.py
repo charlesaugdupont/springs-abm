@@ -356,8 +356,76 @@ def test_caring_time_metrics(make_model):
 
 
 def test_caring_time_default_and_the_econ_campaigns():
-    """0.34 from GEMS's African sites (2026-10-31); econ and econ2 ran without it."""
+    """0.34 from GEMS's African sites, and L1 on (2026-10-31); econ and econ2 ran without either."""
     from experiments.calibration import history_matching as hm
     assert SVEIRCONFIG.economy.carer_day_fraction == 0.34
+    assert SVEIRCONFIG.economy.wash_by_quintile is True
     for name in ("econ", "econ2"):
         assert hm.CAMPAIGNS[name].base_overrides["economy.carer_day_fraction"] == 0.0
+        assert hm.CAMPAIGNS[name].base_overrides["economy.wash_by_quintile"] is False
+
+
+# --- water and sanitation by wealth (link L1; EconomyConfig.wash_by_quintile) -------------------
+
+L1 = {**CEDI, "economy.wash_by_quintile": True}
+NO_L1 = {**CEDI, "economy.wash_by_quintile": False}
+
+
+def _by_household(model, key):
+    nd = model.graph.ndata
+    _, first = np.unique(nd[K.HOUSEHOLD_ID].numpy(), return_index=True)
+    return nd[key].numpy()[first]
+
+
+def test_wash_follows_wealth_with_the_local_shares_kept(make_model):
+    off = make_model(run=False, agents=6000, overrides=NO_L1)
+    on = make_model(run=False, agents=6000, overrides=L1)
+    net_off, net_on = off.grid_environment.water_network, on.grid_environment.water_network
+    assert torch.equal(net_on.hh_type, net_off.hh_type), "the water model's source assignment is untouched"
+    eco = on.config.economy
+    q = _by_household(on, K.WEALTH_QUINTILE)
+    assert np.allclose(np.bincount(q, minlength=5) / len(q), eco.quintile_shares, atol=0.03)
+    src, san = net_on.hh_type.numpy(), net_on.hh_sanitation.numpy()
+    for k in range(5):
+        if (q == k).sum() >= 150:
+            assert np.allclose(np.bincount(src[q == k], minlength=4) / (q == k).sum(), eco.water_source_by_quintile[k], atol=0.07)
+            assert np.allclose(np.bincount(san[q == k], minlength=4) / (q == k).sum(), eco.sanitation_by_quintile[k], atol=0.07)
+    assert np.allclose(np.bincount(san, minlength=4) / len(san), on.config.water.sanitation_shares(), atol=0.03)
+    # the poorest drink surface water and defecate in the open far more than the richest
+    assert (src[q == 0] == 1).mean() > 0.6 > (src[q == 4] == 1).mean()
+    assert (san[q == 0] == 3).mean() > 0.4 > (san[q == 4] == 3).mean()
+
+
+def test_wash_by_quintile_keeps_the_other_economic_draws(make_model):
+    off = make_model(run=False, agents=3000, overrides=NO_L1)
+    on = make_model(run=False, agents=3000, overrides=L1)
+    for key in (K.ECON_AGE_GROUP, K.INSURED, K.HOUSEHOLD_ID, K.IS_PARENT, K.status("rota")):
+        assert torch.equal(off.graph.ndata[key], on.graph.ndata[key]), key
+
+
+def test_release_weights_follow_the_new_sanitation(make_model):
+    from abm.environment.water_network import SAN_OPEN, SAN_SEWER
+    model = make_model(run=False, agents=3000, overrides=L1)
+    net, w = model.grid_environment.water_network, model.config.water
+    adult = ~model.graph.ndata[K.IS_CHILD].bool()
+    san_agent = net.hh_sanitation[net.agent_hh]
+    assert torch.allclose(net.agent_surface_release[adult & (san_agent == SAN_OPEN)],
+                          torch.tensor(float(w.surface_release_open_defecation)))
+    assert torch.allclose(net.agent_surface_release[adult & (san_agent == SAN_SEWER)],
+                          torch.tensor(float(w.surface_release_sewer)))
+
+
+def test_wash_by_quintile_needs_the_catchment_water_model(make_model):
+    with pytest.raises(ValueError, match="catchment"):
+        make_model(run=False, agents=600, overrides={**L1, "water.model": "legacy"})
+
+
+def test_dhs_style_outputs(make_model):
+    model = make_model(steps=60, agents=2000, overrides=L1)
+    m = economy_metrics(model, burn_in_days=10)
+    for key in ("econ_diarrhoea_2wk_prevalence", "econ_diarrhoea_2wk_prevalence_q1", "econ_episodes_per_child_year_q5",
+                "econ_episodes_per_child_year_surface", "econ_child_share_piped"):
+        assert key in m
+    assert 0.0 <= m["econ_diarrhoea_2wk_prevalence"] <= 1.0
+    shares = [m[f"econ_child_share_{s}"] for s in ("piped", "surface", "ground", "packaged")]
+    assert sum(shares) == pytest.approx(1.0)
