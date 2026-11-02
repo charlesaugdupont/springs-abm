@@ -6,7 +6,7 @@ from pathlib import Path
 
 import torch
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator, model_validator
 
 # --- Pathogen Configuration ---
 
@@ -247,6 +247,11 @@ def _maled_age_profile(band_fractions: tuple[float, ...], overall: float) -> lis
     """
     return [(float(u), round(f / overall, 4)) for u, f in zip((6, 12, 18, 24), band_fractions)]
 
+#: Percentiles at which RotavirusConfig.vaccine_dose1_age_days and
+#: vaccine_dose_interval_days are given (1, 5, 10, ..., 95, 99).
+VACCINE_AGE_PERCENTILES: tuple[float, ...] = (0.01,) + tuple(round(0.05 * k, 2) for k in range(1, 20)) + (0.99,)
+
+
 class RotavirusConfig(PathogenConfig):
     """Parameters specific to Rotavirus."""
     name: str = Field("rota", description="Pathogen identifier.")
@@ -340,11 +345,103 @@ class RotavirusConfig(PathogenConfig):
         2, description="Latent period (days) before an exposed agent becomes infectious."
     )
     vaccination_rate: float = Field(
-        0.001, description="Daily probability an unvaccinated agent receives the rotavirus vaccine."
+        0.001, description="vaccination_model 'hazard': daily probability that a susceptible child receives the "
+                           "rotavirus vaccine (at 0.001 a day a child who stays uninfected is vaccinated by 23 "
+                           "months with probability 0.5). Not used by 'schedule'."
     )
     vaccine_efficacy: float = Field(
         0.55, description="Reduction in severity/susceptibility conferred by vaccination."
     )
+    # --- Rotavirus vaccination by schedule (vaccination_model = "schedule") ---
+    # Ghana's programme: Rotarix (2 doses, 6 and 10 weeks) from April-May 2012,
+    # ROTAVAC (3 doses, 6, 10 and 14 weeks) from 2020 (nationwide by the end of
+    # 2020; PATH; Asare et al. 2026, J Infect Dis 233:e1253). Each child slot
+    # draws, from its own generator, how many doses it receives, the age of each
+    # and whether each "takes"; a child enters V at the first dose that takes
+    # (from S, or from R after an earlier infection), and leaves it (to S, or to
+    # R if it was ever infected) when its vaccine protection wanes. Only
+    # children whose vaccine took are ever_vaccinated (the severity reduction).
+    # vaccination_rate is then not used. Recommended for Akuse today, with
+    # vaccine_counts_as_prior_infection (experiments.presets.AKUSE_VACCINATION_2026;
+    # pilot 2026-11-02, docs/vaccination_schedule.md): rotavirus illness falls by
+    # 41% in under-fives and 52% in infants against no vaccination (Ghana: 49%
+    # fall in under-five rotavirus hospitalisations, Armah et al. 2016).
+    vaccination_model: str = Field(
+        "hazard",
+        description="'hazard' (default; the original constant daily vaccination_rate, campaign v4's model) "
+                    "or 'schedule' (doses by age, coverage, take and waning from Ghana data; see below).",
+    )
+    vaccine_dose_continuation: list[float] = Field(
+        [0.962, 0.967, 0.967],
+        description="P(dose 1), P(dose 2 | dose 1), P(dose 3 | dose 2). Ghana DHS 2022 (children 12-23 months, card "
+                    "or mother's report, survey-weighted, n = 1,966): rotavirus 1 96.2% (95% CI 94.9-97.3), "
+                    "rotavirus 2 93.1% (91.7-94.4), so 0.967 (0.958-0.975) continue; Eastern Region 96.5% and "
+                    "96.5% (n = 81). The DHS records two doses only; dose 3 (ROTAVAC) assumes the same continuation, "
+                    "giving 90% fully vaccinated, as the routine data report for 2021-22 (rota3 at least 90%; "
+                    "Ghana's switch analysis, Open Forum Infect Dis 2024, 11:ofae539).",
+    )
+    vaccine_dose1_age_days: list[float] = Field(
+        [22.0, 41.0, 42.0, 42.0, 43.0, 43.0, 44.0, 45.0, 46.0, 47.0, 48.0, 49.0, 51.0, 54.0, 57.0, 61.0, 65.0,
+         71.0, 79.7, 99.0, 272.3],
+        description="Age (days) at dose 1 at percentiles 1, 5, 10, 15, ..., 95, 99 (VACCINE_AGE_PERCENTILES; drawn "
+                    "by inverse CDF). Ghana DHS 2022, card-dated doses of children 12-35 months (n = 3,032, "
+                    "survey-weighted): median 48 days, 69% by 8 weeks, 96% by 15 weeks; Eastern Region (n = 128) "
+                    "median 47.",
+    )
+    vaccine_dose_interval_days: list[float] = Field(
+        [21.8, 28.0, 28.0, 28.0, 28.0, 28.0, 28.0, 28.0, 28.0, 29.0, 30.0, 32.0, 34.0, 35.0, 35.0, 35.0, 41.0,
+         49.0, 59.0, 84.0, 182.0],
+        description="Days between consecutive doses at the same percentiles: Ghana DHS 2022, dose 1 to dose 2 on "
+                    "the card (n = 2,914; median 30, uncorrelated with the age at dose 1, r = 0.04). Dose 2 to 3 "
+                    "(not in the DHS) is assumed the same.",
+    )
+    vaccine_take_by_dose: list[float] = Field(
+        [0.811, 0.250, 0.154],
+        description="Probability that each dose induces protection in a child not yet protected: ROTAVAC "
+                    "estimates for Ghana (Navrongo surveillance; Asare et al. 2026, J Infect Dis 233:e1253, Table "
+                    "1): 0.811 (0.69-0.85), 0.250 (0.19-0.31), 0.154 (0.06-0.30), so 88% respond to three doses "
+                    "(Rotarix: 0.612 and 0.19).",
+    )
+    vaccine_protection_days: float | None = Field(
+        616.0, gt=0.0,
+        description="Mean duration (days; exponential) of vaccine protection, after which the child leaves V. "
+                    "ROTAVAC, Ghana: 20.2 months (15.6-28.3; Asare et al. 2026; Rotarix 5.5 months). None = "
+                    "lifelong, as under 'hazard'.",
+    )
+    vaccine_rng_seed_offset: int = Field(
+        7919, description="Added to the run's seed for the vaccination schedule's own generator.",
+    )
+    vaccine_counts_as_prior_infection: bool = Field(
+        False,
+        description="If True, a child whose vaccine took (ever_vaccinated) counts one extra prior infection in "
+                    "P(diarrhoea | infection), i.e. x exp(-symptomatic_reduction_per_prior_infection): vaccine "
+                    "protection against illness equivalent to one natural infection, as in Asare et al. 2026 "
+                    "(J Infect Dis 233:e1253). False (default): a vaccinated child who is infected is as likely to "
+                    "fall ill as an unvaccinated one (vaccine_efficacy and immunity_factor_vaccine only).",
+    )
+
+    @field_validator("vaccination_model")
+    @classmethod
+    def _check_vaccination_model(cls, v):
+        if v not in ("hazard", "schedule"):
+            raise ValueError("vaccination_model must be 'hazard' or 'schedule'")
+        return v
+
+    @field_validator("vaccine_dose1_age_days", "vaccine_dose_interval_days")
+    @classmethod
+    def _check_age_table(cls, v, info):
+        if len(v) != len(VACCINE_AGE_PERCENTILES) or any(b < a for a, b in zip(v, v[1:])) or v[0] < 0:
+            raise ValueError(f"{info.field_name}: {len(VACCINE_AGE_PERCENTILES)} non-decreasing values in days, "
+                             "at VACCINE_AGE_PERCENTILES")
+        return v
+
+    @model_validator(mode="after")
+    def _check_doses(self):
+        if len(self.vaccine_dose_continuation) != len(self.vaccine_take_by_dose) or not self.vaccine_take_by_dose:
+            raise ValueError("vaccine_dose_continuation and vaccine_take_by_dose need one value per dose")
+        if any(not 0.0 <= x <= 1.0 for x in self.vaccine_dose_continuation + self.vaccine_take_by_dose):
+            raise ValueError("vaccine_dose_continuation and vaccine_take_by_dose are probabilities")
+        return self
 
     # --- Infection -> disease (MAL-ED; see abm/evidence/maled.py) ---
     # Before this, every rotavirus infection in a child produced an episode.

@@ -821,11 +821,13 @@ def hm_metrics_econ(model) -> dict:
     """The economy's outputs, the overall care-seeking rate, and the v4
     epidemiological metrics (true infections, routes and the observation
     layer), so that verification can show the epidemiology has not moved."""
-    from experiments.metrics import economy_metrics
+    from experiments.metrics import economy_metrics, rota_severity_metrics, vaccination_metrics
     out = calibration_metrics(model)
     out.update(observe(model))
     out.update(care_seeking_metrics(model))
     out.update(economy_metrics(model))
+    out.update(vaccination_metrics(model))
+    out.update(rota_severity_metrics(model))
     return out
 
 

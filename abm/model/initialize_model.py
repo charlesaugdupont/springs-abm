@@ -288,6 +288,8 @@ class SVEIRModel(Model):
                 self.pathogens.append(
                     build_pathogen(p_config, self.steering_parameters, self.config.device)
                 )
+                # the run's seed, for a pathogen's own generators (rotavirus vaccination schedule)
+                self.pathogens[-1].run_seed = int(self.config.seed)
             else:
                 print(f"Warning: Pathogen '{p_config.name}' not implemented.")
 

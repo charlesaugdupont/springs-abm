@@ -28,6 +28,9 @@ class Rotavirus(Pathogen):
         super().__init__(config, global_params, device)
         self.config: RotavirusConfig = config
         self.current_infection_prob = 0.0
+        #: the run's seed, set by the model (used by the vaccination schedule's own generator)
+        self.run_seed: int = 0
+        self._vax = None          # per-slot vaccination schedule (vaccination_model "schedule")
 
     def step_progression(self, agent_state: AgentState):
         """Internal state progression (Once per day)."""
@@ -214,7 +217,113 @@ class Rotavirus(Pathogen):
             torch.normal(mean=self.config.infection_prob_mean, std=self.config.infection_prob_std, size=(1,)).item()
         )
 
+    # ------------------------------------------------------------------
+    # Vaccination by schedule (RotavirusConfig.vaccination_model = "schedule")
+    # ------------------------------------------------------------------
+
+    def _draw_schedules(self, n: int) -> dict:
+        """For n child slots: doses planned, age (days) at each dose, whether each
+        dose takes, and how long protection lasts (days). Fixed number of draws
+        per slot, from the schedule's own generator."""
+        import numpy as np
+        from config import VACCINE_AGE_PERCENTILES
+        cfg, rng = self.config, self._vax_rng
+        k = len(cfg.vaccine_dose_continuation)
+        cont = rng.random((n, k)) < np.asarray(cfg.vaccine_dose_continuation)[None, :]
+        planned = np.cumprod(cont, axis=1).sum(axis=1)
+        P = np.asarray(VACCINE_AGE_PERCENTILES)
+        inv = lambda u, table: np.interp(np.clip(u, P[0], P[-1]), P, np.asarray(table, dtype=np.float64))
+        ages = np.empty((n, k))
+        ages[:, 0] = inv(rng.random(n), cfg.vaccine_dose1_age_days)
+        gaps = inv(rng.random((n, max(k - 1, 1))), cfg.vaccine_dose_interval_days)
+        for j in range(1, k):
+            ages[:, j] = ages[:, j - 1] + gaps[:, j - 1]
+        takes = rng.random((n, k)) < np.asarray(cfg.vaccine_take_by_dose)[None, :]
+        e = rng.standard_exponential(n)
+        lasts = e * float(cfg.vaccine_protection_days) if cfg.vaccine_protection_days else np.full(n, np.inf)
+        t = lambda a, dt=torch.float64: torch.as_tensor(a, dtype=dt)
+        return {"planned": t(planned, torch.long), "ages": t(ages), "takes": t(takes, torch.bool), "lasts": t(lasts)}
+
+    def _scheduled_vaccination(self, agent_state: AgentState):
+        """Gives each child the doses due at its age; a child whose dose takes
+        (and who is not protected yet) becomes ever_vaccinated and enters V from
+        S or R; protection wanes after its drawn duration (to R if the child was
+        ever infected, else S). An agent slot renewed as a newborn
+        (DemographySystem) draws a new schedule. At the start of a run every
+        child receives, at once, the doses its age has passed, with the time
+        since then counted against its protection."""
+        import numpy as np
+        from abm.systems.demography import DAYS_PER_MONTH
+        K = AgentPropertyKeys
+        nd = agent_state.ndata
+        n = nd[K.AGE].numel()
+        if self._vax is None or self._vax["planned"].numel() != n:
+            self._vax_rng = np.random.default_rng(int(self.run_seed) + int(self.config.vaccine_rng_seed_offset))
+            self._vax = self._draw_schedules(n)
+            self._vax.update(given=torch.zeros(n, dtype=torch.long), protected=torch.zeros(n, dtype=torch.bool),
+                             wane_day=torch.full((n,), float("inf"), dtype=torch.float64),
+                             birth_day=nd[K.BIRTH_DAY].clone() if K.BIRTH_DAY in nd else None)
+            self._vax_day = 0
+        v = self._vax
+        if v["birth_day"] is not None:
+            reborn = (nd[K.BIRTH_DAY] != v["birth_day"]).nonzero(as_tuple=True)[0]
+            if reborn.numel():
+                fresh = self._draw_schedules(int(reborn.numel()))
+                for key in ("planned", "ages", "takes", "lasts"):
+                    v[key][reborn] = fresh[key]
+                v["given"][reborn] = 0
+                v["protected"][reborn] = False
+                v["wane_day"][reborn] = float("inf")
+                v["birth_day"] = nd[K.BIRTH_DAY].clone()
+        status = nd[K.status(self.name)]
+        vacc_key = K.ever_vaccinated(self.name)
+        is_child = nd[K.IS_CHILD].bool()
+        age_days = nd[K.AGE].double() * DAYS_PER_MONTH
+        day = float(self._vax_day)
+        for j in range(v["ages"].shape[1]):
+            due = is_child & (v["given"] == j) & (v["planned"] > j) & (age_days >= v["ages"][:, j])
+            if not torch.any(due):
+                continue
+            v["given"][due] += 1
+            took = due & v["takes"][:, j] & ~v["protected"]
+            if torch.any(took):
+                v["protected"][took] = True
+                # protection runs from the day of the dose (earlier than today at the start of a run)
+                v["wane_day"][took] = day - (age_days[took] - v["ages"][took, j]) + v["lasts"][took]
+                if vacc_key in nd:
+                    nd[vacc_key][took] = True
+                enter = took & ((status == Compartment.SUSCEPTIBLE) | (status == Compartment.RECOVERED)) \
+                    & (v["wane_day"] > day)
+                status[enter] = Compartment.VACCINATED
+        waned = (status == Compartment.VACCINATED) & (v["wane_day"] <= day)
+        if torch.any(waned):
+            ever_infected = nd[K.num_infections(self.name)] > 0
+            status[waned & ever_infected] = Compartment.RECOVERED
+            status[waned & ~ever_infected] = Compartment.SUSCEPTIBLE
+        self._vax_day += 1
+
+    def vaccination_summary(self, agent_state: AgentState) -> dict:
+        """Doses received by children aged 12-23 months today, the share whose
+        vaccine took, and the share currently in V (schedule mode; {} otherwise)."""
+        if self._vax is None:
+            return {}
+        K = AgentPropertyKeys
+        nd = agent_state.ndata
+        age = nd[K.AGE]
+        m = nd[K.IS_CHILD].bool() & (age >= 12) & (age < 24)
+        if not torch.any(m):
+            return {}
+        g = self._vax["given"][m].double()
+        k = self._vax["ages"].shape[1]
+        out = {f"rota_vaccine_dose{j + 1}_12_23m": float((g >= j + 1).double().mean()) for j in range(k)}
+        out["rota_vaccine_protected_ever_12_23m"] = float(self._vax["protected"][m].double().mean())
+        out["rota_vaccine_in_V_12_23m"] = float((nd[K.status(self.name)][m] == Compartment.VACCINATED).double().mean())
+        return out
+
     def _susceptible_to_vaccinated(self, agent_state: AgentState):
+        if getattr(self.config, "vaccination_model", "hazard") == "schedule":
+            self._scheduled_vaccination(agent_state)
+            return
         # Rotavirus vaccines are administered in infancy - restrict to
         # children, matching real-world vaccination programs rather than a
         # population-wide campaign.

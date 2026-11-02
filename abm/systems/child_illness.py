@@ -147,10 +147,13 @@ class ChildIllnessSystem(System):
                 # everyone the draw is skipped entirely, so no RNG is consumed.
                 symptomatic = episode_candidates
                 cand_idx = episode_candidates.nonzero(as_tuple=True)[0]
+                prior = infection_count[cand_idx] - 1          # infections before the current one
+                vacc_key = AgentPropertyKeys.ever_vaccinated(pathogen_name)
+                if getattr(p_config, "vaccine_counts_as_prior_infection", False) and vacc_key in agent_state.ndata:
+                    # a vaccine that took protects against illness like one natural infection
+                    prior = prior + agent_state.ndata[vacc_key][cand_idx].to(prior.dtype)
                 frac = symptomatic_probability(
-                    p_config, agent_state.ndata[AgentPropertyKeys.AGE][cand_idx],
-                    # infections before the current one
-                    infection_count[cand_idx] - 1,
+                    p_config, agent_state.ndata[AgentPropertyKeys.AGE][cand_idx], prior,
                 )
                 if frac is not None:
                     draws = torch.rand(len(cand_idx), device=agent_state.device)

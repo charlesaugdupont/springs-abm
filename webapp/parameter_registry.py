@@ -284,6 +284,38 @@ REGISTRY: list[ParamMeta] = [
                   "faster rollout matters at all.",
     ),
     ParamMeta(
+        path="pathogens[rota].vaccination_model", label="Vaccination model (hazard or schedule)", category="internal", evidence_tier="assumption",
+        rationale="Rotavirus vaccination by schedule (config.RotavirusConfig; Ghana DHS 2022, Asare et al. 2026). Not used by the web app, which runs the hazard model.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].vaccine_dose_continuation", label="Rotavirus vaccine dose coverage (continuation)", category="internal", evidence_tier="literature",
+        rationale="Rotavirus vaccination by schedule (config.RotavirusConfig; Ghana DHS 2022, Asare et al. 2026). Not used by the web app, which runs the hazard model.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].vaccine_dose1_age_days", label="Age at rotavirus vaccine dose 1", category="internal", evidence_tier="literature",
+        rationale="Rotavirus vaccination by schedule (config.RotavirusConfig; Ghana DHS 2022, Asare et al. 2026). Not used by the web app, which runs the hazard model.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].vaccine_dose_interval_days", label="Interval between rotavirus vaccine doses", category="internal", evidence_tier="literature",
+        rationale="Rotavirus vaccination by schedule (config.RotavirusConfig; Ghana DHS 2022, Asare et al. 2026). Not used by the web app, which runs the hazard model.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].vaccine_take_by_dose", label="Rotavirus vaccine take by dose", category="internal", evidence_tier="literature",
+        rationale="Rotavirus vaccination by schedule (config.RotavirusConfig; Ghana DHS 2022, Asare et al. 2026). Not used by the web app, which runs the hazard model.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].vaccine_protection_days", label="Duration of rotavirus vaccine protection", category="internal", evidence_tier="literature",
+        rationale="Rotavirus vaccination by schedule (config.RotavirusConfig; Ghana DHS 2022, Asare et al. 2026). Not used by the web app, which runs the hazard model.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].vaccine_rng_seed_offset", label="Vaccination schedule seed offset", category="internal", evidence_tier="assumption",
+        rationale="Rotavirus vaccination by schedule (config.RotavirusConfig; Ghana DHS 2022, Asare et al. 2026). Not used by the web app, which runs the hazard model.",
+    ),
+    ParamMeta(
+        path="pathogens[rota].vaccine_counts_as_prior_infection", label="Vaccine response protects against illness like one infection", category="internal", evidence_tier="literature",
+        rationale="Rotavirus vaccination (config.RotavirusConfig; Asare et al. 2026). Not used by the web app, which runs the hazard model.",
+    ),
+    ParamMeta(
         path="illness_mechanics.base_severity_rota", label="Base rotavirus severity",
         category="Rotavirus", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
         rationale="Base illness severity (0-1 scale) before age/immunity adjustments. Anchored to "

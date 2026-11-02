@@ -240,6 +240,43 @@ def economy_metrics(model, burn_in_days: int | None = None) -> dict:
     return out
 
 
+def vaccination_metrics(model) -> dict:
+    """Rotavirus vaccination by schedule (RotavirusConfig.vaccination_model =
+    "schedule"; {} otherwise), at the end of the run: the share of children aged
+    12-23 months with each dose, whose vaccine ever took, and currently in V."""
+    out = {}
+    for p in model.pathogens:
+        if hasattr(p, "vaccination_summary"):
+            out.update(p.vaccination_summary(model.graph))
+    return out
+
+
+#: Severity thresholds at which rota_severity_metrics counts episodes.
+SEVERITY_THRESHOLDS = (0.0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+
+
+def rota_severity_metrics(model, burn_in_days: int | None = None) -> dict:
+    """Rotavirus illness episodes starting after the burn-in, by age at onset
+    (0-11, 12-23, 24-59 months) and initial severity at or above each of
+    SEVERITY_THRESHOLDS (counts; the population of children is the same in
+    runs that share a seed and grid, so counts compare across arms). Severe
+    disease is what hospital-based vaccine studies measure."""
+    from abm.systems.child_illness import ChildIllnessSystem
+    b = DEFAULT_BURN_IN_DAYS if burn_in_days is None else int(burn_in_days)
+    illness = next((s for s in model.systems if isinstance(s, ChildIllnessSystem)), None)
+    if illness is None:
+        return {}
+    eps = [e for e in illness.episode_log if e["pathogen"] == "rota" and e["timestep"] >= b]
+    sev = np.array([e["initial_severity"] for e in eps], dtype=float)
+    age = np.array([e["age_months"] for e in eps], dtype=float)
+    out = {}
+    for lo, hi in ((0, 12), (12, 24), (24, 60)):
+        m = (age >= lo) & (age < hi)
+        for t in SEVERITY_THRESHOLDS:
+            out[f"rota_episodes_sev{int(round(t * 10)):02d}_{lo}_{hi}m"] = int(((sev >= t) & m).sum())
+    return out
+
+
 def wellbeing_metrics(model) -> dict:
     """
     Wealth is a per-HOUSEHOLD pooled value (see EconomicSystem) duplicated
