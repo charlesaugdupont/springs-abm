@@ -120,3 +120,34 @@ def test_the_akuse_vaccination_preset_is_valid(make_model):
     model = make_model(run=False, agents=600, overrides=AKUSE_VACCINATION_2026)
     cfg = _rota(model).config
     assert cfg.vaccination_model == "schedule" and cfg.vaccine_counts_as_prior_infection is True
+
+
+def test_refractory_period_blocks_early_reinfection(make_model):
+    model = make_model(run=False, agents=600, overrides={"pathogens[rota].post_infection_refractory_days": 20.0})
+    rota, nd = _rota(model), model.graph.ndata
+    rota._increment_exposure_time(model.graph)
+    idx = torch.arange(10)
+    rota._days_since_infection[idx] = 5
+    s = rota._relative_susceptibility(model.graph, idx, route="h2h")
+    assert torch.all(s == 0)
+    rota._days_since_infection[idx] = 25
+    assert torch.all(rota._relative_susceptibility(model.graph, idx, route="h2h") > 0)
+
+
+def test_reinfection_metrics(make_model):
+    from experiments.metrics import reinfection_metrics
+    m = reinfection_metrics(make_model(steps=60, agents=2000), burn_in_days=0)
+    assert 0.0 <= m["rota_reinfection_gap_share_lt31"] <= m["rota_reinfection_gap_share_lt61"] <= 1.0
+
+
+def test_v5_campaign_is_wired():
+    from experiments.calibration import history_matching as hm
+    c = hm.CAMPAIGNS["v5"]
+    assert len(c.params) == 37 and len(c.targets) == 41
+    b = c.base_overrides
+    assert b["economy.model"] == "cedi" and b["economy.wash_by_quintile"] is True and b["economy.carer_day_fraction"] == 0.34
+    assert b["pathogens[rota].vaccination_model"] == "hazard" and b["pathogens[rota].vaccination_rate"] == 0.0
+    assert c.params["economy.income_shock_sd"][1] == 1.0 and c.params["economy.income_shock_halflife_days"][0] == 2.0
+    assert set(c.emulator_inputs("econ_care_seeking_rate_q1")) == set(hm.V5_ECON_PARAMS)
+    assert "pathogens[rota].post_infection_refractory_days" in c.emulator_inputs("rota_obs_infant_ratio_0_6_vs_6_12m")
+    assert "pathogens[rota].post_infection_refractory_days" not in c.emulator_inputs("crypto_obs_infant_ratio_0_6_vs_6_12m")

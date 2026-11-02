@@ -312,6 +312,18 @@ REGISTRY: list[ParamMeta] = [
         rationale="Rotavirus vaccination by schedule (config.RotavirusConfig; Ghana DHS 2022, Asare et al. 2026). Not used by the web app, which runs the hazard model.",
     ),
     ParamMeta(
+        path="pathogens[rota].post_infection_refractory_days", label="Rotavirus refractory period after infection", category="internal", evidence_tier="assumption",
+        rationale="Complete short-term protection after each infection (v5 pilot; 0 = none, campaigns v1-v4). Not used by the web app.",
+    ),
+    ParamMeta(
+        path="pathogens[campy].post_infection_refractory_days", label="Campylobacter refractory period after infection", category="internal", evidence_tier="assumption",
+        rationale="Complete short-term protection after each infection (0 = none). Not used by the web app.",
+    ),
+    ParamMeta(
+        path="pathogens[crypto].post_infection_refractory_days", label="Cryptosporidium refractory period after infection", category="internal", evidence_tier="assumption",
+        rationale="Complete short-term protection after each infection (0 = none). Not used by the web app.",
+    ),
+    ParamMeta(
         path="pathogens[rota].vaccine_counts_as_prior_infection", label="Vaccine response protects against illness like one infection", category="internal", evidence_tier="literature",
         rationale="Rotavirus vaccination (config.RotavirusConfig; Asare et al. 2026). Not used by the web app, which runs the hazard model.",
     ),

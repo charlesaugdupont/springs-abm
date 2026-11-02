@@ -79,6 +79,14 @@ grid, population, parameter box, targets and output folder:
       targets (econ's wave 1 matched care-seeking only through cash shortage
       equal in every quintile). Output in
       experiments/outputs/history_matching_econ2. See ECON2_PARAMS.
+  v5  the epidemiology and the economy together (docs/v5_campaign_plan.md):
+      v4's box plus rotavirus's post-infection refractory period and econ2's
+      economic box (widened), against the 31 v4 and 10 econ2 targets, with the
+      cedi economy, caring time and water and sanitation by wealth on and
+      vaccination off; v4's selection rules, route ranges included
+      (--select). --verify --vaccinated re-runs candidates with the Akuse
+      vaccination preset to check the DHS targets. Output in
+      experiments/outputs/history_matching_v5. See V5_PARAMS.
 
 A parameter path may tie several config fields to one value ("a|b|c"): it is
 one dimension of the box, and every field is set to it.
@@ -821,13 +829,14 @@ def hm_metrics_econ(model) -> dict:
     """The economy's outputs, the overall care-seeking rate, and the v4
     epidemiological metrics (true infections, routes and the observation
     layer), so that verification can show the epidemiology has not moved."""
-    from experiments.metrics import economy_metrics, rota_severity_metrics, vaccination_metrics
+    from experiments.metrics import economy_metrics, reinfection_metrics, rota_severity_metrics, vaccination_metrics
     out = calibration_metrics(model)
     out.update(observe(model))
     out.update(care_seeking_metrics(model))
     out.update(economy_metrics(model))
     out.update(vaccination_metrics(model))
     out.update(rota_severity_metrics(model))
+    out.update(reinfection_metrics(model))
     return out
 
 
@@ -847,6 +856,66 @@ def econ_epi_check(df: pd.DataFrame) -> pd.DataFrame:
         I = abs(y.mean() - t.z) / np.sqrt(t.sd_obs ** 2 + t.sd_md ** 2 + (y.var(ddof=1) / len(y) if len(y) > 1 else 0.0))
         rows.append({"target": t.metric, "model": float(np.nanmean(df[t.metric])), "I": float(I)})
     return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Campaign v5: the epidemiology and the economy together (docs/v5_campaign_plan.md)
+# ---------------------------------------------------------------------------
+
+#: The cedi economy with caring time (L3, 0.34) and water and sanitation by
+#: wealth (L1) on, rotavirus vaccination off (MAL-ED's sites were unvaccinated;
+#: decision V5-D2: the DHS targets are checked with vaccination afterwards).
+#: The vaccination model is pinned to "hazard" (at rate 0) so that a later
+#: change of default cannot switch vaccination on here.
+V5_BASE_OVERRIDES = {
+    **V4_BASE_OVERRIDES,
+    "pathogens[rota].vaccination_model": "hazard",
+    "pathogens[rota].vaccination_rate": 0.0,
+    "economy.model": "cedi",
+    "economy.carer_day_fraction": 0.34,
+    "economy.wash_by_quintile": True,
+}
+
+#: econ2's economic box, widened where its optimum sat on the edge (V5-D3): the
+#: income-shock SD up to 1.0 (econ2: 0.6, its maximum) and its half-life down to
+#: 2 days (econ2: 7, its minimum). The insured primary-care cost and the buffer's
+#: wealth elasticity were at 0, their natural floor.
+V5_ECON_PARAMS: dict[str, tuple[float, float, str]] = {
+    **ECON2_PARAMS,
+    "economy.income_shock_sd": (0.1, 1.0, "lin"),
+    "economy.income_shock_halflife_days": (2.0, 180.0, "log"),
+}
+
+#: v4's 29 epidemiological dimensions with v4's ranges, plus rotavirus's
+#: post-infection refractory period: in the pre-v5 pilot 14, 30 and 60 days cut
+#: children's reinfections within a month from 47% to 15%, 0.1% and 0, and
+#: MAL-ED's crude : consecutive ratio fitted better, but halved true infections
+#: with transmission held at v4's values - so it is calibrated jointly here.
+#: The pilot's other fixes did not help (Cryptosporidium ramp beyond 36 months,
+#: community transmission beyond 0.15) or need no wider range (Campylobacter's
+#: ramp at 8 months improved all its targets, inside v4's 3-14).
+V5_EPI_PARAMS: dict[str, tuple[float, float, str]] = {
+    **V4_PARAMS,
+    "pathogens[rota].post_infection_refractory_days": (0.0, 60.0, "lin"),
+}
+V5_PARAMS: dict[str, tuple[float, float, str]] = {**V5_EPI_PARAMS, **V5_ECON_PARAMS}
+
+
+def build_targets_v5() -> list[HMTarget]:
+    """The 31 v4 targets and econ2's ten (care-seeking and the money barrier by quintile)."""
+    return build_targets_v4() + build_targets_econ2()
+
+
+def v5_emulator_inputs(metric: str) -> list[str]:
+    """Economic targets: the economic parameters (in the pilots, epidemiological
+    changes moved care-seeking by quintile by under 1 SD); epidemiological
+    targets: as v4, with the refractory period among rotavirus's parameters."""
+    if metric.startswith("econ_"):
+        return list(V5_ECON_PARAMS)
+    if metric in V3_ALL_INPUT_TARGETS:
+        return list(V5_EPI_PARAMS)
+    p = metric.split("_")[0]
+    return [q for q in V5_EPI_PARAMS if q.startswith(f"pathogens[{p}].") and "|" not in q] + V3_SHARED_PARAMS
 
 
 # ---------------------------------------------------------------------------
@@ -910,6 +979,9 @@ CAMPAIGNS: dict[str, Campaign] = {
     "econ2": Campaign("econ2", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_econ2"),
                       ECON2_PARAMS, ECON_BASE_OVERRIDES, build_targets_econ2(), hm_metrics_econ,
                       checkpoint_every=16),
+    "v5": Campaign("v5", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_v5"),
+                   V5_PARAMS, V5_BASE_OVERRIDES, build_targets_v5(), hm_metrics_econ,
+                   checkpoint_every=16, emulator_inputs=v5_emulator_inputs, core_design=(2, 0.5)),
 }
 CAMPAIGN = "v2"
 CHECKPOINT_EVERY: int | None = None
@@ -1544,12 +1616,15 @@ def select_candidates(n: int = 3, seed: int = 11, n_candidates: int = 300_000,
 
 
 def verify(reps: int, n_cores: int | None, design_ids: list[str] | None = None, top: int = 3,
-           candidates_json: str | None = None, tag: str = "verify"):
+           candidates_json: str | None = None, tag: str = "verify", extra_overrides: dict | None = None):
     """Re-run chosen points on seeds disjoint from the waves (base_seed 10023).
 
     Points come either from simulated_implausibility.csv (by design id, or the
     `top` best) or from a JSON list of {"gsa.design_id": ..., <PATHS>: value}
-    dicts - e.g. emulator-optimised points that were never simulated."""
+    dicts - e.g. emulator-optimised points that were never simulated.
+    `extra_overrides` are applied to every point (e.g. --vaccinated: the Akuse
+    vaccination preset, for checking the DHS targets in a vaccinated
+    population; the MAL-ED targets are then not comparable)."""
     if candidates_json:
         with open(candidates_json) as f:
             combos = [{"gsa.design_id": f"{tag}_" + c["gsa.design_id"], **{p: float(c[p]) for p in PATHS}}
@@ -1559,6 +1634,7 @@ def verify(reps: int, n_cores: int | None, design_ids: list[str] | None = None, 
         sel = imp[imp["gsa.design_id"].isin(design_ids)] if design_ids else imp.head(top)
         combos = [{"gsa.design_id": f"{tag}_" + r["gsa.design_id"], **{p: float(r[p]) for p in PATHS}}
                   for _, r in sel.iterrows()]
+    combos = [{**c, **(extra_overrides or {})} for c in combos]
     df = run_sweep(_spec(tag, reps, base_seed=10_023, n_cores=n_cores), [_expand(c) for c in combos])
     df["wave"] = 99
     v = simulated_implausibility(summarise(df))
@@ -1572,7 +1648,7 @@ def verify(reps: int, n_cores: int | None, design_ids: list[str] | None = None, 
     ).reset_index()
     v = v.merge(stab, on="gsa.design_id", how="left")
     v.to_csv(os.path.join(OUT_DIR, f"{tag}_implausibility.csv"), index=False)
-    if CAMPAIGN in ("econ", "econ2"):
+    if CAMPAIGN in ("econ", "econ2", "v5"):
         # the epidemiology should not have moved: the v4 targets at each verified point
         for design_id, g in df.groupby("gsa.design_id"):
             chk = econ_epi_check(g)
@@ -1605,6 +1681,9 @@ def main():
     ap.add_argument("--candidates-json", default=None,
                     help="verify points listed in this JSON file instead of simulated ones")
     ap.add_argument("--tag", default="verify", help="output name for --verify")
+    ap.add_argument("--vaccinated", action="store_true",
+                    help="--verify with experiments.presets.AKUSE_VACCINATION_2026 (rotavirus vaccination "
+                         "as in Akuse today), to check the DHS targets in a vaccinated population")
     ap.add_argument("--criterion", choices=("max", "second"), default="second")
     ap.add_argument("--literature", action="store_true",
                     help="v3 --select: hold V3_LITERATURE_FIXED and apply v3_physical_constraint")
@@ -1644,6 +1723,14 @@ def main():
         elif args.campaign in ("econ", "econ2"):
             select_candidates(centrality_weight=args.centrality_weight, n_jobs=args.workers,
                               n_simulated=2, refocus_from_wave=None)
+        elif args.campaign == "v5":
+            # v4's final rules, route ranges included from the start
+            select_candidates(centrality_weight=args.centrality_weight, n_jobs=args.workers,
+                              n_simulated=3, refocus_from_wave=2,
+                              constraint=v3_physical_constraint,
+                              output_ranges={**V3_INCIDENCE_SITE_RANGES, **V4_CARRIAGE_RANGES},
+                              ratio_ranges=V3_ATTRIBUTABLE_FRACTION_SITE_RANGES,
+                              aux_ranges=V4_ROUTE_RANGES)
         elif args.literature:
             # literature values held (V3_LITERATURE_FIXED), illness-causing
             # infections detectable at least as long, and the earlier best
@@ -1670,7 +1757,12 @@ def main():
             select_candidates(centrality_weight=args.centrality_weight, n_jobs=args.workers,
                               n_simulated=3, refocus_from_wave=2)
     if args.verify:
-        verify(args.reps, args.workers, args.design_ids, candidates_json=args.candidates_json, tag=args.tag)
+        extra = None
+        if args.vaccinated:
+            from experiments.presets import AKUSE_VACCINATION_2026
+            extra = dict(AKUSE_VACCINATION_2026)
+        verify(args.reps, args.workers, args.design_ids, candidates_json=args.candidates_json, tag=args.tag,
+               extra_overrides=extra)
 
 
 if __name__ == "__main__":

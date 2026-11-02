@@ -251,6 +251,28 @@ def vaccination_metrics(model) -> dict:
     return out
 
 
+def reinfection_metrics(model, burn_in_days: int | None = None) -> dict:
+    """Children's reinfections (infection log, infections becoming infectious
+    after the burn-in): per pathogen, the share of a child's consecutive
+    infections less than 31 and 61 days apart, and the median gap (days)."""
+    b = DEFAULT_BURN_IN_DAYS if burn_in_days is None else int(burn_in_days)
+    out = {}
+    for p in model.pathogens:
+        log = model.get_infection_log(p.name)
+        a, birth, d = (np.asarray(log[k]) for k in ("agent_idx", "birth_day", "day"))
+        if a.size < 2:
+            continue
+        o = np.lexsort((d, birth, a))
+        a, birth, d = a[o], birth[o], d[o]
+        same = (a[1:] == a[:-1]) & (birth[1:] == birth[:-1]) & (d[1:] >= b)
+        gap = (d[1:] - d[:-1])[same]
+        if gap.size:
+            out[f"{p.name}_reinfection_gap_share_lt31"] = float((gap < 31).mean())
+            out[f"{p.name}_reinfection_gap_share_lt61"] = float((gap < 61).mean())
+            out[f"{p.name}_reinfection_gap_median_days"] = float(np.median(gap))
+    return out
+
+
 #: Severity thresholds at which rota_severity_metrics counts episodes.
 SEVERITY_THRESHOLDS = (0.0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 

@@ -47,6 +47,9 @@ class Pathogen(ABC):
         # route per day. Allocated lazily in begin_day(); pathogens that do not
         # opt in simply never consult it.
         self._newly_exposed_this_day: torch.Tensor | None = None
+        # Days since each agent's latest infection by this pathogen, for
+        # post_infection_refractory_days (allocated lazily; None when unused).
+        self._days_since_infection: torch.Tensor | None = None
 
     # ------------------------------------------------------------------
     # Immunity
@@ -138,6 +141,9 @@ class Pathogen(ABC):
         if (route in self.ENVIRONMENTAL_ROUTES
                 and float(getattr(self.global_params, "household_exposure_sdlog", 0.0)) > 0.0):
             s = s * agent_state.ndata[AgentPropertyKeys.EXPOSURE_FRAILTY][indices]
+        refractory = float(getattr(self.config, "post_infection_refractory_days", 0) or 0)
+        if refractory > 0 and self._days_since_infection is not None:
+            s = s * (self._days_since_infection[indices] >= refractory).to(s.dtype)
         return s
 
     # ------------------------------------------------------------------
@@ -343,6 +349,20 @@ class Pathogen(ABC):
         return hh_inf, w_max
 
     def _increment_exposure_time(self, agent_state: AgentState):
+        if float(getattr(self.config, "post_infection_refractory_days", 0) or 0) > 0:
+            from abm.constants import AgentPropertyKeys as _K
+            nd = agent_state.ndata
+            if self._days_since_infection is None:
+                self._days_since_infection = torch.full(
+                    (agent_state.num_nodes(),), 10**6, dtype=torch.int64, device=self.device)
+                self._refractory_birth_day = nd[_K.BIRTH_DAY].clone() if _K.BIRTH_DAY in nd else None
+            if self._refractory_birth_day is not None:
+                # a slot renewed as a newborn (DemographySystem) has no recent infection
+                reborn = nd[_K.BIRTH_DAY] != self._refractory_birth_day
+                if torch.any(reborn):
+                    self._days_since_infection[reborn] = 10**6
+                    self._refractory_birth_day = nd[_K.BIRTH_DAY].clone()
+            self._days_since_infection += 1
         from abm.constants import Compartment, AgentPropertyKeys
         status_key = AgentPropertyKeys.status(self.name)
         timer_key = AgentPropertyKeys.exposure_time(self.name)
@@ -427,6 +447,8 @@ class Pathogen(ABC):
         if sym_key in agent_state.ndata:
             agent_state.ndata[sym_key][infected_indices] = False
 
+        if self._days_since_infection is not None:
+            self._days_since_infection[infected_indices] = 0
         self.new_cases_this_step += num_new
         if route is not None and route in self.cases_by_route:
             self.cases_by_route[route] += num_new

@@ -108,6 +108,20 @@ class PathogenConfig(BaseModel):
                     "immunity_floor (adults at the children's plateau, as in campaign v3).",
         ge=0.0, le=1.0,
     )
+    # Short-term protection after an infection. Every infection here leaves
+    # only partial, permanent protection (exp(-kappa N), floor), and a
+    # recovered agent may be reinfected the next day. Several rotavirus
+    # transmission models instead give a period of complete temporary immunity
+    # after infection before partial susceptibility returns (Pitzer et al.
+    # 2009; Shim et al. 2009; not all: Van Effelterre et al. 2009 has none -
+    # the comparison of Pitzer et al. 2012, PLoS One 7:e42320).
+    # 0 = none (original model).
+    post_infection_refractory_days: float = Field(
+        0.0,
+        description="Days after each infection (counted from exposure) during which the agent cannot be "
+                    "infected again by this pathogen (relative susceptibility 0 on every route). 0 = none.",
+        ge=0.0,
+    )
     adult_infectious_duration_scale: float = Field(
         1.0,
         description="Multiplier on the mean infectious period of an adult's infection: an infectious "
