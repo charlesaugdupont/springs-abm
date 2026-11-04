@@ -25,10 +25,10 @@ def _adult_susceptibility(model, p):
     return s[~model.graph.ndata[K.IS_CHILD].bool()]
 
 
-def test_adult_susceptibility_defaults_campaign_v4(make_model):
-    # v4: rotavirus and Cryptosporidium calibrated, Campylobacter at the floor
+def test_adult_susceptibility_defaults_campaign_v5(make_model):
+    # v5 (v4: 0.216, 0.270): rotavirus and Cryptosporidium calibrated, Campylobacter at the floor
     model = make_model(steps=1, agents=600, run=False)
-    expected = {"rota": 0.216, "campy": None, "crypto": 0.270}
+    expected = {"rota": 0.167, "campy": None, "crypto": 0.283}
     for p in model.pathogens:
         assert p.config.adult_relative_susceptibility == expected[p.name]
         value = expected[p.name] if expected[p.name] is not None else p.config.immunity_floor

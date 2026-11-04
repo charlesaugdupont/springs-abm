@@ -113,7 +113,8 @@ def test_release_weights_by_sanitation_and_child_stool_disposal(model):
 
 
 def test_legacy_model_builds_no_network(make_model):
-    m = make_model(steps=1, agents=600, run=False, overrides={"water.model": "legacy"})
+    m = make_model(steps=1, agents=600, run=False, overrides={"water.model": "legacy",
+                                  "economy.wash_by_quintile": False})   # L1 needs the catchment model
     assert m.grid_environment.water_network is None
     assert m.grid_environment.get_water_state("rota") is not None
 

@@ -265,7 +265,8 @@ def test_id50_matches_the_dose_response_parameter(make_model):
 def test_oocyst_load_decays_exponentially(make_model):
     """load(t) = load(0) * exp(-k t), to numerical precision over 30 days."""
     model = make_model(pathogens=["crypto"], steps=1, run=False,
-                       overrides={"water.model": "legacy"})   # point-source reservoir
+                       overrides={"water.model": "legacy",   # point-source reservoir
+                                  "economy.wash_by_quintile": False})   # L1 needs the catchment model
     crypto = model.pathogens[0]
     grid = model.grid_environment
     k = crypto.config.oocyst_decay_rate
@@ -294,7 +295,8 @@ def test_oocyst_decay_consumes_no_randomness(make_model):
     calibrated behaviour even though nothing about rotavirus had changed.
     """
     model = make_model(pathogens=["crypto"], steps=1, run=False,
-                       overrides={"water.model": "legacy"})   # point-source reservoir
+                       overrides={"water.model": "legacy",   # point-source reservoir
+                                  "economy.wash_by_quintile": False})   # L1 needs the catchment model
     crypto = model.pathogens[0]
     grid = model.grid_environment
     grid.get_water_state("crypto")[grid.water_point_mask()] = 50.0
@@ -311,7 +313,8 @@ def test_oocyst_decay_consumes_no_randomness(make_model):
 
 def test_shedding_adds_load_only_at_water_sources(make_model):
     model = make_model(pathogens=["crypto"], steps=1, run=False,
-                       overrides={"water.model": "legacy"})   # point-source reservoir
+                       overrides={"water.model": "legacy",   # point-source reservoir
+                                  "economy.wash_by_quintile": False})   # L1 needs the catchment model
     crypto = model.pathogens[0]
     grid = model.grid_environment
     state = grid.get_water_state("crypto")
@@ -338,7 +341,8 @@ def test_shedding_adds_load_only_at_water_sources(make_model):
 
 def test_only_infectious_agents_shed(make_model):
     model = make_model(pathogens=["crypto"], steps=1, run=False,
-                       overrides={"water.model": "legacy"})   # point-source reservoir
+                       overrides={"water.model": "legacy",   # point-source reservoir
+                                  "economy.wash_by_quintile": False})   # L1 needs the catchment model
     crypto = model.pathogens[0]
     grid = model.grid_environment
     state = grid.get_water_state("crypto")
@@ -383,8 +387,9 @@ def test_each_route_can_transmit_on_its_own(make_model, route, knob):
     to an arbitrary value because it has no effect.
     """
     overrides = {path: 0.0 for path in ROUTE_KNOBS.values()}
-    # Generous value so a short, small test run still sees cases.
-    overrides[knob] = {"household": 0.25, "community": 0.03,
+    # Generous value so a short, small test run still sees cases (community:
+    # 0.03 left it to luck, 0-2 infections, once v5's defaults were adopted).
+    overrides[knob] = {"household": 0.25, "community": 0.15,
                        "water": 20.0, "zoonotic": 3.0, "imported": 0.002}[route]
     if route == "water":
         # The run starts with ~1% of agents exposed. At the survey shares most

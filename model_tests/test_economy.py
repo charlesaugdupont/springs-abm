@@ -21,6 +21,7 @@ from abm.systems.economics import EconomicSystem
 from experiments.metrics import economy_metrics
 
 CEDI = {"economy.model": "cedi"}
+LEGACY = {"economy.model": "legacy"}
 
 
 def _hh_constant(model, key) -> bool:
@@ -32,9 +33,9 @@ def _hh_constant(model, key) -> bool:
     return all(np.all(v[a:b] == v[a]) for a, b in zip(starts, np.r_[starts[1:], len(hh)]))
 
 
-def test_legacy_is_the_default_and_adds_nothing(make_model):
-    assert SVEIRCONFIG.economy.model == "legacy"
-    model = make_model(steps=3)
+def test_cedi_is_the_default_and_legacy_adds_nothing(make_model):
+    assert SVEIRCONFIG.economy.model == "cedi"         # since campaign v5
+    model = make_model(steps=3, overrides=LEGACY)
     for key in (K.CASH, K.WEALTH_QUINTILE, K.EARNING_POTENTIAL, K.ECON_AGE_GROUP):
         assert key not in model.graph.ndata
     assert economy_metrics(model) == {}
@@ -42,7 +43,7 @@ def test_legacy_is_the_default_and_adds_nothing(make_model):
 
 def test_cedi_keeps_the_legacy_population(make_model):
     """The economy draws from its own stream, after everything else."""
-    a = make_model(run=False)
+    a = make_model(run=False, overrides=LEGACY)
     b = make_model(run=False, overrides=CEDI)
     for key in (K.HOUSEHOLD_ID, K.IS_CHILD, K.IS_PARENT, K.AGE, K.HEALTH, K.X, K.Y, K.OWNS_POULTRY,
                 K.EXPOSURE_FRAILTY, K.status("rota"), K.num_infections("campy")):
@@ -88,7 +89,7 @@ def test_initial_cash_and_wealth_term(make_model):
     model = make_model(run=False, overrides=CEDI)
     nd, eco = model.graph.ndata, model.config.economy
     cash, target = nd[K.CASH], nd[K.CONSUMPTION_TARGET]
-    assert torch.all(cash >= 0) and torch.all(cash <= eco.buffer_days * target + 1e-3)
+    assert torch.all(cash >= 0) and torch.all(cash <= nd[K.CASH_CAP] + 1e-3)
     w = nd[K.WEALTH]
     assert torch.allclose(w, torch.clamp(cash / (eco.wealth_scale_days * target), 0, 1))
     assert torch.equal(nd[K.INITIAL_WEALTH], w)
@@ -236,7 +237,7 @@ def test_economy_metrics(make_model):
     assert len(eco.daily_records) == 40
     nd = model.graph.ndata
     assert torch.all(nd[K.CASH] >= 0)
-    assert torch.all(nd[K.CASH] <= model.config.economy.buffer_days * nd[K.CONSUMPTION_TARGET] + 1e-2)
+    assert torch.all(nd[K.CASH] <= nd[K.CASH_CAP] + 1e-2)
     assert _hh_constant(model, K.CASH)
 
 
@@ -257,7 +258,7 @@ def test_econ_campaign_is_wired():
 
 
 def test_buffer_grows_with_wealth_only_when_asked(make_model):
-    flat = make_model(run=False, agents=3000, overrides=CEDI)
+    flat = make_model(run=False, agents=3000, overrides={**CEDI, "economy.buffer_wealth_elasticity": 0.0})
     nd = flat.graph.ndata
     assert torch.allclose(nd[K.CASH_CAP], flat.config.economy.buffer_days * nd[K.CONSUMPTION_TARGET], rtol=1e-5)
     steep = make_model(run=False, agents=3000, overrides={**CEDI, "economy.buffer_wealth_elasticity": 1.0})
@@ -282,14 +283,18 @@ def test_econ2_campaign_adds_the_money_gradient():
     assert zs == sorted(zs, reverse=True), "the money barrier falls with wealth"
 
 
-def test_cedi_defaults_are_the_econ2_calibration():
-    """Candidate e0 of campaign econ2 at 3 significant figures (2026-10-29); the
-    economy model itself stays 'legacy' by default."""
+def test_cedi_defaults_are_the_v5_calibration():
+    """Candidate e7 of campaign v5 at 3 significant figures (2026-11-04), with
+    the cedi economy on by default; econ2's e0 (2026-10-29) and the legacy
+    economy are pinned in experiments.legacy.V4_OVERRIDES."""
+    from experiments.legacy import V4_OVERRIDES
+    names = ("income_shock_sd", "income_shock_halflife_days", "buffer_days", "savings_rate",
+             "earning_spread_sdlog", "cost_primary_insured", "buffer_wealth_elasticity")
     eco = SVEIRCONFIG.economy
-    assert eco.model == "legacy"
-    assert (eco.income_shock_sd, eco.income_shock_halflife_days, eco.buffer_days, eco.savings_rate,
-            eco.earning_spread_sdlog, eco.cost_primary_insured, eco.buffer_wealth_elasticity) == \
-        (0.6, 7.0, 9.94, 0.00875, 0.38, 0.0, 0.0)
+    assert eco.model == "cedi"
+    assert tuple(getattr(eco, n) for n in names) == (0.438, 180.0, 83.9, 0.0, 0.203, 20.9, 0.377)
+    assert V4_OVERRIDES["economy.model"] == "legacy"
+    assert tuple(V4_OVERRIDES[f"economy.{n}"] for n in names) == (0.6, 7.0, 9.94, 0.00875, 0.38, 0.0, 0.0)
 
 
 # --- caring time (link L3; EconomyConfig.carer_day_fraction) ---------------------------------------

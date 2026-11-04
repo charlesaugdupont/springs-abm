@@ -106,7 +106,7 @@ from scipy.stats import qmc
 
 from abm.evidence import maled, rotavirus_cohorts
 from experiments.calibration import targets as T
-from experiments.legacy import V2_OVERRIDES, V3_OVERRIDES
+from experiments.legacy import V2_OVERRIDES, V3_OVERRIDES, V4_OVERRIDES
 from experiments.metrics import calibration_metrics, care_seeking_metrics
 from experiments.observation import observe
 from experiments.orchestrator import SweepSpec, run_sweep
@@ -918,6 +918,17 @@ def v5_emulator_inputs(metric: str) -> list[str]:
     return [q for q in V5_EPI_PARAMS if q.startswith(f"pathogens[{p}].") and "|" not in q] + V3_SHARED_PARAMS
 
 
+#: v5's selection rules (v4's final ones): the physical constraint on
+#: detectability, detected incidence and P(attributable | detected) inside
+#: MAL-ED's site ranges, carriage ratios in their plausible ranges, rotavirus
+#: at most 10% waterborne (the imported share below MAX_IMPORTED_FRACTION is
+#: applied with them). Used by --select and, from wave 4, by the wave design.
+V5_SELECTION_RULES = dict(constraint=v3_physical_constraint,
+                          output_ranges={**V3_INCIDENCE_SITE_RANGES, **V4_CARRIAGE_RANGES},
+                          ratio_ranges=V3_ATTRIBUTABLE_FRACTION_SITE_RANGES,
+                          aux_ranges=V4_ROUTE_RANGES)
+
+
 # ---------------------------------------------------------------------------
 # Campaign registry
 # ---------------------------------------------------------------------------
@@ -948,6 +959,10 @@ class Campaign:
     #: (first wave, fraction): from that wave on, this share of a wave's
     #: points comes from the core of the NROY (see sample_nroy)
     core_design: tuple | None = None
+    #: (first wave, rules): from that wave on, waves are designed inside the
+    #: region the selection rules allow (rules: select_candidates' constraint,
+    #: output_ranges, ratio_ranges and aux_ranges; see sample_nroy)
+    design_rules: tuple | None = None
 
 
 CAMPAIGNS: dict[str, Campaign] = {
@@ -970,30 +985,39 @@ CAMPAIGNS: dict[str, Campaign] = {
                                 os.path.join("experiments", "outputs", "adult_pilot_cap"), ADULT_PILOT_CAP_PARAMS,
                                 {**V3_OVERRIDES, **V3_BASE_OVERRIDES}, build_targets_adult_pilot(), hm_metrics_v3,
                                 checkpoint_every=8, emulator_inputs=adult_pilot_cap_emulator_inputs),
+    # v4's, econ's and econ2's runs used v4's defaults (econ2's economy), since
+    # replaced by v5's; experiments.legacy.V4_OVERRIDES pins them.
     "v4": Campaign("v4", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_v4"),
-                   V4_PARAMS, V4_BASE_OVERRIDES, build_targets_v4(), hm_metrics_v3,
+                   V4_PARAMS, {**V4_OVERRIDES, **V4_BASE_OVERRIDES}, build_targets_v4(), hm_metrics_v3,
                    checkpoint_every=16, emulator_inputs=v4_emulator_inputs, core_design=(2, 0.5)),
     "econ": Campaign("econ", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_econ"),
-                     ECON_PARAMS, ECON_BASE_OVERRIDES, build_targets_econ(), hm_metrics_econ,
+                     ECON_PARAMS, {**V4_OVERRIDES, **ECON_BASE_OVERRIDES}, build_targets_econ(), hm_metrics_econ,
                      checkpoint_every=16),
     "econ2": Campaign("econ2", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_econ2"),
-                      ECON2_PARAMS, ECON_BASE_OVERRIDES, build_targets_econ2(), hm_metrics_econ,
+                      ECON2_PARAMS, {**V4_OVERRIDES, **ECON_BASE_OVERRIDES}, build_targets_econ2(), hm_metrics_econ,
                       checkpoint_every=16),
     "v5": Campaign("v5", V3_GRID_ID, V3_AGENTS, 1460, os.path.join("experiments", "outputs", "history_matching_v5"),
                    V5_PARAMS, V5_BASE_OVERRIDES, build_targets_v5(), hm_metrics_econ,
-                   checkpoint_every=16, emulator_inputs=v5_emulator_inputs, core_design=(2, 0.5)),
+                   checkpoint_every=16, emulator_inputs=v5_emulator_inputs, core_design=(2, 0.5),
+                   # waves 1-3 were designed on the targets alone and the
+                   # selection rules then excluded nearly all of their NROY
+                   # (2 of 868 simulated points met every rule, the emulators
+                   # none of 300,000 candidates; mostly rotavirus's water
+                   # route: 9 of the 10 best points 17-86% waterborne)
+                   design_rules=(4, V5_SELECTION_RULES)),
 }
 CAMPAIGN = "v2"
 CHECKPOINT_EVERY: int | None = None
 EMULATOR_INPUTS: Callable | None = None
 CORE_DESIGN: tuple | None = None
+DESIGN_RULES: tuple | None = None
 
 
 def use_campaign(name: str) -> Campaign:
     """Point the module-level settings every function here reads at a campaign."""
     global CAMPAIGN, GRID_ID, AGENTS, STEPS, OUT_DIR, PARAMS, PATHS, BASE_OVERRIDES, TARGETS_HM
     global FIRST_CURRENT_WAVE, TREATMENT_DEPENDENT, WAVE3_FIXED, FIRST_IMPORTATION_WAVE, CHECKPOINT_EVERY
-    global ROTA_INDEPENDENT_TARGETS, EMULATOR_INPUTS, CORE_DESIGN
+    global ROTA_INDEPENDENT_TARGETS, EMULATOR_INPUTS, CORE_DESIGN, DESIGN_RULES
     c = CAMPAIGNS[name]
     CAMPAIGN, GRID_ID, AGENTS, STEPS, OUT_DIR = c.name, c.grid_id, c.agents, c.steps, c.out_dir
     PARAMS, PATHS, BASE_OVERRIDES, TARGETS_HM = c.params, list(c.params), c.base_overrides, c.targets
@@ -1001,7 +1025,7 @@ def use_campaign(name: str) -> Campaign:
     WAVE3_FIXED, FIRST_IMPORTATION_WAVE = c.wave_fixed, c.first_importation_wave
     CHECKPOINT_EVERY = c.checkpoint_every
     ROTA_INDEPENDENT_TARGETS = c.conditional_targets
-    EMULATOR_INPUTS, CORE_DESIGN = c.emulator_inputs, c.core_design
+    EMULATOR_INPUTS, CORE_DESIGN, DESIGN_RULES = c.emulator_inputs, c.core_design, c.design_rules
     return c
 
 
@@ -1227,8 +1251,16 @@ def _criterion(I: np.ndarray, which: str) -> np.ndarray:
 
 def sample_nroy(ems: dict, n: int, seed: int, n_candidates: int = 200_000,
                 criterion: str = "second", conditional_on_rota_independent: bool = False,
-                n_jobs: int | None = None, core_fraction: float = 0.0) -> tuple[np.ndarray, float]:
+                n_jobs: int | None = None, core_fraction: float = 0.0,
+                rules: Callable | None = None, local_from: np.ndarray | None = None,
+                info: dict | None = None) -> tuple[np.ndarray, float]:
     """n space-filling points from the emulated NROY region, and its volume fraction.
+
+    rules(X) -> bool mask (unit-cube rows) restricts the NROY to the region
+    the selection rules allow (design_rules); see _rule_constrained_pool for
+    how its candidates are found. The fraction returned is then that of the
+    LHS candidates in the NROY meeting the rules, and `info` (a dict, if
+    given) receives the pool's sizes.
 
     core_fraction > 0: that share of the points (listed first) is a maximin
     sample of the NROY's core - its 10% of candidates with the smallest sum
@@ -1245,24 +1277,40 @@ def sample_nroy(ems: dict, n: int, seed: int, n_candidates: int = 200_000,
     v3 wave 2: the Campylobacter and Cryptosporidium infant ramps."""
     rng = np.random.default_rng(seed)
     U = qmc.LatinHypercube(d=len(PATHS), seed=seed).random(n_candidates)
-    if conditional_on_rota_independent:
+    if rules is not None:
+        if conditional_on_rota_independent:
+            raise ValueError("design rules and a conditional wave cannot be combined")
+        U, I, score, ok_rules, frac = _rule_constrained_pool(ems, U, n, rng, criterion, rules, local_from,
+                                                             n_jobs, info)
+    elif conditional_on_rota_independent:
         U_eval = U.copy()
         for p, v in WAVE3_FIXED.items():
             U_eval[:, PATHS.index(p)] = to_unit(_row_with(p, v))[0, PATHS.index(p)]
         I = emulated_implausibility(ems, U_eval, only=ROTA_INDEPENDENT_TARGETS, n_jobs=n_jobs)
     else:
         I = emulated_implausibility(ems, U, n_jobs=n_jobs)
-    score = _criterion(I, criterion)
-    keep = score < CUTOFF
-    frac = float(keep.mean())
+    if rules is None:
+        score = _criterion(I, criterion)
+        keep = score < CUTOFF
+        frac = float(keep.mean())
+    else:
+        keep = ok_rules & (score < CUTOFF)
     pool = U[keep]
     if len(pool) == 0:
         # Fall back to the least-implausible candidates so the wave can proceed.
         order = np.argsort(score)
+        if rules is not None and ok_rules.any():
+            order = order[ok_rules[order]]
         pool = U[order[: max(n * 20, 1000)]]
+    if info is not None:
+        info["pool"] = int(len(pool))
     if len(pool) <= n:
+        if info is not None:
+            info["n_core"] = 0
         return pool, frac
     n_core = int(round(n * core_fraction)) if keep.any() else 0
+    if info is not None:
+        info["n_core"] = n_core
     if n_core > 0:
         ss = (I[keep] ** 2).sum(axis=1)
         core = pool[np.argsort(ss)[: max(len(pool) // 10, 5 * n_core)]]
@@ -1291,6 +1339,100 @@ def _maximin(pool: np.ndarray, n: int, rng, start: np.ndarray | None = None) -> 
         chosen.append(k)
         d = np.minimum(d, np.linalg.norm(pool - pool[k], axis=1))
     return pool[chosen]
+
+
+#: Rule-constrained designs (design_rules): candidates around each simulated
+#: point (per point, at each unit-cube SD), then rounds of expansion around
+#: the candidates so far that meet the rules within CUTOFF + 1, until the pool
+#: (rules met, criterion below CUTOFF) holds POOL_PER_POINT x n candidates.
+#: Set on v5 after waves 1-3 (2026-11-03): of 427,200 candidates from an LHS
+#: of the box and around the simulated points, 619-664 met every rule and 3
+#: did so within the second-max cutoff; in a trial, two rounds of expansion
+#: (seeds within 4, then 3.5) grew that to 1,256 (waves 2-3 emulators).
+LOCAL_PER_POINT, LOCAL_SDS = 200, (0.05, 0.10)
+EXPAND_N, EXPAND_SD, EXPAND_ROUNDS, POOL_PER_POINT = 100_000, 0.03, 3, 5
+#: select_candidates(local_from_wave=...): the pool's size at which expansion stops
+SELECT_POOL = 2000
+
+
+def _rule_constrained_pool(ems: dict, U: np.ndarray, n: int, rng, criterion: str, rules: Callable,
+                           local_from: np.ndarray | None, n_jobs: int | None, info: dict | None):
+    """Candidates for a rule-constrained wave: the LHS U, LOCAL_PER_POINT
+    perturbations of each simulated point in local_from at each of LOCAL_SDS,
+    and up to EXPAND_ROUNDS rounds of EXPAND_N perturbations (SD EXPAND_SD)
+    around the candidates meeting the rules with criterion < CUTOFF + 1,
+    stopping once POOL_PER_POINT * n meet the rules with criterion < CUTOFF.
+    The selection rules cut the NROY to a small part of the box (v5 after
+    wave 3: 1 in 100,000 of an LHS), which uniform sampling cannot fill.
+    Returns (candidates, I, criterion score, rules mask, fraction of the LHS
+    in the NROY meeting the rules)."""
+    parts = [U]
+    if local_from is not None and len(local_from):
+        for sd in LOCAL_SDS:
+            parts.append(np.clip(np.repeat(local_from, LOCAL_PER_POINT, axis=0)
+                                 + rng.normal(0, sd, (len(local_from) * LOCAL_PER_POINT, U.shape[1])), 0, 1))
+    X = np.vstack(parts)
+    I = emulated_implausibility(ems, X, n_jobs=n_jobs)
+    score = _criterion(I, criterion)
+    ok = np.asarray(rules(X), dtype=bool)
+    n_lhs = len(U)
+    frac = float((ok[:n_lhs] & (score[:n_lhs] < CUTOFF)).mean())
+    sizes = [{"round": 0, "candidates": len(X), "rules": int(ok.sum()), "pool": int((ok & (score < CUTOFF)).sum())}]
+    print(f"  rule-constrained candidates: round 0, {len(X)} candidates, {sizes[0]['rules']} meet the rules, "
+          f"{sizes[0]['pool']} of them with {criterion}-max I < {CUTOFF}")
+    for r in range(1, EXPAND_ROUNDS + 1):
+        if (ok & (score < CUTOFF)).sum() >= POOL_PER_POINT * n:
+            break
+        seeds = X[ok & (score < CUTOFF + 1)]
+        if len(seeds) == 0:
+            break
+        reps = max(1, EXPAND_N // len(seeds))
+        Xn = np.clip(np.repeat(seeds, reps, axis=0) + rng.normal(0, EXPAND_SD, (len(seeds) * reps, X.shape[1])), 0, 1)
+        In = emulated_implausibility(ems, Xn, n_jobs=n_jobs)
+        sn, okn = _criterion(In, criterion), np.asarray(rules(Xn), dtype=bool)
+        X, I, score, ok = np.vstack([X, Xn]), np.vstack([I, In]), np.concatenate([score, sn]), np.concatenate([ok, okn])
+        sizes.append({"round": r, "seeds": len(seeds), "candidates": len(X), "rules": int(ok.sum()),
+                      "pool": int((ok & (score < CUTOFF)).sum())})
+        print(f"  round {r}: {len(seeds)} seeds, {len(X)} candidates, {sizes[-1]['rules']} meet the rules, "
+              f"{sizes[-1]['pool']} of them with {criterion}-max I < {CUTOFF}")
+    if info is not None:
+        info.update({"lhs_candidates": n_lhs, "local_points": 0 if local_from is None else len(local_from),
+                     "lhs_nroy_fraction": float((score[:n_lhs] < CUTOFF).mean()),
+                     "lhs_rule_nroy_fraction": frac, "rounds": sizes})
+    return X, I, score, ok, frac
+
+
+def selection_rule_mask(X: np.ndarray, ems: dict, gp_imp, gp_aux: dict,
+                        max_imported_fraction: float | None = None,
+                        constraint: Callable | None = None, output_ranges: dict | None = None,
+                        ratio_ranges: dict | None = None, aux_ranges: dict | None = None) -> np.ndarray:
+    """The selection rules of select_candidates (all but its implausibility
+    criterion) at unit-cube points X: emulated rotavirus imported fraction
+    below max_imported_fraction (default MAX_IMPORTED_FRACTION), constraint on
+    the parameter values, output_ranges / ratio_ranges on emulated targets
+    (natural scale) and aux_ranges on emulated non-target outputs (gp_aux).
+    The same tests as select_candidates' admissible(), for the wave design."""
+    if max_imported_fraction is None:
+        max_imported_fraction = MAX_IMPORTED_FRACTION
+    ok = _predict_chunked(gp_imp, X) < max_imported_fraction
+    if constraint is not None:
+        ok &= constraint(pd.DataFrame(from_unit(X), columns=PATHS))
+
+    def natural(metric):
+        t = next(t for t in TARGETS_HM if t.metric == metric)
+        mu = _predict_chunked(ems[metric], X)
+        return np.exp(mu) - t.eps if t.transform == "log" else mu
+
+    for metric, (lo, hi) in (output_ranges or {}).items():
+        val = natural(metric)
+        ok &= (val >= lo) & (val <= hi)
+    for num, den, lo, hi in (ratio_ranges or {}).values():
+        r = natural(num) / np.maximum(natural(den), 1e-9)
+        ok &= (r >= lo) & (r <= hi)
+    for metric, (lo, hi) in (aux_ranges or {}).items():
+        v = _predict_chunked(gp_aux[metric], X)
+        ok &= (v >= lo) & (v <= hi)
+    return ok
 
 
 def _emulated_means_and_I(ems: dict, U: np.ndarray) -> list[dict]:
@@ -1327,6 +1469,7 @@ def run_wave(wave: int, n: int, reps: int, seed: int, n_cores: int | None, crite
     # noise (BLAS threading), and the resume matches finished runs by their
     # parameter values.
     design_path = os.path.join(OUT_DIR, f"wave{wave}_design.json")
+    ruled = DESIGN_RULES is not None and wave >= DESIGN_RULES[0]
     if CHECKPOINT_EVERY is not None and os.path.exists(design_path):
         with open(design_path) as f:
             saved = json.load(f)
@@ -1334,19 +1477,36 @@ def run_wave(wave: int, n: int, reps: int, seed: int, n_cores: int | None, crite
         if (saved["n"], saved["seed"], saved["criterion"]) != (n, seed, criterion):
             raise SystemExit(f"{design_path} was made with n={saved['n']}, seed={saved['seed']}, "
                              f"criterion={saved['criterion']}; rerun with those or delete it.")
+        if saved.get("design_rules", False) != ruled:
+            raise SystemExit(f"{design_path} was made {'with' if saved.get('design_rules') else 'without'} "
+                             f"the design rules; delete it to redesign the wave.")
         print(f"wave {wave}: reusing the saved design ({len(combos)} points, NROY fraction {frac:.4f})")
     else:
+        design_info: dict = {}
         if wave == 1:
             U = qmc.LatinHypercube(d=len(PATHS), seed=seed).random(n)
             frac = 1.0
         else:
-            summary = summarise(load_all_waves())
+            df_all = load_all_waves()
+            summary = summarise(df_all)
             n_jobs = n_cores if CAMPAIGN != "v2" else None
             ems = fit_emulators(summary, n_jobs=n_jobs)
             core = CORE_DESIGN[1] if CORE_DESIGN is not None and wave >= CORE_DESIGN[0] else 0.0
+            rules, local_from = None, None
+            if ruled:
+                r = DESIGN_RULES[1]
+                gp_imp = fit_imported_emulator(df_all, summary)
+                gp_aux = {m: fit_aux_emulator(df_all, summary, m) for m in (r.get("aux_ranges") or {})}
+
+                def rules(X):
+                    return selection_rule_mask(X, ems, gp_imp, gp_aux, **r)
+
+                # the simulated points of the waves designed inside the NROY
+                local_from = to_unit(summary.loc[summary["wave"] >= 2, PATHS].to_numpy())
             U, frac = sample_nroy(ems, n, seed=seed + wave, criterion=criterion,
                                   conditional_on_rota_independent=(wave == FIRST_IMPORTATION_WAVE),
-                                  n_jobs=n_jobs, core_fraction=core)
+                                  n_jobs=n_jobs, core_fraction=core, rules=rules, local_from=local_from,
+                                  info=design_info)
             if CHECKPOINT_EVERY is not None:
                 # what the emulators expected at each design point, so the
                 # wave can be checked against its predictions afterwards
@@ -1358,6 +1518,8 @@ def run_wave(wave: int, n: int, reps: int, seed: int, n_cores: int | None, crite
             if wave > 1:
                 extra = {"core_fraction": core, "n_core": int(round(len(combos) * core)),
                          "predicted": predicted}
+            if ruled:
+                extra.update({"design_rules": True, "design_info": design_info})
             with open(design_path, "w") as f:
                 json.dump({"wave": wave, "n": n, "seed": seed, "criterion": criterion,
                            "nroy_fraction_before": frac, "combos": combos, **extra}, f, indent=1)
@@ -1441,7 +1603,8 @@ def select_candidates(n: int = 3, seed: int = 11, n_candidates: int = 300_000,
                       refocus_from_wave: int | None = None, fixed: dict | None = None,
                       constraint: Callable | None = None, adjusted: list[dict] | None = None,
                       suffix: str = "", output_ranges: dict | None = None,
-                      ratio_ranges: dict | None = None, aux_ranges: dict | None = None) -> list[dict]:
+                      ratio_ranges: dict | None = None, aux_ranges: dict | None = None,
+                      local_from_wave: int | None = None) -> list[dict]:
     """Default candidates: a regularised best fit within the emulated NROY.
 
     The admissible set is the emulated NROY (max_j I_j < CUTOFF) with the
@@ -1489,6 +1652,16 @@ def select_candidates(n: int = 3, seed: int = 11, n_candidates: int = 300_000,
     hi)} the same for the ratio of two emulated targets; aux_ranges {metric:
     (lo, hi)} the same for outputs that are not targets, each emulated by
     fit_aux_emulator.
+
+    local_from_wave (v5): the candidates are also sought around the simulated
+    points of the waves from that one on, as for a rule-constrained wave
+    (_rule_constrained_pool, stopping at SELECT_POOL candidates meeting the
+    rules within the second-max cutoff). The selection rules cut the NROY to
+    a small part of the box that the LHS alone cannot find (v5 after wave 4:
+    none of 300,000 candidates). The candidates are then no longer a uniform
+    sample, so the admissible fraction printed is of the candidates, and the
+    admissible-set marginals (nroy_marginals.csv) describe the region found,
+    concentrated near the simulated points.
     """
     df = load_all_waves()
     summary = summarise(df)
@@ -1508,10 +1681,23 @@ def select_candidates(n: int = 3, seed: int = 11, n_candidates: int = 300_000,
         return X
 
     U = hold(U)
+    I0 = None
+    if local_from_wave is not None:
+        def rules(X):
+            return selection_rule_mask(X, ems, gp_imp, gp_aux, max_imported_fraction, constraint,
+                                       output_ranges, ratio_ranges, aux_ranges)
+
+        local = to_unit(summary.loc[summary["wave"] >= local_from_wave, PATHS].to_numpy())
+        U, I0, _, _, _ = _rule_constrained_pool(ems, U, SELECT_POOL // POOL_PER_POINT, rng, "second", rules,
+                                                local, n_jobs, None)
+        if fixed_u:
+            U, I0 = hold(U), None        # the perturbations moved the held values
     crit = {"which": "max"}
 
-    def admissible(X):
-        I = emulated_implausibility(ems, X, n_jobs=n_jobs)
+    def admissible(X, I=None):
+        # I: the emulated implausibility at X when already computed
+        if I is None:
+            I = emulated_implausibility(ems, X, n_jobs=n_jobs)
         imp = _predict_chunked(gp_imp, X)
         ok_ = (_criterion(I, crit["which"]) < CUTOFF) & (imp < max_imported_fraction)
         if constraint is not None:
@@ -1535,28 +1721,29 @@ def select_candidates(n: int = 3, seed: int = 11, n_candidates: int = 300_000,
             ok_ &= (v >= lo) & (v <= hi)
         return I, imp, ok_
 
-    I, imp, ok = admissible(U)
+    I, imp, ok = admissible(U, I0)
     if ok.sum() < 20:
         # Too few candidates fit every target by the emulators: admit those
         # that miss at most one (the second-max rule used to design waves).
         crit["which"] = "second"
         print(f"only {int(ok.sum())} candidates with every target within {CUTOFF}; admitting one miss")
-        I, imp, ok = admissible(U)
+        I, imp, ok = admissible(U, I)
     if not ok.any():
         raise SystemExit("No admissible candidate: the emulators predict no parameter set meeting the "
                          "targets under these fixed values and constraints. Nothing written.")
     print(f"emulated NROY fraction (max I < {CUTOFF}): {(I.max(axis=1) < CUTOFF).mean():.5f}; "
           f"admissible ({crit['which']}-max I < {CUTOFF}, imported fraction < {max_imported_fraction}): "
-          f"{ok.mean():.5f}")
+          f"{ok.mean():.5f}" + (f" ({int(ok.sum())} of {len(U)} candidates, the LHS and around the simulated "
+                                f"points)" if local_from_wave is not None else ""))
     m, sd = np.median(U[ok], axis=0), U[ok].std(axis=0)
     sd = np.where(sd > 0, sd, 1.0)          # parameters held fixed
 
-    def objective(X):
-        I_, imp_, ok_ = admissible(X)
+    def objective(X, I=None):
+        I_, imp_, ok_ = admissible(X, I)
         val = (I_ ** 2).sum(axis=1) + centrality_weight * (((X - m) / sd) ** 2).sum(axis=1)
         return I_, imp_, np.where(ok_, val, np.inf)
 
-    _, _, obj = objective(U)
+    _, _, obj = objective(U, I)
     best = U[np.argsort(obj)[:20]]
     pool = [best]
     for step in (0.05, 0.02):
@@ -1724,13 +1911,11 @@ def main():
             select_candidates(centrality_weight=args.centrality_weight, n_jobs=args.workers,
                               n_simulated=2, refocus_from_wave=None)
         elif args.campaign == "v5":
-            # v4's final rules, route ranges included from the start
+            # v4's final rules, route ranges included from the start; the
+            # candidates also sought around the simulated points, as for the
+            # rule-constrained waves (the LHS alone found none after wave 4)
             select_candidates(centrality_weight=args.centrality_weight, n_jobs=args.workers,
-                              n_simulated=3, refocus_from_wave=2,
-                              constraint=v3_physical_constraint,
-                              output_ranges={**V3_INCIDENCE_SITE_RANGES, **V4_CARRIAGE_RANGES},
-                              ratio_ranges=V3_ATTRIBUTABLE_FRACTION_SITE_RANGES,
-                              aux_ranges=V4_ROUTE_RANGES)
+                              n_simulated=3, refocus_from_wave=2, local_from_wave=2, **V5_SELECTION_RULES)
         elif args.literature:
             # literature values held (V3_LITERATURE_FIXED), illness-causing
             # infections detectable at least as long, and the earlier best

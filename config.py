@@ -269,27 +269,34 @@ VACCINE_AGE_PERCENTILES: tuple[float, ...] = (0.01,) + tuple(round(0.05 * k, 2) 
 class RotavirusConfig(PathogenConfig):
     """Parameters specific to Rotavirus."""
     name: str = Field("rota", description="Pathogen identifier.")
-    # CALIBRATION (campaign v4, 2026-10-27; docs/calibration_v4_adults.md).
-    # The parameters marked "History-matched, campaign v4" below -
-    # transmission, illness and infant protection for each pathogen, adults'
-    # susceptibility to rotavirus and Cryptosporidium, the infectiousness of
-    # symptomless infections, household exposure heterogeneity and
-    # Campylobacter's and Cryptosporidium's detectable-shedding durations -
-    # were set together by history matching (experiments/calibration/
-    # history_matching.py, campaign "v4": 3 waves of 300 design points x 2
-    # seeds, 29 parameters) against 31 targets: MAL-ED as its surveillance
-    # would have seen the model (experiments/observation.py - detected
-    # infections and attributable diarrhoea 0-24 months, the age shape of
-    # detected incidence, rates by detected infection history, repeat
-    # detections, age at first detection), true rotavirus infection from the
-    # Vellore cohort, the route-share bands, and adult : young-child carriage
-    # of rotavirus and Cryptosporidium. v4 changed the structure as well as
-    # the values: close contacts with other households are capped
-    # (steering_parameters.max_contacts_per_visit = 3.5), adults have their
-    # own susceptibility, and Cryptosporidium adults shed for a shorter time
-    # (adult_infectious_duration_scale = 0.65). The adult-transmission pilots
-    # showed v3's adult epidemic (6.8 rotavirus infections per person-year at
-    # 5+) to be crowd exposure at the 8 mapped places of worship.
+    # CALIBRATION (campaign v5, 2026-11-04; docs/v5_campaign_plan.md). The
+    # parameters marked "History-matched, campaign v5" below - transmission,
+    # illness and infant protection for each pathogen, adults' susceptibility
+    # to rotavirus and Cryptosporidium, the infectiousness of symptomless
+    # infections, household exposure heterogeneity, the detection windows,
+    # rotavirus's post-infection refractory period and seven parameters of the
+    # cedi economy (EconomyConfig) - were set together by history matching
+    # (experiments/calibration/history_matching.py, campaign "v5": 4 waves of
+    # 268-300 design points x 2 seeds, 37 parameters, the fourth designed
+    # inside the region the selection rules allow) against 41 targets: v4's 31
+    # - MAL-ED as its surveillance would have seen the model
+    # (experiments/observation.py: detected infections and attributable
+    # diarrhoea 0-24 months, the age shape of detected incidence, rates by
+    # detected infection history, repeat detections, age at first detection),
+    # true rotavirus infection from the Vellore cohort, the route-share bands,
+    # adult : young-child carriage of rotavirus and Cryptosporidium - and
+    # econ2's ten DHS 2022 targets by wealth quintile (care-seeking for child
+    # diarrhoea; "getting money for treatment is a big problem"). The
+    # epidemiology and the economy were calibrated together, with the cedi
+    # economy (now the default, EconomyConfig.model), caring time and water and
+    # sanitation by wealth on, and rotavirus vaccination off. New in v5:
+    # rotavirus's refractory period (post_infection_refractory_days; at v4's
+    # defaults half of children's reinfections came within a month). v4's
+    # structure is kept: close contacts with other households capped
+    # (steering_parameters.max_contacts_per_visit = 3.5), adults' own
+    # susceptibility, Cryptosporidium adults shedding for a shorter time
+    # (adult_infectious_duration_scale = 0.65), and illness protection from
+    # prior infections at literature values.
     #
     # THESE VALUES ARE FOR THE AKUSE SETTLEMENT GRID: grid 6855dd54618c (the
     # GHS-POP settlement domain at 25 m, scripts/make_settlement_grid.py),
@@ -302,46 +309,56 @@ class RotavirusConfig(PathogenConfig):
     # these defaults + experiments/legacy.py::V2_OVERRIDES, which also
     # reproduces campaign v2 and its 4000-agent runs exactly).
     #
-    # How the default was chosen (history_matching.py --campaign v4 --select
-    # --route-ranges): illness protection from prior infections at literature
-    # values (V3_LITERATURE_FIXED); for rotavirus and Cryptosporidium,
-    # illness-causing infections detectable at least as long as symptomless
-    # ones (v3_physical_constraint); detected incidence and the share of
-    # detected infections causing diarrhoea inside the range across MAL-ED's
-    # high-burden sites; imported rotavirus below 15%; adult : child carriage
-    # in its plausible range (V4_CARRIAGE_RANGES); and at most 10% of
-    # rotavirus infections waterborne (V4_ROUTE_RANGES) - without that rule
-    # the best candidate fitted every target but had 34% of rotavirus
-    # waterborne, against the evidence that rotavirus spreads mainly by direct
-    # contact. Rotavirus's two detection windows were then set by re-scoring
-    # the verification runs (see detectable_shedding_days_* below).
+    # How the default was chosen: v4's final selection rules from the start
+    # (history_matching.V5_SELECTION_RULES) - for rotavirus and
+    # Cryptosporidium, illness-causing infections detectable at least as long
+    # as symptomless ones; detected incidence and the share of detected
+    # infections causing diarrhoea inside the range across MAL-ED's
+    # high-burden sites; adult : child carriage in its plausible range; at
+    # most 10% of rotavirus infections waterborne; imported rotavirus below
+    # 15%. Twelve candidates (nine emulator optima, three simulated points)
+    # were verified on 8 fresh seeds; none met the adoption rule set
+    # beforehand (every target within 3 SD, only Cryptosporidium's infant
+    # ratio allowed past it, every rule met). The user adopted candidate e7
+    # (verify_v5b), recording its deviation: all 41 targets within 3 SD (the
+    # worst, Campylobacter's infant ratio, 2.68), but detected
+    # Cryptosporidium incidence 0.343 per child-year, 2% below the lowest
+    # MAL-ED high-burden site (0.350). The defaults are e7 at 3 significant
+    # figures.
     #
-    # Verified on 8 fresh seeds (verify_v4_routes_det5 e2, re-scored): 30 of
-    # the 31 targets within 2.5 SD; ONE MISS, accepted by the user:
-    # Cryptosporidium's detected incidence at 0-6 vs 6-12 months (0.63 vs
-    # MAL-ED 0.25, 3.3 SD; every v4 candidate was weakest there). Every
-    # incidence, episode rate and illness share inside MAL-ED's site range;
-    # carriage ratios 0.56 (rotavirus) and 0.44 (Cryptosporidium); no
-    # rotavirus fade-out; rotavirus 91% person-to-person, 2.2% waterborne,
-    # 6.6% imported. Weakest other fits (2.1-2.5 SD): Campylobacter's
-    # second-year fall among never-detected children and its prior-infection
-    # rate ratio, Cryptosporidium's second-year rise, rotavirus's
-    # never-detected decline and its true infection by 6 months (0.32 vs
-    # Vellore 0.56).
+    # Out of sample (validate_calibration --campaign v5: 8 seeds from 50023,
+    # 1,826 days): 40 of the 41 targets within 3 SD. Care-seeking in the
+    # poorest quintile is 3.1 SD short (0.50 vs DHS 0.63; 0.60 on the seeds e7
+    # was chosen on); every v5 candidate fell short there, with the economic
+    # parameters that would help at the edge of their box (EconomyConfig).
+    # Detected Cryptosporidium incidence 0.316, 10% below the lowest site (seed
+    # noise and the fifth year, not a drift: 0.332 on the same seeds over four
+    # years). Rotavirus 95% person-to-person, 3.1% waterborne, 2.0% imported,
+    # no fade-out, no reinfection within 31 days; adult : child carriage 0.63
+    # (rotavirus) and 0.32 (Cryptosporidium); every illness share inside
+    # MAL-ED's site range. Weak spots: Campylobacter infects too early (71%
+    # truly infected by 6 months; its detected first-year curve is flat where
+    # MAL-ED's rises, shape r 0.21, v4 0.77); Cryptosporidium's second-year
+    # rise is still weak (detected 2nd : 1st year 1.23 vs MAL-ED 2.30), though
+    # its first months now fit (0-3 months 0.09 vs 0.05; v4 0.32); and illness
+    # hardly differs by wealth (two-week prevalence 1.13x in the poorest
+    # quintile vs the richest; DHS 1.9x, all-cause), because the water routes
+    # stay small.
     #
-    # NO ADMISSIBLE RANGES are quoted for v4. Under the emulators almost no
-    # parameter set meets every rule (the route-constrained admissible set is
-    # one sampled point), so the default is a single best fit, not a point in
-    # a well-sampled region; several values sit at or near a search bound
-    # (Cryptosporidium community transmission and infant ramp). The parameters
-    # are strongly correlated: for sensitivity analysis, vary them JOINTLY
-    # around the default, not one at a time. The v3 values are in
-    # experiments/legacy.py::V3_OVERRIDES (regression_check --v3), v2's in
-    # V2_OVERRIDES.
+    # NO ADMISSIBLE RANGES are quoted for v5: the default is a single best fit
+    # among the few candidates meeting the rules, and several values sit at
+    # or near a search bound (Campylobacter's faecal-oral route; the
+    # economy's income-shock half-life, buffer, savings margin and earning
+    # spread). The
+    # parameters are strongly correlated: for sensitivity analysis, vary them
+    # JOINTLY around the default, not one at a time. v4's values (with econ2's
+    # economy, off by default) are in experiments/legacy.py::V4_OVERRIDES
+    # (regression_check --v4), v3's in V3_OVERRIDES, v2's in V2_OVERRIDES.
     infection_prob_mean: float = Field(
-        0.343,
+        0.673,
         description="Mean per-exposure person-to-person infection probability. History-matched, "
-                    "campaign v4 (see the CALIBRATION note). Per close contact under the contact cap "
+                    "campaign v5 (see the CALIBRATION note; v4: 0.343, without a refractory period, so "
+                    "with many more early reinfections). Per close contact under the contact cap "
                     "(steering_parameters.max_contacts_per_visit), so not comparable with v3's 0.0405 "
                     "(everyone in a cell a contact), v2's 0.0261 (original grid) or the first "
                     "generation's 0.01263, which targeted the seeded initial epidemic.",
@@ -466,13 +483,13 @@ class RotavirusConfig(PathogenConfig):
     # the four 6-month bands. Monthly surveillance stools under-detect short
     # asymptomatic infections, so if anything the true fraction is lower.
     symptomatic_fraction: float = Field(
-        0.476,
+        0.388,
         description="P(diarrhoea | FIRST infection) at the age profile's reference; later "
                     "infections are multiplied by exp(-symptomatic_reduction_per_prior_infection x "
-                    "prior infections). History-matched, campaign v4 (v3: 0.467). MAL-ED's 472 "
+                    "prior infections). History-matched, campaign v5 (v4: 0.476; v3: 0.467). MAL-ED's 472 "
                     "attributable episodes / 734 DETECTED infections (0.643) is over-weighted towards "
                     "illness, since diarrhoeal stools catch symptomatic infections that monthly stools "
-                    "miss; the observation layer gives 0.73 at the default (MAL-ED site range "
+                    "miss; the observation layer gives 0.72 at the default (MAL-ED site range "
                     "0.24-0.74).",
         ge=0.0, le=1.0,
     )
@@ -487,11 +504,12 @@ class RotavirusConfig(PathogenConfig):
     # clustered infections in time, inflating the prior-infection rate ratio
     # to 2-12 (MAL-ED 1.008). Freed in waves 4-5, it removed both.
     importation_rate: float = Field(
-        3.24e-4,
+        1.91e-4,
         description="Daily per-person probability of a rotavirus infection acquired outside "
                     "Akuse (route 'imported'), scaled by relative susceptibility. History-matched, "
-                    "campaign v4. 6.6% of infections are imported at the default, with no fade-out "
-                    "in 8 seeds (v3: 0.6%; v2's 4000-agent town needed ~10%). The share is capped at "
+                    "campaign v5 (v4: 3.24e-4). 2.0% of infections are imported at the default, with no "
+                    "fade-out in 8 seeds (v4: 6.6%; v3: 0.6%; v2's 4000-agent town needed ~10%). The share "
+                    "is capped at "
                     "15% when choosing the default - MAL-ED cannot tell a self-sustaining town from a "
                     "sink for outside infection - and it bounds what any intervention inside Akuse "
                     "can achieve; vary it in a GSA.",
@@ -500,14 +518,15 @@ class RotavirusConfig(PathogenConfig):
 
     # --- Catchment water model (WaterConfig.model == "catchment") ---
     water_dose_scale: float = Field(
-        0.00258,
+        0.00456,
         description="Converts a drinking-water source's concentration (infectious-person-days of "
                     "shedding reaching it, dilution-weighted) into P(infection) = 1 - exp(-scale * C) "
                     "per day of drinking. The calibrated knob of the catchment water route. Unused "
                     "by the legacy water model (which uses "
-                    "steering_parameters.water_to_human_infection_prob). History-matched, campaign v4, "
+                    "steering_parameters.water_to_human_infection_prob). History-matched, campaign v5, "
                     "with at most 10% of rotavirus infections waterborne required of the default "
-                    "(history_matching.V4_ROUTE_RANGES): 2.2% at the default (v3: 0.2%). Weakly "
+                    "(history_matching.V4_ROUTE_RANGES): 3.1% at the default (v4: 0.00258, 2.2%; v3: "
+                    "0.2%). Weakly "
                     "identified by the targets. Grid- and population-size dependent.",
         ge=0.0,
     )
@@ -543,13 +562,13 @@ class RotavirusConfig(PathogenConfig):
         ge=0.0, le=1.0,
     )
     adult_relative_susceptibility: float | None = Field(
-        0.216,
+        0.167,
         description="Relative susceptibility of every adult (agent aged 5+), on every route. "
-                    "History-matched, campaign v4, against an adult : young-child (12-59 months) "
+                    "History-matched, campaign v5, against an adult : young-child (12-59 months) "
                     "carriage ratio of 0.7 (Endara et al. 2007; Lopman et al. 2013; plausible range "
-                    "0.4-1.1): 0.56 at the default. Below the children's plateau (0.26): it stands "
-                    "for adults' smaller faecal-oral exposure as well as their immunity. v3: None "
-                    "(= immunity_floor).",
+                    "0.4-1.1): 0.63 at the default. Below the children's plateau (0.26): it stands "
+                    "for adults' smaller faecal-oral exposure as well as their immunity. v4: 0.216; v3: "
+                    "None (= immunity_floor).",
         ge=0.0, le=1.0,   # redeclared: a subclass field replaces the base field outright
     )
     # MAL-ED Supplementary Table 2: infection rate at 0-3 months is 0.55x the
@@ -558,14 +577,14 @@ class RotavirusConfig(PathogenConfig):
     # when it starts at 0.44. First-pass values read off the curve's shape,
     # to be refined by calibration against the full age curve.
     infant_susceptibility_at_birth: float = Field(
-        0.725, description="Newborn relative susceptibility. History-matched, campaign v4, against "
-                           "MAL-ED's detected age curve and Vellore's share infected by 6 months "
-                           "(v3: 0.320; first-pass value 0.44).",
+        0.407, description="Newborn relative susceptibility. History-matched, campaign v5, against "
+                           "MAL-ED's detected age curve and Vellore's share infected by 6 months (0.46 "
+                           "at the default, Vellore 0.56; v4: 0.725; v3: 0.320; first-pass value 0.44).",
         ge=0.0, le=1.0,
     )
     infant_susceptibility_ramp_months: float = Field(
-        9.27, description="Age (months) of full susceptibility. History-matched, campaign v4 (v3: 7.96; "
-                          "first-pass value 7.5, MAL-ED's 6-9 month peak).", ge=0.0,
+        12.8, description="Age (months) of full susceptibility. History-matched, campaign v5 (v4: 9.27; "
+                          "v3: 7.96; first-pass value 7.5, MAL-ED's 6-9 month peak).", ge=0.0,
     )
     # Disease-specific immunity (see PathogenConfig) - set from the
     # literature, not calibrated (history_matching.V3_LITERATURE_FIXED).
@@ -580,10 +599,11 @@ class RotavirusConfig(PathogenConfig):
         ge=0.0,
     )
     asymptomatic_relative_infectiousness: float = Field(
-        0.397,
+        0.385,
         description="Infectiousness of a symptomless infection relative to one causing illness, "
-                    "on every route. History-matched, campaign v4 - one value shared by the three "
-                    "pathogens (v3: 0.201). Within the published 0.1-1 range (see PathogenConfig).",
+                    "on every route. History-matched, campaign v5 - one value shared by the three "
+                    "pathogens (v4: 0.397; v3: 0.201). Within the published 0.1-1 range (see "
+                    "PathogenConfig).",
         ge=0.0, le=1.0,
     )
     # No antiviral exists; ORS/zinc do not shorten shedding.
@@ -600,25 +620,40 @@ class RotavirusConfig(PathogenConfig):
     # of crude over consecutive-detection infections pins both short. In
     # campaign v4 both were set by re-scoring the verified runs (the layer
     # runs after the simulation, so they change nothing else): the selection
-    # had put the symptomatic window at 15.5 days, where a monthly stool often
-    # catches an infection already detected in its diarrhoeal stool and
-    # crude : consecutive infections reach 1.24 (MAL-ED 1.02). 8 seeds at
-    # 5 / 3 days: 1.06, and 73% of detected infections attributable to
-    # diarrhoea - the shortest symptomless window inside MAL-ED's site range
-    # (0.24-0.74; 2 days gave 0.78). See docs/calibration_v4_adults.md.
+    # had put the symptomatic window at 15.5 days, where crude : consecutive
+    # infections reach 1.24 (MAL-ED 1.02); 5 / 3 days gave 1.06 and 73% of
+    # detected infections attributable (docs/calibration_v4_adults.md). In
+    # campaign v5 both were history-matched with everything else: at 4.33 /
+    # 2.44 days, crude : consecutive 1.02 and 72% attributable (MAL-ED's site
+    # range 0.24-0.74).
     detectable_shedding_days_symptomatic: float = Field(
-        5.0,
+        4.33,
         description="Observation layer only: mean days a symptomatic infection's stool tests positive "
-                    "at MAL-ED's cut-off. Set by re-scoring, campaign v4, against MAL-ED's crude : "
-                    "consecutive infection ratio (v3: 5.84).",
+                    "at MAL-ED's cut-off. History-matched, campaign v5 (v4: 5.0, set by re-scoring against "
+                    "MAL-ED's crude : consecutive infection ratio; v3: 5.84).",
         gt=0.0,
     )
     detectable_shedding_days_asymptomatic: float = Field(
-        3.0,
+        2.44,
         description="Observation layer only: mean days a symptomless infection's stool tests positive "
-                    "at MAL-ED's cut-off. Set by re-scoring, campaign v4: the shortest window putting "
-                    "P(attributable | detected) inside MAL-ED's site range (v3: 3.75).",
+                    "at MAL-ED's cut-off. History-matched, campaign v5 (v4: 3.0, set by re-scoring: the "
+                    "shortest window putting P(attributable | detected) inside MAL-ED's site range; v3: "
+                    "3.75).",
         gt=0.0,
+    )
+    # Complete protection for a while after each infection (see
+    # PathogenConfig). Without it, at v4's defaults, 47% of children's
+    # rotavirus reinfections came within a month (pre-v5 pilot,
+    # docs/v5_campaign_plan.md section 3), where MAL-ED's 2% excess of crude
+    # over consecutive-detection infections leaves little room for them.
+    post_infection_refractory_days: float = Field(
+        49.1,
+        description="Days after each infection (counted from exposure) during which the agent cannot be "
+                    "infected again by rotavirus. History-matched, campaign v5 (search range 0-60 days; "
+                    "v4: 0, none): no reinfection within 31 days at the default, 4% of reinfections within "
+                    "61. Some rotavirus transmission models have such a period of complete temporary "
+                    "immunity (see PathogenConfig).",
+        ge=0.0,   # redeclared: a subclass field replaces the base field outright
     )
 
 class CampylobacterConfig(PathogenConfig):
@@ -642,29 +677,30 @@ class CampylobacterConfig(PathogenConfig):
         3, description="Latent period (days) before an exposed agent becomes infectious."
     )
     # Environmental. The three route parameters are history-matched (see
-    # RotavirusConfig's CALIBRATION note). At the v4 default 53% of
-    # infections are zoonotic, 46% food-borne and 0.2% faecal-oral (v3: 83%,
-    # 17%, <1%): the faecal-oral route carries almost nothing anywhere in the
-    # admissible region (1.4% at its top, 0.0096, in a v2 candidate) - a
-    # mechanism to revisit.
+    # RotavirusConfig's CALIBRATION note). At the v5 default 62% of
+    # infections are zoonotic, 38% food-borne and 0.04% faecal-oral (v4: 53%,
+    # 46%, 0.2%; v3: 83%, 17%, <1%): the faecal-oral route carries almost
+    # nothing anywhere in the admissible region (1.4% at its top, 0.0096, in a
+    # v2 candidate) - a mechanism to revisit.
     human_animal_interaction_rate: float = Field(
-        0.00327,
+        0.00351,
         description="Daily probability of zoonotic-route exposure for an animal-owning household. "
-                    "History-matched, campaign v4, against a 0.5-0.8 zoonotic share (0.53 at the "
-                    "default; v3: 0.00117).",
+                    "History-matched, campaign v5, against a 0.5-0.8 zoonotic share (0.62 at the "
+                    "default; v4: 0.00327; v3: 0.00117).",
     )
     # Fecal-oral (household) route
     fecal_oral_prob: float = Field(
-        0.000744,
+        0.000165,
         description="Per-contact fecal-oral transmission probability within an infected household. "
-                    "History-matched, campaign v4 (v3: 0.00174) but not identified: the route carries "
-                    "<2% of infections anywhere in the search range.",
+                    "History-matched, campaign v5 (v4: 0.000744; v3: 0.00174; near the search range's "
+                    "lower bound, 0.00015) but not identified: the route carries <2% of infections "
+                    "anywhere in the search range.",
     )
     # Background risk due to food consumption
     food_borne_prob: float = Field(
-        0.00513,
+        0.00388,
         description="Daily background infection probability via food-borne exposure. "
-                    "History-matched, campaign v4 (v3: 0.000427).",
+                    "History-matched, campaign v5 (v4: 0.00513; v3: 0.000427).",
     )
 
     # Household animal ownership (zoonotic route)
@@ -727,11 +763,11 @@ class CampylobacterConfig(PathogenConfig):
     # months, all eight sites) = 0.171, falling with age from 0.22 to 0.11 -
     # the bulk of childhood Campylobacter infection is subclinical.
     symptomatic_fraction: float = Field(
-        0.194,
+        0.057,
         description="P(diarrhoea | infection) at the age profile's reference (no change with "
                     "prior infections: symptomatic_reduction_per_prior_infection 0). "
-                    "History-matched, campaign v4 (v3: 0.344). Through the observation layer it "
-                    "gives 25% of DETECTED infections attributable to diarrhoea (MAL-ED 502/2938 = "
+                    "History-matched, campaign v5 (v4: 0.194; v3: 0.344). Through the observation layer "
+                    "it gives 14% of DETECTED infections attributable to diarrhoea (MAL-ED 502/2938 = "
                     "17%; site range 2-32%).",
         ge=0.0, le=1.0,
     )
@@ -756,13 +792,16 @@ class CampylobacterConfig(PathogenConfig):
     # (3.80 vs 12.69 per 100 child-months); a linear ramp to 1 at 10 months
     # matches that at 1.5 months when it starts at 0.18. First-pass.
     infant_susceptibility_at_birth: float = Field(
-        0.0642, description="Newborn relative susceptibility. History-matched, campaign v4 (v3: 0.402; "
-                            "first-pass value 0.18).",
+        0.838, description="Newborn relative susceptibility. History-matched, campaign v5 (v4: 0.0642; "
+                           "v3: 0.402; first-pass value 0.18). High: 71% of children are truly infected by "
+                           "6 months at the default, and the detected first-year curve is flat where "
+                           "MAL-ED's rises (0-3 months 0.89 vs 0.46 per child-year) - v5's weakest "
+                           "Campylobacter fit.",
         ge=0.0, le=1.0,
     )
     infant_susceptibility_ramp_months: float = Field(
-        4.18, description="Age (months) of full susceptibility. History-matched, campaign v4 (v3: 5.06; "
-                          "first-pass value 10, MAL-ED's 9-12 month peak).", ge=0.0,
+        7.36, description="Age (months) of full susceptibility. History-matched, campaign v5 (v4: 4.18; "
+                          "v3: 5.06; first-pass value 10, MAL-ED's 9-12 month peak).", ge=0.0,
     )
     symptomatic_reduction_per_prior_infection: float = Field(
         0.0,
@@ -772,9 +811,9 @@ class CampylobacterConfig(PathogenConfig):
         ge=0.0,
     )
     asymptomatic_relative_infectiousness: float = Field(
-        0.397,
+        0.385,
         description="Infectiousness of a symptomless infection relative to one causing illness. "
-                    "History-matched, campaign v4; shared by the three pathogens (see RotavirusConfig).",
+                    "History-matched, campaign v5; shared by the three pathogens (see RotavirusConfig).",
         ge=0.0, le=1.0,
     )
     # Kept at the original model's 1.0: antibiotics (macrolides) do shorten
@@ -797,17 +836,17 @@ class CampylobacterConfig(PathogenConfig):
     # consecutive-detection infections - needs long detectable carriage, the
     # norm for Campylobacter in endemic settings; the rule that illness-causing
     # infections stay detectable longer is not applied to it (see
-    # history_matching.v3_physical_constraint), though the v4 default meets it.
+    # history_matching.v3_physical_constraint), though the v5 default meets it.
     detectable_shedding_days_symptomatic: float = Field(
-        40.2,
+        53.3,
         description="Observation layer only: mean days a symptomatic infection's stool tests positive "
-                    "at MAL-ED's cut-off. History-matched, campaign v4 (v3: 14.1).",
+                    "at MAL-ED's cut-off. History-matched, campaign v5 (v4: 40.2; v3: 14.1).",
         gt=0.0,
     )
     detectable_shedding_days_asymptomatic: float = Field(
-        14.3,
+        7.66,
         description="Observation layer only: mean days a symptomless infection's stool tests positive "
-                    "at MAL-ED's cut-off. History-matched, campaign v4 (v3: 39.5).",
+                    "at MAL-ED's cut-off. History-matched, campaign v5 (v4: 14.3; v3: 39.5).",
         gt=0.0,
     )
 
@@ -870,10 +909,10 @@ class CryptosporidiumConfig(PathogenConfig):
     # episode represents: 245 attributable episodes / 1364 infections in
     # children 0-24 months = 0.180, by 6-month band 0.22, 0.20, 0.17, 0.17.
     symptomatic_fraction: float = Field(
-        0.102,
+        0.277,
         description="P(diarrhoea | FIRST infection) at the age profile's reference; later infections "
-                    "x exp(-0.48) each. History-matched, campaign v4 (v3: 0.132). Through the "
-                    "observation layer it gives 9% of DETECTED infections attributable to diarrhoea "
+                    "x exp(-0.48) each. History-matched, campaign v5 (v4: 0.102; v3: 0.132). Through the "
+                    "observation layer it gives 31% of DETECTED infections attributable to diarrhoea "
                     "(MAL-ED 245/1364 = 18%; site range 2-33%; the ~1/3 DETECTED in diarrhoeal stools in "
                     "Korpe et al. 2016 / Kattula et al. 2016 includes co-detections in diarrhoea "
                     "caused by other pathogens).",
@@ -907,15 +946,15 @@ class CryptosporidiumConfig(PathogenConfig):
     # Observation layer only (see PathogenConfig). Oocyst shedding lasts
     # ~2-3 weeks, but only part of it above MAL-ED's cut-off.
     detectable_shedding_days_symptomatic: float = Field(
-        27.5,
+        16.9,
         description="Observation layer only: mean days a symptomatic infection's stool tests positive "
-                    "at MAL-ED's cut-off. History-matched, campaign v4 (v3: 11.4).",
+                    "at MAL-ED's cut-off. History-matched, campaign v5 (v4: 27.5; v3: 11.4).",
         gt=0.0,
     )
     detectable_shedding_days_asymptomatic: float = Field(
-        16.5,
+        15.3,
         description="Observation layer only: mean days a symptomless infection's stool tests positive "
-                    "at MAL-ED's cut-off. History-matched, campaign v4 (v3: 7.81).",
+                    "at MAL-ED's cut-off. History-matched, campaign v5 (v4: 16.5; v3: 7.81).",
         gt=0.0,
     )
     symptomatic_reduction_per_prior_infection: float = Field(
@@ -928,9 +967,9 @@ class CryptosporidiumConfig(PathogenConfig):
         ge=0.0,
     )
     asymptomatic_relative_infectiousness: float = Field(
-        0.397,
+        0.385,
         description="Infectiousness of a symptomless infection relative to one causing illness. "
-                    "History-matched, campaign v4; shared by the three pathogens (see RotavirusConfig).",
+                    "History-matched, campaign v5; shared by the three pathogens (see RotavirusConfig).",
         ge=0.0, le=1.0,
     )
     immunity_decay_per_infection: float | None = Field(
@@ -949,13 +988,13 @@ class CryptosporidiumConfig(PathogenConfig):
         ge=0.0, le=1.0,
     )
     adult_relative_susceptibility: float | None = Field(
-        0.270,
+        0.283,
         description="Relative susceptibility of every adult (agent aged 5+), on every route. "
-                    "History-matched, campaign v4, against an adult : young-child (12-59 months) "
+                    "History-matched, campaign v5, against an adult : young-child (12-59 months) "
                     "carriage ratio of 0.5 (Krumkamp et al. 2021: qPCR prevalence among household "
                     "members about half that among neighbouring under-5s; plausible range 0.2-1.0): "
-                    "0.44 at the default. Korpe et al. 2023 documented shedding in adult household "
-                    "members. v3: None (= immunity_floor).",
+                    "0.32 at the default. Korpe et al. 2023 documented shedding in adult household "
+                    "members. v4: 0.270; v3: None (= immunity_floor).",
         ge=0.0, le=1.0,   # redeclared: a subclass field replaces the base field outright
     )
     # Korpe et al. 2019 (Clin Infect Dis 68:1073): shedding in people over two
@@ -963,7 +1002,7 @@ class CryptosporidiumConfig(PathogenConfig):
     # al. 2023 (Clin Infect Dis 76:2178): 7.0-7.2 days at 6-17 years and 16.2
     # in adults vs 19.9 in infants (0.36, 0.81). Weighted by Ghana's age
     # structure (41.8% under 18, 2021 census), people aged 5+ shed ~0.65 times
-    # as long as infants. Held at that value in campaign v4 (the pilots
+    # as long as infants. Held at that value in campaigns v4 and v5 (the pilots
     # admitted 0.42-0.84).
     adult_infectious_duration_scale: float = Field(
         0.65,
@@ -976,32 +1015,34 @@ class CryptosporidiumConfig(PathogenConfig):
     # peak (0.45 vs 5.96 per 100 child-months) - the strongest early-life
     # protection of the three. A linear ramp from 0 reaching 1 at 16 months
     # gives 0.09 at 1.5 months. First-pass. Kattula et al. 2016 also found
-    # exclusive breastfeeding protective. v3 and v4 both leave the
+    # exclusive breastfeeding protective. v3 and v4 both left the
     # second-year rise too weak and the first-half-year incidence too high
-    # (detected 0-6 : 6-12 months 0.63 at the v4 default vs MAL-ED 0.25, the
-    # default's one target outside 3 SD); v4's ramp sits near its 36-month
-    # search bound.
+    # (v4: detected 0-6 : 6-12 months 0.63 vs MAL-ED 0.25, its one target
+    # outside 3 SD, with the ramp near its 36-month search bound). v5 starts
+    # lower and ramps faster: the first months now fit (detected 0-3 months
+    # 0.09 per child-year vs MAL-ED 0.05; v4 0.32), the second-year rise is
+    # still weak (detected 2nd : 1st year 1.23 vs 2.30).
     infant_susceptibility_at_birth: float = Field(
-        0.188, description="Newborn relative susceptibility. History-matched, campaign v4 (v3: 0.0127; "
-                           "first-pass value 0).",
+        0.0471, description="Newborn relative susceptibility. History-matched, campaign v5 (v4: 0.188; "
+                            "v3: 0.0127; first-pass value 0).",
         ge=0.0, le=1.0,
     )
     infant_susceptibility_ramp_months: float = Field(
-        34.7, description="Age (months) of full susceptibility. History-matched, campaign v4 (v3: 15.3; "
-                          "first-pass value 16, MAL-ED's 15-18 month peak). Near the 36-month search "
-                          "bound.", ge=0.0,
+        12.0, description="Age (months) of full susceptibility. History-matched, campaign v5 (v4: 34.7, "
+                          "near its 36-month search bound; v3: 15.3; first-pass value 16, MAL-ED's 15-18 "
+                          "month peak).", ge=0.0,
     )
 
     # ------------------------------------------------------------------
     # Calibrated route parameters
     # ------------------------------------------------------------------
     # History-matched with the other pathogens (see RotavirusConfig's
-    # CALIBRATION note). At the v4 default, post burn-in: 35% of infections
-    # household, 62% community, 0.6% waterborne, 2.8% zoonotic, 0.2%
-    # imported (v3: 36%, 40%, 18%, 6.5%, <1%). The water share is not
-    # constrained by any target (in v3 the water dose's admissible range
-    # spanned more than an order of magnitude), so water-shock scenarios
-    # should vary it.
+    # CALIBRATION note). At the v5 default, post burn-in: 39% of infections
+    # household, 51% community, 8.3% waterborne, 0.5% zoonotic, 0.6%
+    # imported (v4: 35%, 62%, 0.6%, 2.8%, 0.2%; v3: 36%, 40%, 18%, 6.5%, <1%).
+    # The water share is not constrained by any target (in v3 the water
+    # dose's admissible range spanned more than an order of magnitude), so
+    # water-shock scenarios should vary it.
     #
     # Superseded first-generation values (LHS search against
     # LEGACY_CRYPTO_TARGETS, experiments/calibration/run_crypto_calibration.py,
@@ -1011,23 +1052,23 @@ class CryptosporidiumConfig(PathogenConfig):
 
     # --- Route 1: household person-to-person (dominant) ---
     household_transmission_prob: float = Field(
-        0.0952,
+        0.0924,
         description="Daily per-susceptible-member infection probability in a household "
                     "containing an infectious member. Anchored (not merely guessed) on Korpe et "
                     "al. 2019, Clin Infect Dis 68(7):1073-9: 8-week secondary attack rate 35.8% "
                     "(19/53) urban and 7.8% (5/64) rural vs 0% in control families. Over a "
                     "~21-day infectious window, 1-(1-p)^21 = 0.36 implies p ~ 0.021, the urban end of that "
-                    "range; the rural SAR implies ~0.004. History-matched, campaign v4, against a "
-                    "0.3-0.6 household share (0.35 at the default; v3: 0.144). Higher than that "
-                    "anchor because symptomless infections - most of Cryptosporidium's - transmit at "
-                    "asymptomatic_relative_infectiousness (0.40) of the rate: from a symptomless "
-                    "index the per-day probability is ~0.038. The 8-week SAR this implies should be "
+                    "range; the rural SAR implies ~0.004. History-matched, campaign v5, against a "
+                    "0.3-0.6 household share (0.39 at the default; v4: 0.0952; v3: 0.144). Higher than "
+                    "that anchor because symptomless infections - most of Cryptosporidium's - transmit at "
+                    "asymptomatic_relative_infectiousness (0.39) of the rate: from a symptomless "
+                    "index the per-day probability is ~0.036. The 8-week SAR this implies should be "
                     "checked against Korpe et al.",
     )
 
     # --- Route 2: community person-to-person (co-location) ---
     community_infection_prob: float = Field(
-        0.15,
+        0.104,
         description="Per-exposure infection probability from each co-located infectious agent, "
                     "using the same co-location machinery as rotavirus H2H (so schools, worship, "
                     "social visits and neighbours all contribute), per close contact under the "
@@ -1036,9 +1077,9 @@ class CryptosporidiumConfig(PathogenConfig):
                     "in neighbour children, the highest of any contact group). Calibrated tuning "
                     "knob. Unlike rotavirus this is a fixed value rather than a daily Gaussian "
                     "draw - one fewer stochastic knob, and nothing in the evidence motivates "
-                    "day-to-day variation specifically for this route. History-matched, campaign v4 "
-                    "(v3: 0.00271, before the cap). AT THE UPPER SEARCH BOUND (0.15): the best fit "
-                    "may lie beyond it.",
+                    "day-to-day variation specifically for this route. History-matched, campaign v5 "
+                    "(v4: 0.15, at the upper search bound - a pre-v5 pilot at 0.25 tripled infections; "
+                    "v3: 0.00271, before the cap).",
     )
 
     # --- Route 3: waterborne, via a persistent oocyst reservoir ---
@@ -1081,15 +1122,16 @@ class CryptosporidiumConfig(PathogenConfig):
                     "this is not a second, redundant knob. Change it only to rescale the units.",
     )
     water_dose_scale: float = Field(
-        0.00574,
+        0.0418,
         description="Converts a source's load (infectious-person-days of shedding reaching it, "
                     "dilution-weighted) into the dose entering the exponential dose-response. The "
                     "calibrated knob for the waterborne route; absorbs oocysts shed per "
                     "person-day, the fraction mobilised by runoff, dilution, volume ingested and "
                     "treatment, none of which is separately measured for Akuse. The value depends "
-                    "on the water model's units. History-matched for the catchment model, campaign v4 "
-                    "(weakly identified; 0.6% of infections waterborne at the default; v3: 0.408, "
-                    "18%); the legacy point-source model was calibrated at 0.00090348. Grid- and "
+                    "on the water model's units. History-matched for the catchment model, campaign v5 "
+                    "(weakly identified; 8.3% of infections waterborne at the default; v4: 0.00574, "
+                    "0.6%; v3: 0.408, 18%); the legacy point-source model was calibrated at 0.00090348. "
+                    "Grid- and "
                     "population-size dependent.",
     )
     shock_oocyst_load: float = Field(
@@ -1115,7 +1157,7 @@ class CryptosporidiumConfig(PathogenConfig):
     # deliberately excluded: birds are not hosts of C. parvum/C. hominis.
     # C. meleagridis is avian-associated but minor (0.6% of GEMS isolates).
     zoonotic_interaction_rate: float = Field(
-        0.0073,
+        0.000436,
         description="Scales local ruminant density into a zoonotic dose for the exponential "
                     "dose-response. Calibrated, and expected to stay SMALL: Krumkamp et al. 2021 "
                     "found no elevated risk of positive animal contacts around positive index "
@@ -1124,8 +1166,8 @@ class CryptosporidiumConfig(PathogenConfig):
                     "because C. parvum zoonotic subtypes do circulate (Oduro et al. 2024 found "
                     "C. parvum in 41% of Ghanaian animal samples) and because livestock-focused "
                     "intervention scenarios need it, not because it is expected to dominate. "
-                    "History-matched, campaign v4, against a 2-15% zoonotic share (2.8% at the "
-                    "default; v3: 0.0236, 6.5%).",
+                    "History-matched, campaign v5, against a 2-15% zoonotic share: 0.5% at the "
+                    "default, below the band (2.1 SD; v4: 0.0073, 2.8%; v3: 0.0236, 6.5%).",
     )
     ruminant_weight: float = Field(
         1.0,
@@ -1539,18 +1581,18 @@ class SteeringParamsSVEIR(BaseModel):
     # importation_rate.)
     #
     # History-matched with everything else (see RotavirusConfig's CALIBRATION
-    # note): 0.8 in campaign v2, 0.906 in v3, 0.224 in v4. At 0.224 the median
-    # household has 0.97x the mean environmental exposure and the top 5% more
-    # than 1.4x (at v3's 0.906: 0.66x and 2.9x). The low value leaves
-    # Campylobacter's prior-infection rate ratio short of MAL-ED's (0.93 vs
-    # 2.62 at 12-24 months, 2.5 SD) - one of the default's weaker fits.
+    # note): 0.8 in campaign v2, 0.906 in v3, 0.224 in v4, 0.695 in v5. At
+    # 0.695 the median household has 0.79x the mean environmental exposure and
+    # the top 5% more than 2.4x (at v4's 0.224: 0.97x and 1.4x). Campylobacter's
+    # prior-infection rate ratio at 12-24 months is 1.27 (MAL-ED 2.64, 1.7 SD;
+    # v4: 0.93, 2.5 SD).
     household_exposure_sdlog: float = Field(
-        0.224,
+        0.695,
         description="SD (log scale) of the household-level log-normal (mean 1) multiplier on "
                     "infection risk via environmental routes (water, zoonotic, food-borne), "
                     "shared by all members and pathogens. 0 = homogeneous. History-matched, campaign "
-                    "v4 (see RotavirusConfig's CALIBRATION note), identified mainly by MAL-ED's "
-                    "prior-infection rate ratios. v3: 0.906; v2: 0.8.",
+                    "v5 (see RotavirusConfig's CALIBRATION note), identified mainly by MAL-ED's "
+                    "prior-infection rate ratios. v4: 0.224; v3: 0.906; v2: 0.8.",
         ge=0.0,
     )
 
@@ -1774,11 +1816,13 @@ class SteeringParamsSVEIR(BaseModel):
 class EconomyConfig(BaseModel):
     """The household economy (docs/economy_design_proposal.md).
 
-    model="legacy" (default): the original dimensionless pooled wealth in [0, 1]
+    model="legacy": the original dimensionless pooled wealth in [0, 1]
     (SteeringParamsSVEIR.daily_income_rate, daily_cost_of_living, cost_of_care),
-    reproducing campaign v4 byte for byte. Nothing below is read.
+    reproducing campaign v4 byte for byte with experiments.legacy.V4_OVERRIDES
+    (and the web app, campaigns v1-v3). Nothing below is read.
 
-    model="cedi": money in 2026 Ghana cedis (GH¢) per household per day.
+    model="cedi" (the default since campaign v5): money in 2026 Ghana cedis
+    (GH¢) per household per day.
       * Roles by age. Agents aged 5+ get an economic age group, 5-14, 15-64 or
         65+, from the census shares below. The first member of every household
         (its head, and the parent who decides on care) is aged 15+. Everyone aged
@@ -1879,11 +1923,33 @@ class EconomyConfig(BaseModel):
     Cryptosporidium 0.7% of infections; Campylobacter has none), illness hardly
     differs by quintile or water source, unlike DHS's gradient - a question for
     v5.
+
+    CALIBRATION (campaign v5, 2026-11-04; docs/v5_campaign_plan.md): the same
+    seven parameters were history-matched again, jointly with the epidemiology
+    (see RotavirusConfig's CALIBRATION note), with caring time and L1 on and
+    the income-shock SD's box widened to 1.0 and its half-life's down to 2 days
+    (econ2's optimum sat at both edges). The joint fit moved away from econ2's
+    short, volatile earnings: a smaller (0.44) but very persistent income shock
+    (half-life 180 days, the top of the box), cash buffers of 84 days at the
+    middle quintile's consumption, rising with wealth (elasticity 0.38: about
+    56 days at the poorest quintile's level, 134 at the richest's), no savings
+    margin (the bottom of the box), a narrower earning spread (0.20, the
+    bottom of its box) and
+    GH¢20.9 for an insured primary-care visit. Out of sample (8 seeds from
+    50023, 1,826 days): care-seeking 0.50 / 0.57 / 0.60 / 0.62 / 0.65 by
+    quintile (DHS 0.63 / 0.66 / 0.55 / 0.55 / 0.63: the poorest quintile 3.1 SD
+    short, as at every v5 candidate) and households unable to pay 0.43 / 0.39 /
+    0.37 / 0.34 / 0.31 (DHS 0.63 / 0.57 / 0.47 / 0.39 / 0.25, flatter);
+    poverty 32% of persons (GLSS 7: 23.4%). With the half-life, savings margin
+    and earning spread at the edge of the box and the buffer near it, the best
+    fit may lie beyond it. Two-week illness prevalence
+    hardly differs by quintile (1.13x poorest vs richest; DHS 1.9x, all-cause).
     """
     model: str = Field(
-        "legacy",
-        description="'legacy' (default; campaign v4's dimensionless pooled wealth) or 'cedi' "
-                    "(2026 Ghana cedis, roles by age, wealth quintiles; see EconomyConfig).",
+        "cedi",
+        description="'cedi' (default since campaign v5; 2026 Ghana cedis, roles by age, wealth quintiles; "
+                    "see EconomyConfig) or 'legacy' (the original dimensionless pooled wealth: campaigns "
+                    "v1-v4 and the web app).",
     )
     rng_seed_offset: int = Field(
         104729, description="Added to the run's seed for the economy's own initialisation stream.",
@@ -1906,38 +1972,43 @@ class EconomyConfig(BaseModel):
                     "rank consumption, the DHS strata assets (design §3.4).",
     )
     earning_spread_sdlog: float = Field(
-        0.38, ge=0.0,
+        0.203, ge=0.0,
         description="SD (log scale) of the household earning factor within a quintile. Calibrated "
-                    "(econ2): 0.38.",
+                    "(campaign v5, box 0.2-0.8): 0.203, at the lower bound (econ2: 0.38).",
     )
     savings_rate: float = Field(
-        0.00875, ge=0.0,
+        0.0, ge=0.0,
         description="Full-health income in excess of the consumption target, as a fraction of the "
-                    "target. Calibrated (econ2): 0.00875.",
+                    "target. Calibrated (campaign v5): 0, the lower bound of the search box (econ2: "
+                    "0.00875).",
     )
     income_shock_sd: float = Field(
-        0.6, ge=0.0,
+        0.438, ge=0.0,
         description="Stationary SD (log scale) of the persistent household income shock. 0 = earnings "
-                    "never vary. Calibrated (econ2): 0.6, the upper bound of the search box.",
+                    "never vary. Calibrated (campaign v5, box 0.1-1.0): 0.438 (econ2: 0.6, then the upper "
+                    "bound).",
     )
     income_shock_halflife_days: float = Field(
-        7.0, gt=0.0,
-        description="Half-life (days) of the household income shock's AR(1) process. Calibrated (econ2): "
-                    "7 days, the lower bound of the search box.",
+        180.0, gt=0.0,
+        description="Half-life (days) of the household income shock's AR(1) process. Calibrated (campaign "
+                    "v5, box 2-180 days): 180 days, the upper bound of the search box (econ2: 7 days, then "
+                    "the lower bound).",
     )
     buffer_days: float = Field(
-        9.94, gt=0.0,
-        description="Cash a household holds at most, in days of its consumption target; income above it "
-                    "is spent. Calibrated (econ2): 9.94.",
+        83.9, gt=0.0,
+        description="Cash a household holds at most, in days of its consumption target, at the middle "
+                    "quintile's consumption level (see buffer_wealth_elasticity); income above it is spent. "
+                    "Calibrated (campaign v5, box 7-90 days): 83.9 (econ2: 9.94).",
     )
     buffer_wealth_elasticity: float = Field(
-        0.0, ge=0.0,
+        0.377, ge=0.0,
         description="How the cash buffer grows with wealth: household h holds at most buffer_days x "
                     "(c_h / c_ref)^elasticity days of its consumption target, c_h its consumption target per "
                     "person and c_ref the middle quintile's GLSS level. 0 = the same number of days for "
-                    "every household (scale-free). Calibrated (econ2) against the DHS 2022 wealth gradient "
-                    "in 'getting money for treatment is a big problem' (63% poorest, 25% richest): 0, the "
-                    "lower bound - the gradient comes from fixed visit costs against small budgets instead.",
+                    "every household (scale-free). Calibrated (campaign v5) against the DHS 2022 wealth "
+                    "gradient in 'getting money for treatment is a big problem' (63% poorest, 25% richest), "
+                    "with the other targets: 0.377 (econ2: 0, the lower bound, where the gradient came from "
+                    "fixed visit costs against small budgets instead).",
     )
     initial_buffer_fraction: float = Field(
         1.0, ge=0.0, le=1.0,
@@ -1965,10 +2036,11 @@ class EconomyConfig(BaseModel):
                     "flat by wealth (88-95%). GLSS 7's valid-card share (47.8%) is the low-cover case.",
     )
     cost_primary_insured: float = Field(
-        0.0, ge=0.0,
+        20.9, ge=0.0,
         description="Out-of-pocket cost, GH¢, of a public primary-care visit with NHIS cover: NHIS covers "
                     "consultation and essential medicines, and CHPS compounds and health centres are mostly "
-                    "within walking distance. Calibrated (econ2) within [0, 55]: 0, the lower bound.",
+                    "within walking distance. Calibrated (campaign v5) within [0, 55]: 20.9 (econ2: 0, the "
+                    "lower bound).",
     )
     cost_hospital_insured: float = Field(
         55.0, ge=0.0,

@@ -256,7 +256,8 @@ def test_phase_is_passed_explicitly_and_both_phases_occur(make_model):
 # ---------------------------------------------------------------------------
 
 def test_each_waterborne_pathogen_gets_its_own_reservoir(make_model):
-    model = make_model(steps=1, run=False, overrides={"water.model": "legacy"})
+    model = make_model(steps=1, run=False, overrides={"water.model": "legacy",
+                                  "economy.wash_by_quintile": False})   # L1 needs the catchment model
     grid = model.grid_environment
 
     rota_state = grid.get_water_state("rota")
@@ -285,7 +286,8 @@ def test_static_water_layer_is_not_mutated_by_contamination(make_model):
     """
     model = make_model(steps=30, run=False,
                        overrides={"steering_parameters.human_to_water_infection_prob": 1.0,
-                                  "water.model": "legacy"})
+                                  "water.model": "legacy",
+                                  "economy.wash_by_quintile": False})   # L1 needs the catchment model
     grid = model.grid_environment
     before = grid.water_point_mask().clone()
 
@@ -307,7 +309,8 @@ def test_water_shock_hits_every_waterborne_pathogen(make_model):
     """
     from abm.systems.environment import EnvironmentSystem
 
-    model = make_model(steps=1, run=False, overrides={"water.model": "legacy"})
+    model = make_model(steps=1, run=False, overrides={"water.model": "legacy",
+                                  "economy.wash_by_quintile": False})   # L1 needs the catchment model
     grid = model.grid_environment
     env = next(s for s in model.systems if isinstance(s, EnvironmentSystem))
 

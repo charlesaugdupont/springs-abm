@@ -14,7 +14,7 @@ reports, next to the MAL-ED values:
   * route mixes, the imported fraction, carriage prevalence, adult share of
     infections and the care-seeking/economic outputs
 
-With --campaign v4 (the default) or v3 it runs the settlement grid (11,476
+With --campaign v4 (the default), v3 or v5 it runs the settlement grid (11,476
 agents, GHS-POP households) and adds the MAL-ED observation layer, so the
 detected age curve, age at first detection and P(attributable | detected
 infection) are compared like for like with MAL-ED, next to the true values,
@@ -22,9 +22,19 @@ and reports adult vs young-child carriage; v3 runs with
 experiments.legacy.V3_OVERRIDES. --campaign v2 runs the original grid with
 experiments.legacy.V2_OVERRIDES (4000 agents).
 
+--campaign v5 runs v5's base (the cedi economy with caring time and water
+and sanitation by wealth, vaccination off; history_matching.V5_BASE_OVERRIDES)
+with the calibrated values from --values-json applied on top, rounded to
+--round-sig significant figures: the out-of-sample check of the values
+before they go into config.py (docs/v5_campaign_plan.md, step 4). It also
+reports v5's 41 targets on these seeds and, as a check rather than a target
+(V5-D1), the two-week diarrhoea prevalence by wealth quintile next to DHS's.
+
 Usage:
     python -m experiments.calibration.validate_calibration --reps 8 --workers 8
     python -m experiments.calibration.validate_calibration --campaign v3 --reps 8
+    python -m experiments.calibration.validate_calibration --campaign v5 --reps 8 \
+        --values-json experiments/outputs/history_matching_v5/adopted_e7.json
 """
 from __future__ import annotations
 
@@ -37,7 +47,7 @@ import pandas as pd
 
 from abm.constants import AgentPropertyKeys
 from abm.evidence import maled
-from experiments.legacy import V2_OVERRIDES, V3_OVERRIDES
+from experiments.legacy import V2_OVERRIDES, V3_OVERRIDES, V4_OVERRIDES
 from experiments.metrics import calibration_metrics, care_seeking_metrics, wellbeing_metrics
 from experiments.observation import observe
 from experiments.orchestrator import SweepSpec, run_sweep
@@ -51,10 +61,40 @@ GRID_ID, OUT_DIR = CAMPAIGNS["v2"][0], CAMPAIGNS["v2"][3]
 
 
 def _settlement_campaign(name: str):
-    """(grid, agents, base overrides, output folder) for v3 or v4."""
-    from experiments.calibration.history_matching import V3_AGENTS, V3_BASE_OVERRIDES, V3_GRID_ID, V4_BASE_OVERRIDES
-    base = {**V3_OVERRIDES, **V3_BASE_OVERRIDES} if name == "v3" else dict(V4_BASE_OVERRIDES)
+    """(grid, agents, base overrides, output folder) for v3, v4 or v5. v4 runs
+    v4's values (experiments.legacy.V4_OVERRIDES), the defaults it validated."""
+    from experiments.calibration.history_matching import (V3_AGENTS, V3_BASE_OVERRIDES, V3_GRID_ID,
+                                                          V4_BASE_OVERRIDES, V5_BASE_OVERRIDES)
+    base = ({**V3_OVERRIDES, **V3_BASE_OVERRIDES} if name == "v3"
+            else dict(V5_BASE_OVERRIDES) if name == "v5" else {**V4_OVERRIDES, **V4_BASE_OVERRIDES})
     return (V3_GRID_ID, V3_AGENTS, base, os.path.join("experiments", "outputs", f"calibration_validation_{name}"))
+
+
+#: Ghana DHS two-week diarrhoea prevalence in children under five by wealth
+#: quintile, poorest first (survey-weighted; Claude outputs/economy/dhs_tables.txt,
+#: from the 2022 and 2014 recode files). All-cause, so the model's three
+#: pathogens give lower levels; the check is the gradient (V5-D1).
+DHS_DIARRHOEA_2WK_BY_QUINTILE = {2022: (0.150, 0.142, 0.135, 0.122, 0.079),
+                                 2014: (0.141, 0.146, 0.128, 0.102, 0.070)}
+
+
+def _round_sig(x: float, sig: int) -> float:
+    return float(f"{x:.{sig}g}") if x != 0 else 0.0
+
+
+def calibrated_values(path: str, sig: int = 3) -> dict:
+    """{config path: value} from a JSON file - a dict, or a one-element list
+    of candidates as written by history_matching --select - with tied paths
+    ("a|b") split and values rounded to `sig` significant figures."""
+    from experiments.calibration.history_matching import _expand
+    with open(path) as f:
+        c = json.load(f)
+    if isinstance(c, list):
+        if len(c) != 1:
+            raise SystemExit(f"{path}: expected one candidate, found {len(c)}")
+        c = c[0]
+    c = {k: v for k, v in c.items() if k not in ("gsa.design_id", "source")}
+    return {k: _round_sig(float(v), sig) for k, v in _expand(c).items()}
 BANDS = [(0, 3), (3, 6), (6, 9), (9, 12), (12, 15), (15, 18), (18, 21), (21, 24)]
 
 
@@ -85,12 +125,26 @@ def validation_metrics_observed(model) -> dict:
     return out
 
 
-def run(reps: int, steps: int, agents: int, n_cores: int | None, campaign: str = "v2") -> pd.DataFrame:
+def validation_metrics_v5(model) -> dict:
+    """validation_metrics plus v5's campaign metrics (the observation layer,
+    the economy, vaccination, severity and reinfection metrics)."""
+    from experiments.calibration.history_matching import hm_metrics_econ
+    out = validation_metrics(model)
+    out.update(hm_metrics_econ(model))
+    return out
+
+
+def run(reps: int, steps: int, agents: int, n_cores: int | None, campaign: str = "v2",
+        values: dict | None = None) -> pd.DataFrame:
+    """values: calibrated {config path: value} applied on top of the
+    campaign's base overrides (v5: the values to be validated before they go
+    into config.py)."""
     grid, _, base, out_dir = CAMPAIGNS[campaign] if campaign in CAMPAIGNS else _settlement_campaign(campaign)
-    spec = SweepSpec(name="validation", grid_id=grid, params=[],
-                     metrics_fn=validation_metrics if campaign == "v2" else validation_metrics_observed,
+    metrics_fn = (validation_metrics if campaign == "v2" else validation_metrics_v5 if campaign == "v5"
+                  else validation_metrics_observed)
+    spec = SweepSpec(name="validation", grid_id=grid, params=[], metrics_fn=metrics_fn,
                      reps=reps, steps=steps, agents=agents, output_dir=out_dir, n_cores=n_cores,
-                     base_seed=50_023, base_overrides=base)
+                     base_seed=50_023, base_overrides={**base, **(values or {})})
     return run_sweep(spec, [{"gsa.design_id": "defaults"}])
 
 
@@ -158,6 +212,8 @@ def report(df: pd.DataFrame, out_dir: str = OUT_DIR) -> dict:
         out[p] = {"model_curve": mod, "maled_curve": obs, "shape_r": r}
     lines.append(f"\ncare-seeking rate {m['episode_care_seeking_rate']:.3f} (DHS 0.692, 95% CI 0.656-0.728); "
                  f"could not afford {m['could_not_afford_rate']:.3f}; mean household wealth {m['mean_household_wealth']:.3f}")
+    if "econ_diarrhoea_2wk_prevalence_q1" in m:
+        lines += _v5_lines(df, m, sd, out)
     text = "\n".join(lines)
     print(text)
     os.makedirs(out_dir, exist_ok=True)
@@ -168,20 +224,66 @@ def report(df: pd.DataFrame, out_dir: str = OUT_DIR) -> dict:
     return out
 
 
+def _v5_lines(df: pd.DataFrame, m: pd.Series, sd: pd.Series, out: dict) -> list[str]:
+    """v5: the 41 targets on the validation seeds, and the diarrhoea gradient
+    by wealth next to DHS's (V5-D1: a check, not a target)."""
+    from experiments.calibration import history_matching as hm
+    lines = []
+    prev = [m.get(f"econ_diarrhoea_2wk_prevalence_q{q}", np.nan) for q in range(1, 6)]
+    prev_sd = [sd.get(f"econ_diarrhoea_2wk_prevalence_q{q}", np.nan) for q in range(1, 6)]
+    lines.append("\ntwo-week diarrhoea prevalence, children under five, by wealth quintile (poorest first)")
+    lines.append("   model (3 pathogens): " + " ".join(f"{v:6.3f}" for v in prev)
+                 + f"   q1/q5 {prev[0] / prev[4]:.2f}   (seed SD " + " ".join(f"{v:.3f}" for v in prev_sd) + ")")
+    for year, d in DHS_DIARRHOEA_2WK_BY_QUINTILE.items():
+        lines.append(f"   DHS {year} (all-cause): " + " ".join(f"{v:6.3f}" for v in d) + f"   q1/q5 {d[0] / d[4]:.2f}")
+    if np.all(np.isfinite(prev)):
+        lines.append("   model relative to its q5: " + " ".join(f"{v / prev[4]:.2f}" for v in prev)
+                     + "; DHS 2022: " + " ".join(f"{v / DHS_DIARRHOEA_2WK_BY_QUINTILE[2022][4]:.2f}"
+                                                for v in DHS_DIARRHOEA_2WK_BY_QUINTILE[2022]))
+    out["diarrhoea_2wk_by_quintile"] = {"model": prev, "dhs": {str(k): v for k, v in DHS_DIARRHOEA_2WK_BY_QUINTILE.items()}}
+    old = hm.CAMPAIGN
+    hm.use_campaign("v5")
+    try:
+        d = df.copy()
+        d["gsa.design_id"], d["wave"] = "validation", 99
+        for p in hm.PATHS:                       # the values are base overrides, not sweep columns
+            if p.split("|")[0] not in d:
+                d[p.split("|")[0]] = np.nan
+        v = hm.simulated_implausibility(hm.summarise(d)).iloc[0]
+        lines.append(f"\nv5 targets on these seeds: max I {v['I_max']:.2f}, second {v['I_second']:.2f}; "
+                     f"past 3: {int(sum(v['I__' + t.metric] >= 3 for t in hm.TARGETS_HM))} of {len(hm.TARGETS_HM)}")
+        for t in sorted(hm.TARGETS_HM, key=lambda t: -v["I__" + t.metric])[:10]:
+            lines.append(f"   {t.metric:56s} model {m.get(t.metric, np.nan):8.3f}   I {v['I__' + t.metric]:.2f}")
+        out["v5_targets"] = {t.metric: float(v["I__" + t.metric]) for t in hm.TARGETS_HM}
+    finally:
+        hm.use_campaign(old)
+    return lines
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--reps", type=int, default=8)
     ap.add_argument("--steps", type=int, default=1826)
     ap.add_argument("--agents", type=int, default=None, help="default: the campaign's (v2 4000, v3 11,476)")
     ap.add_argument("--workers", type=int, default=None)
-    ap.add_argument("--campaign", choices=("v2", "v3", "v4"), default="v4")
+    ap.add_argument("--campaign", choices=("v2", "v3", "v4", "v5"), default="v4")
+    ap.add_argument("--values-json", default=None,
+                    help="v5: calibrated values to validate (a {path: value} dict or a one-candidate list)")
+    ap.add_argument("--round-sig", type=int, default=3, help="significant figures for --values-json")
     ap.add_argument("--report-only", action="store_true")
     args = ap.parse_args()
     _, agents, _, out_dir = CAMPAIGNS[args.campaign] if args.campaign in CAMPAIGNS else _settlement_campaign(args.campaign)
+    if args.campaign == "v5" and not args.values_json:
+        raise SystemExit("--campaign v5 validates calibrated values: pass --values-json")
+    values = calibrated_values(args.values_json, args.round_sig) if args.values_json else None
+    if values:
+        os.makedirs(out_dir, exist_ok=True)
+        with open(os.path.join(out_dir, "validation_values.json"), "w") as f:
+            json.dump(values, f, indent=1)
     if args.report_only:
         df = pd.read_parquet(os.path.join(out_dir, "validation", "results.parquet"))
     else:
-        df = run(args.reps, args.steps, args.agents or agents, args.workers, args.campaign)
+        df = run(args.reps, args.steps, args.agents or agents, args.workers, args.campaign, values)
     report(df, out_dir)
 
 

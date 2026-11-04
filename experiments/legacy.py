@@ -178,3 +178,61 @@ for _p in ("rota", "campy", "crypto"):
     # adults at the children's floor, with children's infectious period
     V3_OVERRIDES[f"pathogens[{_p}].adult_relative_susceptibility"] = None
     V3_OVERRIDES[f"pathogens[{_p}].adult_infectious_duration_scale"] = 1.0
+
+#: The fourth-generation model: campaign v4 (2026-10-27) with econ2's
+#: economic values (2026-10-29), the economy off ("legacy") by default.
+#: Campaign v5 (2026-11-04, docs/v5_campaign_plan.md) replaced these defaults
+#: and switched the cedi economy on; pinning them keeps the v4, econ and econ2
+#: campaigns, validate_calibration --campaign v4 and regression_check --v4
+#: reproducible byte for byte. Only parameters v5 changed are listed;
+#: everything else is still at v4's value.
+V4_OVERRIDES: dict = {
+    "pathogens[rota].infection_prob_mean": 0.343,
+    "pathogens[rota].adult_relative_susceptibility": 0.216,
+    "pathogens[rota].water_dose_scale": 0.00258,
+    "pathogens[rota].importation_rate": 0.000324,
+    "pathogens[rota].symptomatic_fraction": 0.476,
+    "pathogens[rota].infant_susceptibility_at_birth": 0.725,
+    "pathogens[rota].infant_susceptibility_ramp_months": 9.27,
+    "pathogens[rota].detectable_shedding_days_symptomatic": 5.0,
+    "pathogens[rota].detectable_shedding_days_asymptomatic": 3.0,
+    "pathogens[rota].post_infection_refractory_days": 0.0,
+    "pathogens[campy].human_animal_interaction_rate": 0.00327,
+    "pathogens[campy].fecal_oral_prob": 0.000744,
+    "pathogens[campy].food_borne_prob": 0.00513,
+    "pathogens[campy].symptomatic_fraction": 0.194,
+    "pathogens[campy].infant_susceptibility_at_birth": 0.0642,
+    "pathogens[campy].infant_susceptibility_ramp_months": 4.18,
+    "pathogens[campy].detectable_shedding_days_symptomatic": 40.2,
+    "pathogens[campy].detectable_shedding_days_asymptomatic": 14.3,
+    "pathogens[crypto].household_transmission_prob": 0.0952,
+    "pathogens[crypto].community_infection_prob": 0.15,
+    "pathogens[crypto].adult_relative_susceptibility": 0.27,
+    "pathogens[crypto].water_dose_scale": 0.00574,
+    "pathogens[crypto].zoonotic_interaction_rate": 0.0073,
+    "pathogens[crypto].symptomatic_fraction": 0.102,
+    "pathogens[crypto].infant_susceptibility_at_birth": 0.188,
+    "pathogens[crypto].infant_susceptibility_ramp_months": 34.7,
+    "pathogens[crypto].detectable_shedding_days_symptomatic": 27.5,
+    "pathogens[crypto].detectable_shedding_days_asymptomatic": 16.5,
+    "steering_parameters.household_exposure_sdlog": 0.224,
+    # econ2's values (campaign econ2 e0); they act only under the cedi economy
+    "economy.model": "legacy",
+    "economy.income_shock_sd": 0.6,
+    "economy.income_shock_halflife_days": 7.0,
+    "economy.buffer_days": 9.94,
+    "economy.savings_rate": 0.00875,
+    "economy.earning_spread_sdlog": 0.38,
+    "economy.cost_primary_insured": 0.0,
+    "economy.buffer_wealth_elasticity": 0.0,
+}
+for _p in ("rota", "campy", "crypto"):
+    V4_OVERRIDES[f"pathogens[{_p}].asymptomatic_relative_infectiousness"] = 0.397
+
+# Every earlier generation predates v5's values too: each key the older sets
+# do not pin themselves takes its v4 value, which is what the code defaults
+# were when their goldens were last shown byte-identical (before v5's
+# adoption).
+for _older in (V3_OVERRIDES, V2_OVERRIDES, LEGACY_V1_OVERRIDES):
+    for _k, _v in V4_OVERRIDES.items():
+        _older.setdefault(_k, _v)
