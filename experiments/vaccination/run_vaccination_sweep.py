@@ -100,6 +100,10 @@ def build_spec(grid_id: str, reps: int, steps: int, agents: int, pilot: bool = F
         reps=reps,
         steps=steps,
         agents=agents,
+        # the sweep is over the constant-hazard model's rate, which the
+        # schedule (the default since 2026-11-05) does not use
+        base_overrides={"pathogens[rota].vaccination_model": "hazard",
+                        "pathogens[rota].vaccine_counts_as_prior_infection": False},
         record_timeseries=True,
         n_cores=n_cores,
     )

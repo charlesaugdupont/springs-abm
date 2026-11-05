@@ -67,7 +67,7 @@ GOLDEN_PATH = os.path.join("experiments", "outputs", "perf", "golden.pt")
 _TMP_ROOT = os.path.join("experiments", "outputs", "perf", "_tmp")
 
 
-from experiments.legacy import LEGACY_V1_OVERRIDES, V2_OVERRIDES, V3_OVERRIDES, V4_OVERRIDES  # noqa: E402  (see experiments/legacy.py)
+from experiments.legacy import LEGACY_V1_OVERRIDES, V2_OVERRIDES, V3_OVERRIDES, V4_OVERRIDES, V5_0_OVERRIDES  # noqa: E402  (see experiments/legacy.py)
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +268,9 @@ def main():
                         help="Apply experiments.legacy.V4_OVERRIDES: reproduce the fourth-generation "
                              "model (the v4 calibration with econ2's economy, economy off; the defaults "
                              "before campaign v5's adoption).")
+    parser.add_argument("--v5-0", action="store_true",
+                        help="Apply experiments.legacy.V5_0_OVERRIDES: reproduce the defaults as tagged v5.0 "
+                             "(constant-hazard vaccination, before the schedule became the default).")
     parser.add_argument("--set", action="append", default=[], metavar="PATH=VALUE",
                         help="Extra config override (orchestrator dot-path; VALUE parsed as JSON, "
                              "else taken as a string), applied after --legacy-v1. Repeatable. E.g. "
@@ -281,6 +284,8 @@ def main():
         overrides.update(V3_OVERRIDES)
     if args.v4:
         overrides.update(V4_OVERRIDES)
+    if args.v5_0:
+        overrides.update(V5_0_OVERRIDES)
     for item in args.set:
         path, _, raw = item.partition("=")
         try:

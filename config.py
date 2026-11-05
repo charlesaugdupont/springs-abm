@@ -376,9 +376,11 @@ class RotavirusConfig(PathogenConfig):
         2, description="Latent period (days) before an exposed agent becomes infectious."
     )
     vaccination_rate: float = Field(
-        0.001, description="vaccination_model 'hazard': daily probability that a susceptible child receives the "
+        0.001, description="vaccination_model 'hazard' only: daily probability that a susceptible child receives the "
                            "rotavirus vaccine (at 0.001 a day a child who stays uninfected is vaccinated by 23 "
-                           "months with probability 0.5). Not used by 'schedule'."
+                           "months with probability 0.5). Not used by 'schedule', the default: to switch "
+                           "vaccination off, set vaccination_model 'hazard' and this rate to 0, as the "
+                           "calibration does."
     )
     vaccine_efficacy: float = Field(
         0.55, description="Reduction in severity/susceptibility conferred by vaccination."
@@ -392,15 +394,24 @@ class RotavirusConfig(PathogenConfig):
     # (from S, or from R after an earlier infection), and leaves it (to S, or to
     # R if it was ever infected) when its vaccine protection wanes. Only
     # children whose vaccine took are ever_vaccinated (the severity reduction).
-    # vaccination_rate is then not used. Recommended for Akuse today, with
-    # vaccine_counts_as_prior_infection (experiments.presets.AKUSE_VACCINATION_2026;
-    # pilot 2026-11-02, docs/vaccination_schedule.md): rotavirus illness falls by
-    # 41% in under-fives and 52% in infants against no vaccination (Ghana: 49%
-    # fall in under-five rotavirus hospitalisations, Armah et al. 2016).
+    # vaccination_rate is then not used. At the start of a run each child
+    # receives at once the doses its age has passed, with the time since counted
+    # against its protection, so runs start with Akuse's coverage (on the
+    # settlement grid: 97 / 93 / 89% with one, two and three doses at 12-23
+    # months, about 82% of under-fives ever protected). The default since
+    # 2026-11-05 (user's decision), with vaccine_counts_as_prior_infection
+    # (experiments.presets.AKUSE_VACCINATION_2026; pilot 2026-11-02,
+    # docs/vaccination_schedule.md): rotavirus illness falls by 41% in
+    # under-fives and 52% in infants against no vaccination (Ghana: 49% fall in
+    # under-five rotavirus hospitalisations, Armah et al. 2016). Calibration runs
+    # have vaccination off (MAL-ED's sites were unvaccinated): 'hazard' at rate 0
+    # (history_matching's base overrides). The constant hazard of campaigns v1-v5
+    # is pinned in experiments.legacy (V4_OVERRIDES, V5_0_OVERRIDES).
     vaccination_model: str = Field(
-        "hazard",
-        description="'hazard' (default; the original constant daily vaccination_rate, campaign v4's model) "
-                    "or 'schedule' (doses by age, coverage, take and waning from Ghana data; see below).",
+        "schedule",
+        description="'schedule' (default since 2026-11-05: doses by age, coverage, take and waning from Ghana "
+                    "data; see below) or 'hazard' (the original constant daily vaccination_rate, the default of "
+                    "campaigns v1-v5).",
     )
     vaccine_dose_continuation: list[float] = Field(
         [0.962, 0.967, 0.967],
@@ -443,12 +454,13 @@ class RotavirusConfig(PathogenConfig):
         7919, description="Added to the run's seed for the vaccination schedule's own generator.",
     )
     vaccine_counts_as_prior_infection: bool = Field(
-        False,
+        True,
         description="If True, a child whose vaccine took (ever_vaccinated) counts one extra prior infection in "
                     "P(diarrhoea | infection), i.e. x exp(-symptomatic_reduction_per_prior_infection): vaccine "
                     "protection against illness equivalent to one natural infection, as in Asare et al. 2026 "
-                    "(J Infect Dis 233:e1253). False (default): a vaccinated child who is infected is as likely to "
-                    "fall ill as an unvaccinated one (vaccine_efficacy and immunity_factor_vaccine only).",
+                    "(J Infect Dis 233:e1253). True by default since 2026-11-05. False (the default before): a "
+                    "vaccinated child who is infected is as likely to fall ill as an unvaccinated one "
+                    "(vaccine_efficacy and immunity_factor_vaccine only).",
     )
 
     @field_validator("vaccination_model")

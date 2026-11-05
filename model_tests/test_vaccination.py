@@ -1,8 +1,9 @@
 """
 Rotavirus vaccination by schedule (RotavirusConfig.vaccination_model = "schedule").
 
-The default stays "hazard" (the original constant daily rate; checked byte for
-byte by experiments/perf/regression_check.py). These tests cover the schedule:
+The default is "schedule" since 2026-11-05; "hazard" (the original constant
+daily rate, campaigns v1-v5) is pinned by experiments.legacy and checked byte for
+byte by experiments/perf/regression_check.py. These tests cover the schedule:
 coverage and ages from the DHS-based tables, take, entry into V, waning, and
 a renewed slot drawing a new schedule.
 """
@@ -17,15 +18,22 @@ from abm.constants import AgentPropertyKeys as K, Compartment
 from experiments.metrics import vaccination_metrics
 
 SCHEDULE = {"pathogens[rota].vaccination_model": "schedule"}
+HAZARD = {"pathogens[rota].vaccination_model": "hazard", "pathogens[rota].vaccine_counts_as_prior_infection": False}
 
 
 def _rota(model):
     return next(p for p in model.pathogens if p.name == "rota")
 
 
-def test_hazard_is_the_default():
+def test_schedule_is_the_default():
+    from experiments.legacy import V4_OVERRIDES, V5_0_OVERRIDES
+    from experiments.presets import AKUSE_VACCINATION_2026
     rota = next(p for p in SVEIRCONFIG.pathogens if p.name == "rota")
-    assert rota.vaccination_model == "hazard"
+    assert rota.vaccination_model == "schedule" and rota.vaccine_counts_as_prior_infection is True
+    assert all(getattr(rota, k.split(".")[1]) == v for k, v in AKUSE_VACCINATION_2026.items())
+    for pins in (V4_OVERRIDES, V5_0_OVERRIDES):
+        assert pins["pathogens[rota].vaccination_model"] == "hazard"
+        assert pins["pathogens[rota].vaccine_counts_as_prior_infection"] is False
     assert len(rota.vaccine_dose1_age_days) == len(VACCINE_AGE_PERCENTILES) == 21
 
 
@@ -93,7 +101,7 @@ def test_vaccination_metrics(make_model):
     m = vaccination_metrics(model)
     assert m["rota_vaccine_dose1_12_23m"] >= m["rota_vaccine_dose2_12_23m"] >= m["rota_vaccine_dose3_12_23m"]
     assert 0.0 <= m["rota_vaccine_in_V_12_23m"] <= m["rota_vaccine_protected_ever_12_23m"] <= 1.0
-    assert vaccination_metrics(make_model(steps=3, agents=600)) == {}
+    assert vaccination_metrics(make_model(steps=3, agents=600, overrides=HAZARD)) == {}
 
 
 def test_a_vaccine_response_can_count_as_a_prior_infection(make_model):
@@ -103,7 +111,7 @@ def test_a_vaccine_response_can_count_as_a_prior_infection(make_model):
     ages = torch.tensor([8.0, 8.0])
     p = symptomatic_probability(cfg, ages, torch.tensor([0, 1]))
     assert float(p[1] / p[0]) == pytest.approx(np.exp(-cfg.symptomatic_reduction_per_prior_infection), rel=1e-6)
-    assert SVEIRCONFIG.pathogens[0].vaccine_counts_as_prior_infection is False
+    assert SVEIRCONFIG.pathogens[0].vaccine_counts_as_prior_infection is True     # default since 2026-11-05
 
 
 def test_rota_severity_metrics(make_model):

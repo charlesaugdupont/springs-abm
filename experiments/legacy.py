@@ -216,6 +216,9 @@ V4_OVERRIDES: dict = {
     "pathogens[crypto].detectable_shedding_days_symptomatic": 27.5,
     "pathogens[crypto].detectable_shedding_days_asymptomatic": 16.5,
     "steering_parameters.household_exposure_sdlog": 0.224,
+    # the constant-hazard vaccination (v1-v5; default until 2026-11-05)
+    "pathogens[rota].vaccination_model": "hazard",
+    "pathogens[rota].vaccine_counts_as_prior_infection": False,
     # econ2's values (campaign econ2 e0); they act only under the cedi economy
     "economy.model": "legacy",
     "economy.income_shock_sd": 0.6,
@@ -228,6 +231,14 @@ V4_OVERRIDES: dict = {
 }
 for _p in ("rota", "campy", "crypto"):
     V4_OVERRIDES[f"pathogens[{_p}].asymptomatic_relative_infectiousness"] = 0.397
+
+#: The defaults as tagged v5.0 (2026-11-04, commit 5e2e3ec): v5's values with
+#: the constant-hazard vaccination, before rotavirus vaccination by schedule
+#: became the default (2026-11-05). regression_check --v5-0.
+V5_0_OVERRIDES: dict = {
+    "pathogens[rota].vaccination_model": "hazard",
+    "pathogens[rota].vaccine_counts_as_prior_infection": False,
+}
 
 # Every earlier generation predates v5's values too: each key the older sets
 # do not pin themselves takes its v4 value, which is what the code defaults

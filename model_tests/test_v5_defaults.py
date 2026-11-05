@@ -68,14 +68,17 @@ def test_defaults_are_the_adopted_v5_values():
 
 
 def test_defaults_run_v5s_base_settings_except_vaccination():
-    """v5 was calibrated with rotavirus vaccination off; the default keeps the
-    constant hazard (0.001 a day; the user's decision, 2026-11-04)."""
+    """v5 was calibrated with rotavirus vaccination off (the constant hazard at
+    rate 0); the default is vaccination by schedule as in Akuse today (the
+    user's decision, 2026-11-05), whose hazard rate is unused."""
     differ = {k: (_get(k), v) for k, v in V5_BASE_OVERRIDES.items() if _get(k) != v}
-    assert differ == {"pathogens[rota].vaccination_rate": (0.001, 0.0)}
+    assert differ == {"pathogens[rota].vaccination_model": ("schedule", "hazard"),
+                      "pathogens[rota].vaccination_rate": (0.001, 0.0)}
 
 
 def test_every_changed_default_is_pinned_for_earlier_generations():
-    assert set(V4_OVERRIDES) == set(ADOPTED_V5) | {"economy.model"}
+    assert set(V4_OVERRIDES) == set(ADOPTED_V5) | {"economy.model", "pathogens[rota].vaccination_model",
+                                                    "pathogens[rota].vaccine_counts_as_prior_infection"}
     assert V4_OVERRIDES["economy.model"] == "legacy"
     assert all(V4_OVERRIDES[k] != v for k, v in ADOPTED_V5.items()), "v5 changed every one of them"
     for older in (V3_OVERRIDES, V2_OVERRIDES):
