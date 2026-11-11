@@ -96,6 +96,26 @@ The model requires Python >= 3.13.
     ```
     This covers the model, grid generation, and the experiments. The web app needs `requirements-web.txt` on top (see §7).
 
+### External data
+
+Running the model and the experiments doesn't need any of the raw data below: what the model takes from it is already in the repository, as parameters in `config.py` and as the grids in `grids/`. The raw files are needed only to rebuild those inputs, and none of them is committed:
+
+| Data | Source | Used by |
+|---|---|---|
+| Ghana DHS 2014 and 2022 recode files: household (HR), person (PR), children (KR), women (IR) | [The DHS Program](https://dhsprogram.com); registration required, and the files may not be redistributed | `scripts/dhs_tables.py` |
+| `ghana_data.csv`: the SPRINGS compiled child-level survey file (cluster coordinates, household WASH, livestock ownership) | SPRINGS project | `scripts/dhs_tables.py`, `notebooks/ghana_data.ipynb` (reads `abm/data/ghana_data.csv`) |
+| GHS-POP R2023A population tiles (100 m; epochs 2020, 2025, 2030) | JRC Global Human Settlement Layer (openly licensed) | `scripts/add_population_layer.py` |
+
+Keep these outside the repository, or in a `data/` folder at its root (ignored by both git and Docker), and pass their location on the command line. With the files laid out as the scripts expect:
+
+```bash
+python -m scripts.dhs_tables --data-dir "path/to/SPRINGS DATA"          # writes outputs/dhs/dhs_tables.txt
+python -m scripts.add_population_layer --grid-id <GRID_ID> \
+    --tiles "path/to/SPRINGS DATA/GHS POP/2025/*.zip"
+```
+
+`scripts/dhs_tables.py` expects the unzipped recode folders under `GHS 2014/` and `GHS 2022/` (e.g. `GHS 2022/GHKR8CDT/GHKR8CFL.DTA`; see `FILES` in the script), with `ghana_data.csv` beside them. OpenStreetMap data for grid creation is downloaded automatically and cached in `cache/`.
+
 ## 5. Simulation Workflow (single-run, via `main.py`)
 
 This is the original workflow for running and inspecting one simulation at a time. For multi-replicate parameter sweeps and calibration (the primary way this project now generates results), see §6 instead.

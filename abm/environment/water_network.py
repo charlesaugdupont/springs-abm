@@ -81,8 +81,9 @@ HH_PIPED, HH_SURFACE, HH_GROUND, HH_PACKAGED = 0, 1, 2, 3
 SAN_IMPROVED_ONSITE, SAN_SEWER, SAN_UNIMPROVED, SAN_OPEN = 0, 1, 2, 3
 
 # Package-relative (not working-directory-relative), so the network is the
-# same whichever directory the model is run from. abm/data/ is gitignored:
-# see load_groundwater_points for what happens when the file is absent.
+# same whichever directory the model is run from. abm/data/ is gitignored,
+# but this file is tracked: see load_groundwater_points for what happens if
+# it is absent.
 WATER_SAMPLING_CSV = Path(__file__).resolve().parents[1] / "data" / "water_sampling_points.csv"
 _METERS_PER_DEG_LAT = 110_574.0
 _METERS_PER_DEG_LON_EQ = 111_320.0
@@ -105,12 +106,12 @@ def load_groundwater_points(bounds, grid_shape) -> list[tuple[int, int, int]]:
     Standpipes (piped supply) and surface-water points are not groundwater
     and are skipped: surface water comes from the natural-water layer.
 
-    The CSV is project data under the gitignored abm/data/, so a checkout or
-    a deployment built from git does not have it. Without it there are no
-    wells or boreholes: the ~6% of households assigned groundwater by the
-    survey shares get piped water instead, and the random stream shifts, so
-    results differ from the calibrated model - hence the warning rather than
-    a silent fallback.
+    The CSV is tracked in git (the one committed file under the otherwise
+    gitignored abm/data/), so checkouts and the deployed image have it. If it
+    is ever missing there are no wells or boreholes: the ~6% of households
+    assigned groundwater by the survey shares get piped water instead, and
+    the random stream shifts, so results differ from the calibrated model -
+    hence the warning rather than a silent fallback.
     """
     if not WATER_SAMPLING_CSV.exists():
         warnings.warn(

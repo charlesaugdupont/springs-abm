@@ -26,7 +26,12 @@ experiments/vaccination/
 
 cache/
 outputs/
-data/
+# Every data/ folder, not just the root one (Docker, unlike git, matches a bare
+# "data/" only at the root): abm/data/ holds survey files that are never
+# committed and webapp/data/ the local SQLite job store. The one exception is
+# water_sampling_points.csv, which is tracked and read by the model at runtime.
+**/data/
+!abm/data/water_sampling_points.csv
 docs/
 streamlit_outputs/
 
