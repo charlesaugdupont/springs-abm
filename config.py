@@ -269,7 +269,7 @@ VACCINE_AGE_PERCENTILES: tuple[float, ...] = (0.01,) + tuple(round(0.05 * k, 2) 
 class RotavirusConfig(PathogenConfig):
     """Parameters specific to Rotavirus."""
     name: str = Field("rota", description="Pathogen identifier.")
-    # CALIBRATION (campaign v5, 2026-11-04; docs/v5_campaign_plan.md). The
+    # CALIBRATION (campaign v5, 2026-11-04). The
     # parameters marked "History-matched, campaign v5" below - transmission,
     # illness and infant protection for each pathogen, adults' susceptibility
     # to rotavirus and Cryptosporidium, the infectiousness of symptomless
@@ -400,8 +400,8 @@ class RotavirusConfig(PathogenConfig):
     # settlement grid: 97 / 93 / 89% with one, two and three doses at 12-23
     # months, about 82% of under-fives ever protected). The default since
     # 2026-11-05 (user's decision), with vaccine_counts_as_prior_infection
-    # (experiments.presets.AKUSE_VACCINATION_2026; pilot 2026-11-02,
-    # docs/vaccination_schedule.md): rotavirus illness falls by 41% in
+    # (experiments.presets.AKUSE_VACCINATION_2026; pilot 2026-11-02):
+    # rotavirus illness falls by 41% in
     # under-fives and 52% in infants against no vaccination (Ghana: 49% fall in
     # under-five rotavirus hospitalisations, Armah et al. 2016). Calibration runs
     # have vaccination off (MAL-ED's sites were unvaccinated): 'hazard' at rate 0
@@ -634,7 +634,7 @@ class RotavirusConfig(PathogenConfig):
     # runs after the simulation, so they change nothing else): the selection
     # had put the symptomatic window at 15.5 days, where crude : consecutive
     # infections reach 1.24 (MAL-ED 1.02); 5 / 3 days gave 1.06 and 73% of
-    # detected infections attributable (docs/calibration_v4_adults.md). In
+    # detected infections attributable (calibration v4). In
     # campaign v5 both were history-matched with everything else: at 4.33 /
     # 2.44 days, crude : consecutive 1.02 and 72% attributable (MAL-ED's site
     # range 0.24-0.74).
@@ -655,8 +655,8 @@ class RotavirusConfig(PathogenConfig):
     )
     # Complete protection for a while after each infection (see
     # PathogenConfig). Without it, at v4's defaults, 47% of children's
-    # rotavirus reinfections came within a month (pre-v5 pilot,
-    # docs/v5_campaign_plan.md section 3), where MAL-ED's 2% excess of crude
+    # rotavirus reinfections came within a month (pre-v5 pilot), where
+    # MAL-ED's 2% excess of crude
     # over consecutive-detection infections leaves little room for them.
     post_infection_refractory_days: float = Field(
         49.1,
@@ -1826,7 +1826,7 @@ class SteeringParamsSVEIR(BaseModel):
 
 
 class EconomyConfig(BaseModel):
-    """The household economy (docs/economy_design_proposal.md).
+    """The household economy.
 
     model="legacy": the original dimensionless pooled wealth in [0, 1]
     (SteeringParamsSVEIR.daily_income_rate, daily_cost_of_living, cost_of_care),
@@ -1900,8 +1900,8 @@ class EconomyConfig(BaseModel):
     Bank / CEIC / Bank of Ghana); 2011 -> 2026 x 8.2 (2011 CPI 108.7 on 2010 =
     100).
 
-    CALIBRATION (campaign econ2, 2026-10-29; docs/economy_design_proposal.md
-    §7b): with the epidemiology at v4, seven parameters - income_shock_sd,
+    CALIBRATION (campaign econ2, 2026-10-29): with the epidemiology at v4,
+    seven parameters - income_shock_sd,
     income_shock_halflife_days, buffer_days, savings_rate, earning_spread_sdlog,
     cost_primary_insured, buffer_wealth_elasticity - were history-matched (2
     waves x 150 points x 2 seeds) against ten DHS 2022 targets by wealth
@@ -1923,20 +1923,20 @@ class EconomyConfig(BaseModel):
     here, per adult equivalent there). The time a drug-seller visit takes (0.1
     of a day) and the private-facility cost remain assumptions.
 
-    CARING TIME (L3, 2026-10-31; design §7b): carer_day_fraction = 0.34, from
+    CARING TIME (L3, 2026-10-31): carer_day_fraction = 0.34, from
     GEMS's four African sites, was added after econ2 (which ran without it).
     On the econ2 verification seeds every econ2 target stays within 1.33 SD and
     the v4 targets are unchanged (the same single Cryptosporidium miss); the
     economy hardly moves (an episode costs about half a day of household income).
 
-    WATER AND SANITATION BY WEALTH (L1, 2026-10-31; design §7b): on by default
+    WATER AND SANITATION BY WEALTH (L1, 2026-10-31): on by default
     after a pilot on the same seeds in which no v4 or econ2 target moved by more
     than 0.8 SD. Because the v4 water routes are small (rotavirus 3%,
     Cryptosporidium 0.7% of infections; Campylobacter has none), illness hardly
     differs by quintile or water source, unlike DHS's gradient - a question for
     v5.
 
-    CALIBRATION (campaign v5, 2026-11-04; docs/v5_campaign_plan.md): the same
+    CALIBRATION (campaign v5, 2026-11-04): the same
     seven parameters were history-matched again, jointly with the epidemiology
     (see RotavirusConfig's CALIBRATION note), with caring time and L1 on and
     the income-shock SD's box widened to 1.0 and its half-life's down to 2 days
@@ -1981,7 +1981,7 @@ class EconomyConfig(BaseModel):
         [8.8, 17.3, 26.2, 40.0, 91.1],
         description="Per-capita consumption by quintile, GH¢ a day at 2026 prices: GLSS 7 (2016/17) "
                     "Table 10.1, GH¢872 / 1,704 / 2,581 / 3,944 / 8,987 a year, x 3.7. GLSS quintiles "
-                    "rank consumption, the DHS strata assets (design §3.4).",
+                    "rank consumption, the DHS strata assets.",
     )
     earning_spread_sdlog: float = Field(
         0.203, ge=0.0,
@@ -2030,7 +2030,7 @@ class EconomyConfig(BaseModel):
     wealth_scale_days: float = Field(
         30.0, gt=0.0,
         description="Days of consumption that count as full wealth (W = 1) in the care-seeking utility "
-                    "(design §3.6: 'can this household cover a month of needs?').",
+                    "('can this household cover a month of needs?').",
     )
     provider_shares_by_quintile: list[list[float]] = Field(
         [[0.472, 0.141, 0.019, 0.368], [0.377, 0.127, 0.024, 0.473], [0.212, 0.134, 0.040, 0.615],
@@ -2122,7 +2122,7 @@ class EconomyConfig(BaseModel):
                     "surface, ground, packaged (WaterConfig's order). Eastern Region's gradient (DHS 2022 "
                     "household recode, survey-weighted, 1,216 households; springs, rainwater and tankers "
                     "counted as ground) raked to quintile_shares and to WaterConfig's local Akuse shares "
-                    "(design §3.5), so those shares are kept on average.",
+                    "by iterative proportional fitting, so those shares are kept on average.",
     )
     sanitation_by_quintile: list[list[float]] = Field(
         [[0.1448, 0.0, 0.2645, 0.5907], [0.5066, 0.0, 0.2922, 0.2012], [0.5565, 0.1866, 0.2050, 0.0518],
@@ -2205,7 +2205,7 @@ class SVEIRConfig(BaseModel):
         0.145, description="Probability a non-first household member is a child under five. The first "
                            "member is always aged 5+, so the realised under-five share is "
                            "0.145 x 2.2 / 3.2 = 0.10, close to the about 10% estimated for Lower "
-                           "Manya Krobo from the 2021 census (docs/economy_design_proposal.md §3.2)."
+                           "Manya Krobo from the 2021 census."
     )
 
     # Parameters for Agent Personas

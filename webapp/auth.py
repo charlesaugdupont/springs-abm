@@ -1,6 +1,6 @@
 """
-Single shared-password gate for the whole app (see the plan's Auth &
-deployment section) - no per-user accounts, no database. A correct
+Single shared-password gate for the whole app - no per-user accounts, no
+database. A correct
 password sets `session["authenticated"] = True` on Starlette's signed
 session cookie (itsdangerous-signed, tamper-proof but not encrypted -
 fine, since the cookie holds nothing but a boolean).

@@ -1,10 +1,10 @@
 """FastAPI application factory - wires routers, session middleware, and
 static files. See webapp/settings.py for environment-driven config.
 
-All application routers are mounted under /api (a clean JSON API - see the
-plan's Architecture section). The built SPA (frontend/dist/, via Vite's
-outDir - see frontend/vite.config.ts) is served from webapp/frontend_dist/,
-mounted at "/" - but as an explicit catch-all route, not a StaticFiles
+All application routers are mounted under /api (a clean JSON API). The
+built SPA (written straight to webapp/frontend_dist/ by Vite's outDir - see
+frontend/vite.config.ts) is served from there, mounted at "/" - but as an
+explicit catch-all route, not a StaticFiles
 mount: a Mount at "/" would claim every path unconditionally as a prefix
 match regardless of registration order, which would either shadow /api
 (if registered first) or never be reached (if registered last, since a

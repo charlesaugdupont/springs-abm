@@ -79,7 +79,7 @@ grid, population, parameter box, targets and output folder:
       targets (econ's wave 1 matched care-seeking only through cash shortage
       equal in every quintile). Output in
       experiments/outputs/history_matching_econ2. See ECON2_PARAMS.
-  v5  the epidemiology and the economy together (docs/v5_campaign_plan.md):
+  v5  the epidemiology and the economy together:
       v4's box plus rotavirus's post-infection refractory period and econ2's
       economic box (widened), against the 31 v4 and 10 econ2 targets, with the
       cedi economy, caring time and water and sanitation by wealth on and
@@ -752,8 +752,8 @@ def v4_emulator_inputs(metric: str) -> list[str]:
 # Campaign econ: the cedi household economy, epidemiology fixed at v4
 # ---------------------------------------------------------------------------
 
-#: The economy in Ghana cedis (config.EconomyConfig, docs/economy_design_proposal.md
-#: §7b) on the v4 epidemiology. Only economic parameters vary; every
+#: The economy in Ghana cedis (config.EconomyConfig) on the v4 epidemiology.
+#: Only economic parameters vary; every
 #: epidemiological parameter stays at its v4 default (config.py) with v4's base
 #: settings (vaccination off, as in the v4 calibration). Both campaigns ran
 #: before caring time (L3, economy.carer_day_fraction) and water and sanitation
@@ -763,8 +763,8 @@ ECON_BASE_OVERRIDES = {**V4_BASE_OVERRIDES, "economy.model": "cedi", "economy.ca
                        "economy.wash_by_quintile": False}
 
 #: Six dimensions; the rest of EconomyConfig is set from data (GLSS 7, DHS 2022,
-#: NHIS Medicines List) or held at its stated assumption. Ranges from the pilots
-#: (§7b): shock SD 0.15-0.3 put care-seeking at 0.90-0.74, so the box reaches
+#: NHIS Medicines List) or held at its stated assumption. Ranges from the pilots:
+#: shock SD 0.15-0.3 put care-seeking at 0.90-0.74, so the box reaches
 #: lower; the half-life spans a week to half a year (irregular work to a bad
 #: season); the buffer a week to three months of consumption; the savings
 #: margin 0-15%; the earning spread within a quintile 0.2-0.8 (log SD); the
@@ -781,7 +781,7 @@ ECON_PARAMS: dict[str, tuple[float, float, str]] = {
 #: Care-seeking for a child under five with diarrhoea in the two weeks before the
 #: survey, by national wealth quintile: Ghana DHS 2022 (children's recode, any
 #: source of advice or treatment), survey-weighted, 95% cluster-bootstrap
-#: intervals (Claude outputs/economy/dhs_tables.py); n = 458 / 300 / 209 / 150 / 90
+#: intervals (scripts/dhs_tables.py); n = 458 / 300 / 209 / 150 / 90
 #: children with diarrhoea. SD = interval width / 3.92; model discrepancy 0.03 as
 #: for the earlier single care-seeking target. Compared with the model's
 #: per-episode rate in each household quintile (economy_metrics). The gradient
@@ -843,7 +843,7 @@ def hm_metrics_econ(model) -> dict:
 def econ_epi_check(df: pd.DataFrame) -> pd.DataFrame:
     """For verification runs of the econ campaign: each v4 target's seed mean
     and its implausibility (as in the v4 verification), next to the v4 default's
-    own fit (docs/calibration_v4_adults.md §6), so that a change in the
+    own fit, so that a change in the
     epidemiology from the economy shows."""
     rows = []
     for t in build_targets_v4():
@@ -859,7 +859,7 @@ def econ_epi_check(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Campaign v5: the epidemiology and the economy together (docs/v5_campaign_plan.md)
+# Campaign v5: the epidemiology and the economy together
 # ---------------------------------------------------------------------------
 
 #: The cedi economy with caring time (L3, 0.34) and water and sanitation by

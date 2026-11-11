@@ -3,8 +3,7 @@ Purpose-built simulation-running function for the web UI. Deliberately NOT
 a reuse of main.py::run_single_simulation() - the UI needs richer per-day
 data (a day-by-day spatial animation, all-ages prevalence, household
 wealth/care-seeking trajectories) that the CLI's function doesn't produce,
-and main.py is left untouched per the plan. This module does not import
-from main.py.
+and main.py is left untouched. This module does not import from main.py.
 
 Drives the model with the same manual day-by-day stepping pattern already
 established in experiments/orchestrator.py::_run_one (see that function's
@@ -29,9 +28,9 @@ from experiments.metrics import (
 from webapp import jobs
 from webapp.jobs import SimResultBundle
 
-# Downsampled resolution for the results-page spatial scrubber - see the
-# plan's Finding #3: a full GRID_SIZE x GRID_SIZE array per simulated day
-# would be too large a JSON payload for a day-by-day animation.
+# Downsampled resolution for the results-page spatial scrubber: a full
+# GRID_SIZE x GRID_SIZE array per simulated day would be too large a JSON
+# payload for a day-by-day animation.
 SPATIAL_GRID_SIZE = 25
 _BLOCK = GRID_SIZE // SPATIAL_GRID_SIZE
 assert _BLOCK * SPATIAL_GRID_SIZE == GRID_SIZE, (
@@ -132,7 +131,7 @@ def _static_layers(
 def _capture_daily_snapshot(model: SVEIRModel, daily: dict[str, list]) -> None:
     """Called once per simulated day, right after model.step(). Reads model.graph.ndata
     directly - cheap vectorized ops, capturing state that isn't tracked historically anywhere
-    else in the model (see the plan's Finding #4)."""
+    else in the model."""
     g = model.graph
 
     for p in model.pathogens:
@@ -199,7 +198,7 @@ def run_simulation_for_ui(config: SVEIRConfig, job_id: str) -> SimResultBundle:
     # Cumulative under-5 illness-days, derived post-hoc from u5_prevalence_history rather than
     # captured fresh - this reconstructs experiments/metrics.py::epidemic_metrics's
     # cumulative_u5_days formula (prev.sum() * n_u5) as a running partial sum, so the final
-    # day's value is guaranteed identical to that already-established metric (Finding #4).
+    # day's value is guaranteed identical to that already-established metric.
     cumulative_u5_illness_days = {
         name: (np.cumsum(np.array(series)) * n_u5).tolist()
         for name, series in model.u5_prevalence_history.items()

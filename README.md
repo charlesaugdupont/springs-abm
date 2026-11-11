@@ -25,38 +25,53 @@ The simulation is set in a geographical context inspired by Akuse, Ghana, using 
     *   Simulation output is handled by **Zarr** and **XArray**, allowing for efficient storage and analysis of large-scale, multi-dimensional data.
 
 ## 3. Project Structure
-The project is organized into several key directories. Note there are two parallel workflows: the original single-run CLI (`main.py` + `abm/simulation_analysis/`) described in §5 below, and a newer, actively-developed multi-replicate sweep/calibration framework (`experiments/`) described in §6 — most of the project's calibration and published results are produced via the latter.
+The project is organized into several key directories. Note there are two parallel workflows: the original single-run CLI (`main.py` + `abm/simulation_analysis/`) described in §5 below, and a newer, actively-developed multi-replicate sweep/calibration framework (`experiments/`) described in §6 — most of the project's calibration and published results are produced via the latter. A browser-based web app for running single scenarios (`webapp/` + `frontend/`) is described in §7.
 
 ```
 ├── README.md
-├── requirements.txt
-├── inspect_grid.py         # Debug/visualization tool for inspecting spatial grid layers
+├── requirements.txt        # Full dependencies: model, grid generation, experiments, plotting
+├── requirements-web.txt    # Narrower dependency set for the deployed web app (see §7)
+├── pytest.ini              # Test configuration (see §8)
+├── Dockerfile              # Web app image: builds frontend/ and serves it from webapp/
+├── cloudbuild.yaml         # Cloud Build pipeline: deploys the web app to Cloud Run on push to main
+├── config.py               # Pydantic-based configuration for all model parameters
+├── main.py                 # Entry point for the original single-run simulation workflow (see §5)
 ├── run_viz.py              # Quick single-run visualization (spatial + epidemic curves)
 ├── sensitivity.py          # One-at-a-time parameter sensitivity sweeps (bridges main.py and experiments/)
-├── main.py                 # Entry point for the original single-run simulation workflow (see §5)
-├── config.py               # Pydantic-based configuration for all model parameters
-├── pyproject.toml          # Project dependencies and metadata
+├── inspect_grid.py         # Debug/visualization tool for inspecting spatial grid layers
+├── model-reference.html    # Standalone model reference (open in a browser)
 ├── abm/                    # Core source code for the agent-based model
 │ ├── agent/                # Agent-level logic: CPT/utility math, illness severity & duration formulas
 │ ├── data/                 # Real-world input data (e.g. Akuse water-sampling points)
+│ ├── economy/              # Household economy in Ghana cedis (used when EconomyConfig.model == "cedi")
 │ ├── environment/          # Spatial grid creation, generation, and OpenStreetMap integration
+│ ├── evidence/             # Transcribed published estimates (MAL-ED, rotavirus cohorts) used for parameters and targets
 │ ├── factories/            # Builders that populate agents and the environment at model init
 │ ├── model/                # The main model class, day/night step loop, and data collection
 │ ├── pathogens/            # Pathogen-specific transmission and progression (Rotavirus, Campylobacter, Cryptosporidium) + the name->class registry
 │ ├── simulation_analysis/  # Plotting/output helpers for the legacy main.py workflow (see §5)
-│ ├── systems/              # Core per-day processes: movement, illness, care-seeking, environment, economics
+│ ├── systems/              # Core per-day processes: movement, illness, care-seeking, demography, household, environment, economics
 │ └── utils/                # Utilities (RNG seeding)
 ├── experiments/            # Actively-developed sweep/calibration framework (see §6)
-│ ├── calibration/          # Epidemic transmission-parameter calibration (LHS search); run_calibration.py for rotavirus+campylobacter, run_crypto_calibration.py for Cryptosporidium
+│ ├── calibration/          # Calibration against MAL-ED and DHS targets: LHS search, joint history matching, out-of-sample validation
 │ ├── care_seeking/         # Care-seeking/economics OAT, interaction, and DHS-calibration sweeps
+│ ├── gsa/                  # Global sensitivity analysis (Morris screening, then Sobol indices)
+│ ├── perf/                 # Timing benchmarks and the regression_check.py fingerprint harness (see §8)
 │ ├── shocks/               # Ecological water-contamination disturbance sweeps
 │ ├── vaccination/          # Vaccination rate/efficacy sweep
 │ ├── metrics.py            # Reusable per-run and post-hoc metrics shared across all sweeps
+│ ├── observation.py        # MAL-ED observation layer: what surveillance would have detected in a run
+│ ├── presets.py            # Named override sets for recommended non-default settings
+│ ├── legacy.py             # Override sets that reproduce earlier model generations
 │ └── orchestrator.py       # Shared parallel sweep-execution engine
-├── model_tests/            # Pytest suite for the model core (pathogen framework, Cryptosporidium routes, illness mechanics)
+├── webapp/                 # FastAPI backend for the web app: JSON API under /api, serves the built frontend (see §7)
+├── frontend/               # React + TypeScript + Vite single-page app for the web app (see §7)
+├── scripts/                # Offline tooling: settlement grid builder, GHS-POP population layer, basemap baker, DHS tabulations
+├── model_tests/            # Pytest suite for the model core (pathogens, illness mechanics, demography, economy, vaccination, water network)
 ├── notebooks/              # Exploratory data analysis (e.g. Ghana animal-ownership estimation)
-├── grids/                  # Cached generated spatial grids (one per unique grid_id)
-└── cache/                  # OpenStreetMap query cache (raw API responses)
+├── grids/                  # Generated spatial grids, one directory per grid_id (the web app uses 7d9ce7c720a6)
+├── cache/                  # OpenStreetMap query cache (generated, not committed)
+└── outputs/                # Simulation outputs (generated, not committed)
 ```
 
 ## 4. Setup and Installation
@@ -66,7 +81,7 @@ The model requires Python >= 3.13.
 1.  **Clone the Repository:**
     ```bash
     git clone https://github.com/charlesaugdupont/springs-abm.git
-    cd charlesaugdupont-springs-abm
+    cd springs-abm
     ```
 
 2.  **Create and Activate a Virtual Environment (Recommended):**
@@ -79,6 +94,7 @@ The model requires Python >= 3.13.
     ```bash
     pip install -r requirements.txt
     ```
+    This covers the model, grid generation, and the experiments. The web app needs `requirements-web.txt` on top (see §7).
 
 ## 5. Simulation Workflow (single-run, via `main.py`)
 
@@ -149,7 +165,28 @@ Common flags across these scripts: `--pilot` (small grid/reps/steps for a quick 
 
 `experiments/shocks/` has two scripts: `run_shock_sweep.py` (a single rectangular duration x magnitude shock window; produces the `shocks_day200` result) and `run_shock_scenarios.py` (GoodBYE-paper-inspired cyclical background stress + punctuated/persistent shock recovery shapes, layered on the same underlying mechanism; produces `shocks_scenarios_named`).
 
-## 7. Testing
+## 7. Web App (`webapp/` + `frontend/`)
+
+A browser interface for configuring and running single simulations: a FastAPI backend (`webapp/`) exposing a JSON API under `/api`, and a React + TypeScript + Vite frontend (`frontend/`) whose charts render client-side. It runs on the `7d9ce7c720a6` grid, executes one simulation at a time, and sits behind a single shared password.
+
+**Run locally** (two terminals, from the repository root):
+
+```bash
+pip install -r requirements.txt -r requirements-web.txt
+WEBAPP_SHARED_PASSWORD=<choose-a-password> uvicorn webapp.app:app --port 8000
+```
+
+```bash
+cd frontend
+npm ci
+npm run dev     # http://localhost:5173 - proxies /api to the backend on :8000
+```
+
+Alternatively, `npm run build` writes the frontend into `webapp/frontend_dist/`, after which the backend alone serves the whole app at http://localhost:8000.
+
+**Deployment:** the `Dockerfile` builds the frontend and a slim Python image (CPU-only PyTorch, no geo or plotting stack), and `cloudbuild.yaml` deploys it to Cloud Run on every push to `main`. The service must keep `--max-instances=1` (the SQLite job store and single-worker executor assume one process) and `--no-cpu-throttling` (simulations run in a background thread after the submitting request returns). Outside local dev (`WEBAPP_ENV` other than `dev`), the app refuses to start unless `WEBAPP_SECRET_KEY` and `WEBAPP_SHARED_PASSWORD` are set; on Cloud Run they come from Secret Manager.
+
+## 8. Testing
 
 ```bash
 pytest          # both suites; see pytest.ini for why --pyargs is required
@@ -165,7 +202,9 @@ python -m experiments.perf.regression_check --pathogens rota campy --allow-new-k
 
 The last form is how the Cryptosporidium work was validated: it reproduces a golden captured *before* the third pathogen existed, proving the framework refactors left rotavirus and campylobacter bit-identical.
 
-## 8. Configuration
+The web app's end-to-end tests (Playwright) live in `frontend/e2e/`. `npm run test:e2e` (from `frontend/`) starts the Vite dev server and the backend itself; the backend is launched from `venv/bin/uvicorn`, so it expects the virtual environment at `venv/`. The `live-*` specs run only against a deployed URL and are skipped unless `SPRINGS_LIVE_URL` and `SPRINGS_LIVE_PASSWORD` are set.
+
+## 9. Configuration
 
 All model parameters are defined in `config.py` using Pydantic models. To alter the model's behavior (e.g., pathogen infectiousness, number of agents, agent persona ranges), you can modify the values in this file before running a simulation.
 

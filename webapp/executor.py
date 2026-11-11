@@ -1,6 +1,6 @@
 """
-Single-slot execution queue for simulation runs - see the plan's §2 for why
-this is deliberately NOT a multi-process pool: reproducibility (avoiding a
+Single-slot execution queue for simulation runs. This is deliberately NOT a
+multi-process pool: reproducibility (avoiding a
 race on abm/'s process-global RNG state - set_global_seed/torch.manual_seed,
 see abm/utils/rng.py) and fitting a free-tier ~512MB RAM budget both favor
 running exactly one simulation at a time rather than paying for parallelism

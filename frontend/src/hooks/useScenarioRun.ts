@@ -14,7 +14,7 @@ export function useSubmitScenario() {
 
 /** Polls GET /api/runs/{id} every 2s while the run is queued/running -
  * the direct replacement for the old HTMX `hx-trigger="load delay:2s"`
- * poll. Also used by Phase 3's history view to load a past run's detail
+ * poll. Also used by the run-history view to load a past run's detail
  * (a finished run's status stops the interval immediately, so reusing this
  * hook there costs nothing extra). */
 export function useRunDetail(jobId: string | null) {

@@ -26,7 +26,7 @@ experiments.legacy.V2_OVERRIDES (4000 agents).
 and sanitation by wealth, vaccination off; history_matching.V5_BASE_OVERRIDES)
 with the calibrated values from --values-json applied on top, rounded to
 --round-sig significant figures: the out-of-sample check of the values
-before they go into config.py (docs/v5_campaign_plan.md, step 4). It also
+before they go into config.py. It also
 reports v5's 41 targets on these seeds and, as a check rather than a target
 (V5-D1), the two-week diarrhoea prevalence by wealth quintile next to DHS's.
 
@@ -71,8 +71,8 @@ def _settlement_campaign(name: str):
 
 
 #: Ghana DHS two-week diarrhoea prevalence in children under five by wealth
-#: quintile, poorest first (survey-weighted; Claude outputs/economy/dhs_tables.txt,
-#: from the 2022 and 2014 recode files). All-cause, so the model's three
+#: quintile, poorest first (survey-weighted, from the 2022 and 2014 recode
+#: files; scripts/dhs_tables.py). All-cause, so the model's three
 #: pathogens give lower levels; the check is the gradient (V5-D1).
 DHS_DIARRHOEA_2WK_BY_QUINTILE = {2022: (0.150, 0.142, 0.135, 0.122, 0.079),
                                  2014: (0.141, 0.146, 0.128, 0.102, 0.070)}

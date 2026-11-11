@@ -10,7 +10,7 @@ import {
 
 // Tree-shaken registration - only the modules this app actually uses, not
 // the "full" echarts bundle. Keeps the shipped JS well under the old
-// vendored plotly.min.js's 4.5MB (see the plan's chart-library decision).
+// vendored plotly.min.js's 4.5MB.
 echarts.use([
   CanvasRenderer,
   LineChart,
@@ -24,7 +24,7 @@ echarts.use([
  * an option via the returned chartRef, either declaratively (setOption on
  * every render when the option object changes) or imperatively (targeted
  * partial updates, e.g. the spatial chart's day-scrubber only touching one
- * series' `data`, not the whole option, per the plan's guidance). */
+ * series' `data`, not the whole option). */
 export function useECharts() {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<echarts.ECharts | null>(null)

@@ -44,7 +44,7 @@ export default function SimulationPage() {
   // The URL is the source of truth for which run is being viewed - makes a
   // past run bookmarkable/shareable ("/runs/:jobId") and keeps "just
   // submitted" and "clicked from history" the same code path (both just
-  // navigate here), matching the plan's "GET /api/runs/{id} either way".
+  // navigate here): GET /api/runs/{id} either way.
   const { jobId: routeJobId } = useParams<{ jobId?: string }>()
   const activeJobId = routeJobId ?? null
   const navigate = useNavigate()

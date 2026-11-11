@@ -3,7 +3,7 @@
 Global Sensitivity Analysis driver for SPRINGS-ABM.
 ===================================================
 
-Two-stage design (see the approved plan):
+Two-stage design:
 
   morris   Screen ALL ~51 user-editable model params (over their UI slider
            ranges) with Morris elementary effects. Cheap; ranks by mu* and

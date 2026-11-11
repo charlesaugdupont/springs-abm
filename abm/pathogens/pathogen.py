@@ -172,9 +172,9 @@ class Pathogen(ABC):
         """Agents eligible for a new infection: SUSCEPTIBLE or RECOVERED.
 
         Recovered agents are re-infection-eligible by design throughout this
-        model - immunity is partial and never sterile (see
-        docs/model_description.md). With respect_daily_guard=True, agents
-        already infected earlier today are excluded.
+        model - immunity is partial and never sterile. With
+        respect_daily_guard=True, agents already infected earlier today are
+        excluded.
         """
         from abm.constants import Compartment, AgentPropertyKeys
         status = agent_state.ndata[AgentPropertyKeys.status(self.name)]

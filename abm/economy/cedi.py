@@ -2,9 +2,9 @@
 """
 The household economy in 2026 Ghana cedis: initialisation and shared helpers.
 
-Used only when EconomyConfig.model == "cedi" (see config.EconomyConfig for the
-model and docs/economy_design_proposal.md for the evidence). Nothing here runs,
-and no agent property it defines exists, in the legacy economy.
+Used only when EconomyConfig.model == "cedi" (see config.EconomyConfig).
+Nothing here runs, and no agent property it defines exists, in the legacy
+economy.
 
 Household-level quantities (cash, consumption target, quintile, insurance) are
 stored per agent and broadcast to every member, exactly as WEALTH is, so the

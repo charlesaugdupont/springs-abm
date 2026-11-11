@@ -5,9 +5,8 @@ returns the same shape regardless of status, so a fast job that finishes
 before the first poll still renders correctly on the very first response.
 
 Critically, this now returns `config_form` on every response - the actual
-fix for "submitted parameters vanish after a run starts" (see the plan's
-Context section): the value was already captured server-side before this
-phase, just never sent back to any client.
+fix for "submitted parameters vanish after a run starts": the value was
+already captured server-side, just never sent back to any client.
 
 The former _spatial_axes() helper (mapping the spatial grid's row/col
 indices onto the basemap's geographic extent) is deliberately not carried

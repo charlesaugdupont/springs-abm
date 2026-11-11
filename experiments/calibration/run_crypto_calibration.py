@@ -24,8 +24,7 @@ Searched (4 free knobs, one per route):
     zoonotic_interaction_rate     ruminant density -> ingested dose
 
 Deliberately NOT searched, because they are literature-grounded rather than
-free (same principle that excludes recovery_rate from run_calibration.py - see
-docs/model_description.md section 10):
+free (same principle that excludes recovery_rate from run_calibration.py):
     exposure_period = 7                 incubation ~7 days (range 2-10)
     recovery_rate = 0.0476              ~21-day shedding (Korpe 2022: 16-19
                                         day means; Ethiopian series: 31-day
@@ -301,9 +300,9 @@ def measure_drift(grid_id: str, reps: int, steps: int, agents: int, n_cores: int
     rotavirus and campylobacter burden either DOWN (more forced cures) or UP
     (wealth depleted, more households priced out of care) - the sign is not
     predictable from the mechanism alone, which is exactly why it is measured
-    rather than assumed. docs/PROJECT_STATUS.md records the same channel
-    operating when the care-seeking parameters were calibrated (rotavirus peak
-    under-5 prevalence fell 0.099 -> 0.045).
+    rather than assumed. The same channel operated when the care-seeking
+    parameters were calibrated (rotavirus peak under-5 prevalence fell
+    0.099 -> 0.045).
 
     Pairing, and its one real limitation
     ------------------------------------

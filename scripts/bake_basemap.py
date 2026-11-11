@@ -6,7 +6,7 @@ under the spatial infection heatmap on the results page.
 Run once locally whenever the basemap needs to be (re)generated. The output
 PNG (+ a small JSON sidecar with its exact geographic extent) is committed
 to the repo so the deployed webapp never needs contextily/osmnx/GDAL at
-runtime - see webapp/simulation_runner.py and Finding #2 in the plan.
+runtime - see webapp/simulation_runner.py.
 
 Usage (run as a module, like the experiments/ scripts, so the repo root
 lands on sys.path and `abm`/`config` imports resolve):

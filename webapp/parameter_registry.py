@@ -1296,119 +1296,119 @@ REGISTRY: list[ParamMeta] = [
     ),
     ParamMeta(
         path="economy.model", label="Economy model", category="internal", evidence_tier="structural",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.rng_seed_offset", label="Economy RNG seed offset", category="internal", evidence_tier="structural",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.age_group_shares_5plus", label="Age groups of agents aged 5+", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.quintile_shares", label="Households by wealth quintile", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.consumption_per_capita_daily", label="Consumption per person by quintile", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.earning_spread_sdlog", label="Earning spread within a quintile", category="internal", evidence_tier="calibrated",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.savings_rate", label="Savings margin", category="internal", evidence_tier="calibrated",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.income_shock_sd", label="Income shock SD", category="internal", evidence_tier="calibrated",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.income_shock_halflife_days", label="Income shock half-life", category="internal", evidence_tier="calibrated",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.buffer_days", label="Cash buffer", category="internal", evidence_tier="calibrated",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.buffer_wealth_elasticity", label="Wealth elasticity of the cash buffer", category="internal", evidence_tier="calibrated",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.initial_buffer_fraction", label="Initial cash", category="internal", evidence_tier="assumption",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.wealth_scale_days", label="Wealth scale of the care decision", category="internal", evidence_tier="structural",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.provider_shares_by_quintile", label="Usual provider by quintile", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.cost_primary_insured", label="Primary-care visit cost, insured", category="internal", evidence_tier="calibrated",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.cost_hospital_insured", label="Hospital visit cost, insured", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.cost_facility_uninsured", label="Facility visit cost, uninsured", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.cost_private", label="Private facility visit cost", category="internal", evidence_tier="assumption",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.cost_drug_seller", label="Drug seller cost", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.insured_prob", label="NHIS cover", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.public_visit_day_fraction", label="Working time lost per public-facility visit", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.private_visit_day_fraction", label="Working time lost per private-facility visit", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.drug_seller_visit_day_fraction", label="Working time lost per drug-seller visit", category="internal", evidence_tier="assumption",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.carer_day_fraction", label="Working time a parent loses per day a child is ill", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy, caring time (link L3; config.EconomyConfig; docs/economy_design_proposal.md): GEMS, four African sites (Zimmermann et al. 2019). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy, caring time (link L3; config.EconomyConfig): GEMS, four African sites (Zimmermann et al. 2019). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.wash_by_quintile", label="Water and sanitation follow household wealth", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy, link L1 (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy, link L1 (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.water_source_by_quintile", label="Drinking-water source by wealth quintile", category="internal", evidence_tier="literature",
-        rationale="DHS 2022 Eastern Region, raked to the local Akuse shares (link L1; docs/economy_design_proposal.md §3.5). Not used by the web app.",
+        rationale="DHS 2022 Eastern Region, raked to the local Akuse shares (link L1). Not used by the web app.",
     ),
     ParamMeta(
         path="economy.sanitation_by_quintile", label="Sanitation by wealth quintile", category="internal", evidence_tier="literature",
-        rationale="DHS 2022 Eastern Region, raked to the local Akuse shares (link L1; docs/economy_design_proposal.md §3.5). Not used by the web app.",
+        rationale="DHS 2022 Eastern Region, raked to the local Akuse shares (link L1). Not used by the web app.",
     ),
     ParamMeta(
         path="economy.poverty_line_daily", label="Upper poverty line", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.extreme_poverty_line_daily", label="Extreme poverty line", category="internal", evidence_tier="literature",
-        rationale="Cedi household economy (config.EconomyConfig; docs/economy_design_proposal.md). Not used by the web app, which runs the legacy economy.",
+        rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="pathogens[campy].importation_rate", label="Imported infection rate", category="internal",

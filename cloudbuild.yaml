@@ -3,8 +3,8 @@
 # same Dockerfile used for local verification, pushes it, then deploys with
 # the exact flags manual deploys used - most importantly --no-cpu-throttling
 # (required: this app runs simulations in a background thread outside the
-# HTTP request that submitted them, which Cloud Run's default CPU-only-
-# during-requests throttling starves - see webui_overhaul_status memory)
+# HTTP request that submitted them - see webapp/executor.py - and Cloud
+# Run's default CPU-only-during-requests throttling would starve it)
 # and --max-instances=1 (required: the SQLite job store and single-worker
 # executor both assume exactly one process).
 steps:

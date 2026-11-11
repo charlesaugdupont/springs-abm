@@ -61,7 +61,7 @@ EXPOSE 8000
 # SQLite-backed job store and webapp/executor.py's single-slot execution
 # queue both assume exactly one process. On Cloud Run this is enforced at
 # the *service* level too (--max-instances=1 at deploy time, not something
-# this file can express) - see the plan's Phase 6: Cloud Run's default
+# this file can express; see cloudbuild.yaml): Cloud Run's default
 # autoscaling would otherwise let multiple instances run concurrently,
 # each with its own disconnected ephemeral filesystem, silently breaking
 # job polling.

@@ -14,8 +14,7 @@ const PATHOGEN_LABEL: Record<string, string> = {
 // INFECTIOUS, i.e. SHEDDING. For rotavirus and campylobacter that is
 // effectively the same as being ill, but ~2/3 of childhood Cryptosporidium
 // infections are subclinical, so this line is a CARRIAGE curve and runs
-// several times above the symptomatic curve. See docs/model_description.md
-// section 5a.
+// several times above the symptomatic curve.
 
 interface PrevalenceLineChartProps {
   days: number[]

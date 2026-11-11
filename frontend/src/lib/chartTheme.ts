@@ -1,18 +1,16 @@
-// Chart color roles, sourced from the dataviz skill's validated reference
-// palette (references/palette.md) - not shadcn's default --chart-* tokens,
-// which the "Nova" preset ships as pure zero-chroma grays, unusable for
-// distinguishing series. Validated via scripts/validate_palette.js for
-// this app's first two series (rota=slot1 blue, campy=slot2 orange): all
-// checks pass in both light and dark mode (worst adjacent CVD ΔE 24.7
-// light / 26.8 dark, well clear of the >=8 target).
+// Chart color roles from a validated categorical palette - not shadcn's
+// default --chart-* tokens, which the "Nova" preset ships as pure
+// zero-chroma grays, unusable for distinguishing series. Checked for this
+// app's first two series (rota=slot1 blue, campy=slot2 orange): all checks
+// pass in both light and dark mode (worst adjacent CVD ΔE 24.7 light /
+// 26.8 dark, well clear of the >=8 target).
 //
 // The third series (crypto=teal) reuses the EXACT teal already validated as
 // campy's fecal_oral route colour below - the same hex in each mode,
 // including the light-mode deepening that keeps it >=3:1 on the light
 // surface - rather than introducing an unvalidated hue. NOTE it has not
-// itself been re-run through the all-pairs validator, because the
-// scripts/validate_palette.js referenced above is no longer present in the
-// repo. Re-validate if that script is restored.
+// itself been re-run through the all-pairs colour-vision-deficiency check,
+// so re-check the full set if any series colour changes.
 
 export function isDarkMode(): boolean {
   return document.documentElement.classList.contains("dark")
@@ -70,8 +68,8 @@ export const PATHOGEN_COLOR: Record<
 // Campylobacter's three transmission routes. Display/stacking order matters:
 // orange (campy's family hue), aqua, yellow - kept in this order so orange and
 // yellow never sit adjacent (aqua between them), the one pair that fails the
-// all-pairs floor. Validated via scripts/validate_palette.js in both modes
-// (worst adjacent CVD ΔE 9.1 light / 8.4 dark). Light-mode aqua/yellow are
+// all-pairs floor. Validated in both modes (worst adjacent CVD ΔE 9.1 light /
+// 8.4 dark). Light-mode aqua/yellow are
 // sub-3:1 on the surface, so CampyRouteAreaChart adds direct end-labels (relief).
 export const CAMPY_ROUTE_ORDER = ["zoonotic", "fecal_oral", "food_borne"] as const
 
@@ -85,8 +83,8 @@ export function campyRouteColors(): Record<string, string> {
   // Light-mode teal/gold are deepened (#12946a / #bd7d00, vs the brighter
   // #1baf7a / #eda100) so all three routes clear >=3:1 contrast on the light
   // surface - the chart no longer carries direct end-labels, so it can't lean
-  // on them for the sub-3:1 relief. Validated via the dataviz validate_palette
-  // script; the residual orange<->teal CVD is covered by the 2px surface-gap
+  // on them for the sub-3:1 relief. Validated for contrast and colour-vision
+  // deficiency; the residual orange<->teal CVD is covered by the 2px surface-gap
   // separators between the stacked bands. Dark mode already passes as-is.
   return isDarkMode()
     ? { zoonotic: "#d95926", fecal_oral: "#199e70", food_borne: "#c98500" }
@@ -120,7 +118,7 @@ export function baseGridAxisOption() {
   }
 }
 
-// Per-axis style fragment matching the skill's mark specs: hairline (1px)
+// Per-axis style fragment: hairline (1px)
 // solid recessive gridlines, axis line + text in muted ink. This MUST be
 // spread inside each `xAxis`/`yAxis` object - ECharts ignores axisLine /
 // axisLabel / splitLine at the option root (the previous bug: they silently

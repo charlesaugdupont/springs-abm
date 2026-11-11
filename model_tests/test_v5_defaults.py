@@ -1,7 +1,7 @@
 """The config defaults are campaign v5's adopted candidate (e7 at 3 significant
 figures, validated out of sample with validate_calibration --campaign v5), on
 v5's base settings, and every value v5 changed has its v4 value pinned in
-experiments.legacy.V4_OVERRIDES (docs/v5_campaign_plan.md)."""
+experiments.legacy.V4_OVERRIDES."""
 import re
 
 from config import SVEIRCONFIG

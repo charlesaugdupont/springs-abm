@@ -181,7 +181,7 @@ for _p in ("rota", "campy", "crypto"):
 
 #: The fourth-generation model: campaign v4 (2026-10-27) with econ2's
 #: economic values (2026-10-29), the economy off ("legacy") by default.
-#: Campaign v5 (2026-11-04, docs/v5_campaign_plan.md) replaced these defaults
+#: Campaign v5 (2026-11-04) replaced these defaults
 #: and switched the cedi economy on; pinning them keeps the v4, econ and econ2
 #: campaigns, validate_calibration --campaign v4 and regression_check --v4
 #: reproducible byte for byte. Only parameters v5 changed are listed;

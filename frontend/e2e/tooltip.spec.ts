@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { login, expandAllParamSections } from './helpers'
 
-// Named regression test for the specific bug the plan traced: the old
+// Named regression test for a specific bug: the old
 // tooltip was clipped by an `overflow:hidden` ancestor and had zero
 // viewport-collision handling, so it visibly overflowed when opened on a
 // field in the right-hand column of the 2-column parameter grid. The

@@ -17,8 +17,8 @@ test('recent runs: two submissions create history, params survive re-run, loadin
   const defaultPopulation = await populationSlider.getAttribute('aria-valuenow')
   const seedBefore = await seedInput.inputValue()
 
-  // Other e2e specs share this same real dev server/database (that's the
-  // point of Phase 3 - real persistence), so the panel may already have
+  // Other e2e specs share this same real dev server/database (runs are
+  // persisted), so the panel may already have
   // entries from earlier test files. Measure growth relative to that
   // baseline rather than assuming a pristine empty history.
   const baselineViewCount = await page.getByRole('button', { name: 'View' }).count()
