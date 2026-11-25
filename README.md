@@ -185,6 +185,8 @@ Common flags across these scripts: `--pilot` (small grid/reps/steps for a quick 
 
 `experiments/shocks/` has two scripts: `run_shock_sweep.py` (a single rectangular duration x magnitude shock window; produces the `shocks_day200` result) and `run_shock_scenarios.py` (GoodBYE-paper-inspired cyclical background stress + punctuated/persistent shock recovery shapes, layered on the same underlying mechanism; produces `shocks_scenarios_named`).
 
+The experiments on the v5 model (`experiments/scenarios/`) are parts of one resumable driver, `python -m experiments.scenarios.run <part> --cores N` (`--dry-run` lists a part's scenarios and seeds). Paper 1's parts are `p1_3a`, `p1_ps`, `p1_obs`, `p1_routes`, `p1_decision`, `p1_morris` and `p1_long`; `experiments/scenarios/paper1.py`'s docstring gives each one's settings. The docking of person-to-person transmission against its SEIR equations runs on its own: `python -m experiments.verification.seir_docking`.
+
 ## 7. Web App (`webapp/` + `frontend/`)
 
 A browser interface for configuring and running single simulations: a FastAPI backend (`webapp/`) exposing a JSON API under `/api`, and a React + TypeScript + Vite frontend (`frontend/`) whose charts render client-side. It runs on the `7d9ce7c720a6` grid, executes one simulation at a time, and sits behind a single shared password.
@@ -227,6 +229,14 @@ The web app's end-to-end tests (Playwright) live in `frontend/e2e/`. `npm run te
 ## 9. Configuration
 
 All model parameters are defined in `config.py` using Pydantic models. To alter the model's behavior (e.g., pathogen infectiousness, number of agents, agent persona ranges), you can modify the values in this file before running a simulation.
+
+## 10. License
+
+The code is released under the MIT License (see `LICENSE`). The data in the repository keep their sources' licences:
+
+*   The settlement grids in `grids/` are derived from OpenStreetMap data, © OpenStreetMap contributors, available under the Open Database License (ODbL). Reuse requires attribution, and databases derived from them must be shared under the ODbL.
+*   Their population layers are derived from GHS-POP R2023A (European Commission, Joint Research Centre), provided under the Creative Commons Attribution 4.0 International licence (CC BY 4.0). Reuse requires attribution.
+*   `abm/data/water_sampling_points.csv` holds the locations of the wells and the borehole of the SPRINGS water-sampling survey. *To confirm with the SPRINGS consortium: the licence under which these locations are shared.*
 
 ## Contact
 Charles Dupont - c.a.dupont@uva.nl

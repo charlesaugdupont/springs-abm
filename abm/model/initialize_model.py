@@ -74,11 +74,24 @@ class SVEIRModel(Model):
         self.save_model_parameters()
 
     def _load_agent_personas(self):
-        """Generates agent behavioral personas using LH sampling."""
+        """Generates agent behavioral personas using LH sampling.
+
+        A range with equal bounds fixes that parameter for every persona (paper
+        1's decision-model variants: gamma 1 = no probability weighting, lambda
+        1 = no loss aversion). The sample is drawn as before and only scaled
+        differently, so the other two parameters keep their values."""
         sampler = qmc.LatinHypercube(d=3, seed=self.config.seed)
         samples = sampler.random(n=self.config.num_agent_personas)
         ranges = [self.config.alpha_range, self.config.gamma_range, self.config.lambda_range]
-        scaled_samples = qmc.scale(samples, [r[0] for r in ranges], [r[1] for r in ranges])
+        lo, hi = [r[0] for r in ranges], [r[1] for r in ranges]
+        if any(l > h for l, h in zip(lo, hi)):
+            raise ValueError(f"persona ranges need lower <= upper bounds: {ranges}")
+        if all(l < h for l, h in zip(lo, hi)):
+            scaled_samples = qmc.scale(samples, lo, hi)
+        else:
+            # qmc.scale's own formula (sample * (u - l) + l), which it refuses for l == u
+            scaled_samples = samples * (np.asarray(hi, dtype=np.float64) - np.asarray(lo, dtype=np.float64)) \
+                + np.asarray(lo, dtype=np.float64)
         self.agent_personas = torch.from_numpy(scaled_samples).float()
 
     def _build_animal_density_layers(self):

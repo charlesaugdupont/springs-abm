@@ -91,16 +91,33 @@ def _episode_index(model) -> dict:
     return out
 
 
-def observe(model, burn_in_days: int = 730) -> dict:
+def observe(model, burn_in_days: int = 730, *, stools_per_month: int = 1, shedding_scale: float = 1.0,
+            diarrhoeal_stool_tested_prob: float | None = None) -> dict:
     """MAL-ED-style detected outcomes of a finished run.
 
     Returns a flat dict of metrics, keys prefixed "{pathogen}_obs_" (detected)
     or "{pathogen}_true_" (true-infection anchors), see _summarise.
+
+    The keyword arguments observe the same run by another design (paper 1,
+    experiment 8; experiments.scenarios.paper1): stools_per_month surveillance
+    stools in each month of life, evenly spaced (1 = MAL-ED's mid-month stool),
+    detectable-shedding windows scaled by shedding_scale (a more or less
+    sensitive assay), and diarrhoeal stools collected with this probability
+    (None = ObservationConfig.diarrhoeal_stool_tested_prob). The defaults give
+    exactly the MAL-ED observation, and every design takes the same random
+    draws in the same order (a window's draw is scaled, a stool's collection
+    draw is compared with another probability), so the designs differ only in
+    the design.
     """
     cfg = model.config
     obs = cfg.observation
     T = int(model.step_count)
     rng = np.random.default_rng(int(cfg.seed) + int(obs.rng_seed_offset))
+    k = int(stools_per_month)
+    if k < 1:
+        raise ValueError("stools_per_month must be at least 1")
+    tested_prob = obs.diarrhoeal_stool_tested_prob if diarrhoeal_stool_tested_prob is None \
+        else float(diarrhoeal_stool_tested_prob)
 
     cohorts = [c for c in model.get_birth_cohorts() if "agent_idx" in c and c["birth_day"] >= 0]
     cohorts.sort(key=lambda c: (c["birth_day"], c["agent_idx"]))
@@ -108,9 +125,14 @@ def observe(model, burn_in_days: int = 730) -> dict:
     n_child = len(cohorts)
     births = np.array([c["birth_day"] for c in cohorts], dtype=np.int64)
 
-    # Surveillance stool days: mid-month of each month of life in range.
+    # Surveillance stool days: mid-month of each month of life in range
+    # (k > 1: k evenly spaced stools in each month, at most one a day).
     months = np.arange(obs.surveillance_start_months, obs.surveillance_end_months + 1)   # 1-based
-    surv_offsets = np.round((months - 0.5) * DAYS_PER_MONTH).astype(np.int64)
+    if k == 1:
+        surv_offsets = np.round((months - 0.5) * DAYS_PER_MONTH).astype(np.int64)
+    else:
+        frac = (np.arange(k) + 0.5) / k
+        surv_offsets = np.unique(np.round((months[:, None] - 1 + frac[None, :]) * DAYS_PER_MONTH).astype(np.int64))
 
     # Diarrhoeal stools: one collection draw per episode, in a fixed order.
     # A slot hosts one child at a time and children leave at 60 months, so
@@ -118,7 +140,7 @@ def observe(model, burn_in_days: int = 730) -> dict:
     episodes = _episode_index(model)
     by_slot_day: dict = defaultdict(lambda: defaultdict(list))   # slot -> day -> [pathogen]
     for (agent_idx, pathogen, day) in sorted(episodes, key=lambda k: (k[2], k[0], k[1])):
-        if rng.random() < obs.diarrhoeal_stool_tested_prob:
+        if rng.random() < tested_prob:
             by_slot_day[agent_idx][day].append(pathogen)
     ep_stools = {slot: sorted(days.items()) for slot, days in by_slot_day.items()}
 
@@ -132,6 +154,8 @@ def observe(model, burn_in_days: int = 730) -> dict:
         for a, b, d, s in zip(log["agent_idx"], log["birth_day"], log["day"], log["symptomatic"]):
             i = key_of.get((int(a), int(b)))
             mean = pc.detectable_shedding_days_symptomatic if s else pc.detectable_shedding_days_asymptomatic
+            if shedding_scale != 1.0:
+                mean = mean * float(shedding_scale)
             dur = rng.gamma(shape, mean / shape)
             if i is None:
                 continue

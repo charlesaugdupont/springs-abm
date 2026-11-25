@@ -36,11 +36,12 @@ OUTPUT_DIR = os.path.join("experiments", "outputs", "experiments_v5")
 
 def experiment_spec(name: str, *, reps: int = 8, steps: int = STEPS, metrics_fn=None, step_callback=None,
                     base_overrides: dict | None = None, n_cores: int | None = None,
-                    output_dir: str = OUTPUT_DIR, base_seed: int = BASE_SEED) -> SweepSpec:
+                    output_dir: str = OUTPUT_DIR, base_seed: int = BASE_SEED,
+                    checkpoint_every: int = 4) -> SweepSpec:
     return SweepSpec(name=name, grid_id=GRID_ID, params=[], metrics_fn=metrics_fn or experiment_metrics,
                      reps=reps, steps=steps, agents=AGENTS, base_overrides=dict(base_overrides or {}),
                      output_dir=output_dir, n_cores=n_cores, base_seed=base_seed,
-                     step_callback=step_callback, checkpoint_every=4, resume=True)
+                     step_callback=step_callback, checkpoint_every=checkpoint_every, resume=True)
 
 
 def _systems(model):

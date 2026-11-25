@@ -27,6 +27,8 @@ def main(argv=None) -> None:
     ap.add_argument("--reps", type=int, default=8)
     ap.add_argument("--steps", type=int, default=None, help="override the design's run length (tests)")
     ap.add_argument("--dry-run", action="store_true", help="list the scenarios and exit")
+    ap.add_argument("--checkpoint-every", type=int, default=4,
+                    help="save results.parquet after this many runs (1: an interrupted part loses only runs in progress)")
     args = ap.parse_args(argv)
 
     design = DESIGNS[args.part]
@@ -47,7 +49,8 @@ def main(argv=None) -> None:
         return
     callback = design.step_callback or (apply_hooks if design.hooks else None)
     spec = experiment_spec(design.name, reps=args.reps, steps=args.steps or design.steps, n_cores=args.cores,
-                           step_callback=callback, metrics_fn=design.metrics_fn)
+                           step_callback=callback, metrics_fn=design.metrics_fn,
+                           checkpoint_every=args.checkpoint_every)
     run_sweep(spec, combos)
 
 

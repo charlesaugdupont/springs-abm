@@ -2272,8 +2272,8 @@ class SVEIRConfig(BaseModel):
     # Parameters for Agent Personas
     num_agent_personas: int = Field(32, description="Number of distinct behavioral (CPT) personas sampled via Latin Hypercube (internal - not user-configurable).")
     alpha_range: list[float] = Field([0.1, 0.9], description="Sampling range for the CPT wealth/health utility weight (alpha). Plausible, exploratory range - not fit to measured risk preferences.")
-    gamma_range: list[float] = Field([0.4, 0.9], description="Sampling range for the CPT probability-distortion parameter (gamma). Plausible, exploratory range - not fit to measured risk preferences.")
-    lambda_range: list[float] = Field([1.0, 3.0], description="Sampling range for the CPT loss-aversion parameter (lambda). Plausible, exploratory range - not fit to measured risk preferences.")
+    gamma_range: list[float] = Field([0.4, 0.9], description="Sampling range for the CPT probability-distortion parameter (gamma). Plausible, exploratory range - not fit to measured risk preferences. Equal bounds fix it for every persona ([1, 1]: no probability weighting).")
+    lambda_range: list[float] = Field([1.0, 3.0], description="Sampling range for the CPT loss-aversion parameter (lambda). Plausible, exploratory range - not fit to measured risk preferences. Equal bounds fix it for every persona ([1, 1]: no loss aversion).")
 
     demography: DemographyConfig = Field(default_factory=DemographyConfig, description="Ageing, under-5 turnover and age-dependent activity.")
     water: WaterConfig = Field(default_factory=WaterConfig, description="Household water sources, sanitation and the catchment contamination model.")

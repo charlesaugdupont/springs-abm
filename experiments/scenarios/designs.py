@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from config import EconomyConfig
+from experiments.scenarios import paper1 as P1
 from experiments.scenarios.common import STEPS
 
 #: the label column (the orchestrator skips "gsa.*" keys as config paths)
@@ -514,4 +515,16 @@ DESIGNS: dict[str, Design] = {
                     description="paper 1: 3A's headline scenarios, 40 seeds each"),
     "p1_ps": Design("p1_ps_param_sets", p1_ps_combos, steps=REV_STEPS,
                     description="paper 1: today's vaccine and none over the 10 other calibrated parameter sets"),
+    # paper 1's basic experiments and checks (experiments.scenarios.paper1)
+    "p1_obs": Design("p1_obs_observation", P1.p1_obs_combos, steps=REV_STEPS, metrics_fn=P1.p1_obs_metrics,
+                     description="paper 1, experiment 8: one setting seen by eight observation designs"),
+    "p1_routes": Design("p1_routes_knockouts", P1.p1_routes_combos, steps=REV_STEPS, step_callback=P1.route_off,
+                        metrics_fn=P1.p1_metrics,
+                        description="paper 1, experiment 7: each transmission route switched off in turn"),
+    "p1_decision": Design("p1_decision_model", P1.p1_decision_combos, steps=REV_STEPS, metrics_fn=P1.p1_metrics,
+                          description="paper 1, experiment 9: CPT, its variants and no cash constraint"),
+    "p1_morris": Design("p1_morris_fixed", P1.p1_morris_combos, steps=REV_STEPS, metrics_fn=P1.morris_metrics,
+                        description="paper 1, analysis 5: Morris screening of the fixed parameters"),
+    "p1_long": Design("p1_long_warmup", P1.p1_long_combos, steps=P1.LONG_STEPS, metrics_fn=P1.long_run_metrics,
+                      description="paper 1, analysis 3: ten-year runs in both settings"),
 }
