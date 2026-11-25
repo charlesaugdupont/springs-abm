@@ -148,7 +148,7 @@ class ChildIllnessSystem(System):
                 symptomatic = episode_candidates
                 cand_idx = episode_candidates.nonzero(as_tuple=True)[0]
                 prior = infection_count[cand_idx] - 1          # infections before the current one
-                vacc_key = AgentPropertyKeys.ever_vaccinated(pathogen_name)
+                vacc_key = _vaccine_illness_key(agent_state, pathogen_name)
                 if getattr(p_config, "vaccine_counts_as_prior_infection", False) and vacc_key in agent_state.ndata:
                     # a vaccine that took protects against illness like one natural infection
                     prior = prior + agent_state.ndata[vacc_key][cand_idx].to(prior.dtype)
@@ -257,9 +257,11 @@ class ChildIllnessSystem(System):
         # was always False (a vaccinated child moves V -> E -> I before any
         # episode starts) and immunity_factor_vaccine never applied. The
         # ever-vaccinated flag is set at S -> V and never cleared, so the
-        # vaccine's severity reduction applies to every later episode.
+        # vaccine's severity reduction applies to every later episode - unless
+        # RotavirusConfig.vaccine_illness_protection_days is set, when the
+        # waning flag vaccine_illness_protected is read instead.
         vaccine_status_tensor = None
-        vacc_key = AgentPropertyKeys.ever_vaccinated(pathogen_name)
+        vacc_key = _vaccine_illness_key(agent_state, pathogen_name)
         if vacc_key in agent_state.ndata:
             vaccine_status_tensor = agent_state.ndata[vacc_key][mask].bool()
 
@@ -372,6 +374,17 @@ class ChildIllnessSystem(System):
                 entry = self.episode_log[int(open_idx[agent_idx])]
                 entry['realized_duration'] = self._current_timestep - entry['timestep']
                 open_idx[agent_idx] = -1
+
+
+def _vaccine_illness_key(agent_state: AgentState, pathogen_name: str) -> str:
+    """The flag of the vaccine's protection against illness: the waning one
+    (AgentPropertyKeys.vaccine_illness_protected) when the vaccine sets it
+    (RotavirusConfig.vaccine_illness_protection_days), else the lifelong
+    ever_vaccinated."""
+    key = AgentPropertyKeys.vaccine_illness_protected(pathogen_name)
+    if key in agent_state.ndata:
+        return key
+    return AgentPropertyKeys.ever_vaccinated(pathogen_name)
 
 
 def symptomatic_probability(p_config, ages_months: torch.Tensor,

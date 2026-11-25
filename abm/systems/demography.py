@@ -149,6 +149,9 @@ class DemographySystem(System):
             nd[AgentPropertyKeys.symptom_severity(name)][idx] = 0.0
             nd[AgentPropertyKeys.illness_duration(name)][idx] = 0
             nd[AgentPropertyKeys.ever_vaccinated(name)][idx] = False
+            ill_key = AgentPropertyKeys.vaccine_illness_protected(name)
+            if ill_key in nd:
+                nd[ill_key][idx] = False
             nd[AgentPropertyKeys.last_episode_infection(name)][idx] = -1
             nd[AgentPropertyKeys.first_infection_day(name)][idx] = -1
             sym_key = AgentPropertyKeys.symptomatic_infection(name)

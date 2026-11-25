@@ -50,6 +50,12 @@ class Pathogen(ABC):
         # Days since each agent's latest infection by this pathogen, for
         # post_infection_refractory_days (allocated lazily; None when unused).
         self._days_since_infection: torch.Tensor | None = None
+        # Scenario multipliers on a route's infection probability, set and
+        # cleared during a run by experiment hooks (experiments.scenarios.hooks:
+        # drought hygiene, first rains, floods): route -> a float for every
+        # agent, or a tensor over all agents. Empty in the model itself, so
+        # _relative_susceptibility is unchanged.
+        self.route_multipliers: dict[str, float | torch.Tensor] = {}
 
     # ------------------------------------------------------------------
     # Immunity
@@ -111,6 +117,9 @@ class Pathogen(ABC):
         original exp(-kappa N) for every agent, computed with the same
         operations, so outputs are bit-identical.
 
+        A hook may scale a route for a scenario (route_multipliers: a float,
+        or a tensor over all agents); with none set nothing is multiplied.
+
         Adults have a fixed susceptibility rather than accumulating immunity
         from in-simulation infections: they stand for people who have long
         since reached their adult level, and adults never leave the
@@ -144,6 +153,9 @@ class Pathogen(ABC):
         refractory = float(getattr(self.config, "post_infection_refractory_days", 0) or 0)
         if refractory > 0 and self._days_since_infection is not None:
             s = s * (self._days_since_infection[indices] >= refractory).to(s.dtype)
+        m = self.route_multipliers.get(route) if self.route_multipliers else None
+        if m is not None:
+            s = s * (m[indices].to(s.dtype) if isinstance(m, torch.Tensor) else float(m))
         return s
 
     # ------------------------------------------------------------------

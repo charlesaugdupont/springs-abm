@@ -241,8 +241,12 @@ class Rotavirus(Pathogen):
         takes = rng.random((n, k)) < np.asarray(cfg.vaccine_take_by_dose)[None, :]
         e = rng.standard_exponential(n)
         lasts = e * float(cfg.vaccine_protection_days) if cfg.vaccine_protection_days else np.full(n, np.inf)
+        # protection against illness: the same draw, its own mean (no extra draw, so the stream is unchanged)
+        t_ill = getattr(cfg, "vaccine_illness_protection_days", None)
+        ill_lasts = e * float(t_ill) if t_ill else np.full(n, np.inf)
         t = lambda a, dt=torch.float64: torch.as_tensor(a, dtype=dt)
-        return {"planned": t(planned, torch.long), "ages": t(ages), "takes": t(takes, torch.bool), "lasts": t(lasts)}
+        return {"planned": t(planned, torch.long), "ages": t(ages), "takes": t(takes, torch.bool), "lasts": t(lasts),
+                "ill_lasts": t(ill_lasts)}
 
     def _scheduled_vaccination(self, agent_state: AgentState):
         """Gives each child the doses due at its age; a child whose dose takes
@@ -251,7 +255,12 @@ class Rotavirus(Pathogen):
         ever infected, else S). An agent slot renewed as a newborn
         (DemographySystem) draws a new schedule. At the start of a run every
         child receives, at once, the doses its age has passed, with the time
-        since then counted against its protection."""
+        since then counted against its protection.
+
+        With vaccine_illness_protection_days set, the protection against
+        illness (K.vaccine_illness_protected, read by ChildIllnessSystem
+        instead of ever_vaccinated) starts with the protection against
+        infection and ends after its own drawn duration."""
         import numpy as np
         from abm.systems.demography import DAYS_PER_MONTH
         K = AgentPropertyKeys
@@ -262,18 +271,25 @@ class Rotavirus(Pathogen):
             self._vax = self._draw_schedules(n)
             self._vax.update(given=torch.zeros(n, dtype=torch.long), protected=torch.zeros(n, dtype=torch.bool),
                              wane_day=torch.full((n,), float("inf"), dtype=torch.float64),
+                             ill_until=torch.full((n,), float("inf"), dtype=torch.float64),
                              birth_day=nd[K.BIRTH_DAY].clone() if K.BIRTH_DAY in nd else None)
             self._vax_day = 0
+            if getattr(self.config, "vaccine_illness_protection_days", None):
+                nd[K.vaccine_illness_protected(self.name)] = torch.zeros(n, dtype=torch.bool)
+        ill_key = K.vaccine_illness_protected(self.name)
         v = self._vax
         if v["birth_day"] is not None:
             reborn = (nd[K.BIRTH_DAY] != v["birth_day"]).nonzero(as_tuple=True)[0]
             if reborn.numel():
                 fresh = self._draw_schedules(int(reborn.numel()))
-                for key in ("planned", "ages", "takes", "lasts"):
+                for key in ("planned", "ages", "takes", "lasts", "ill_lasts"):
                     v[key][reborn] = fresh[key]
                 v["given"][reborn] = 0
                 v["protected"][reborn] = False
                 v["wane_day"][reborn] = float("inf")
+                v["ill_until"][reborn] = float("inf")
+                if ill_key in nd:
+                    nd[ill_key][reborn] = False
                 v["birth_day"] = nd[K.BIRTH_DAY].clone()
         status = nd[K.status(self.name)]
         vacc_key = K.ever_vaccinated(self.name)
@@ -290,8 +306,11 @@ class Rotavirus(Pathogen):
                 v["protected"][took] = True
                 # protection runs from the day of the dose (earlier than today at the start of a run)
                 v["wane_day"][took] = day - (age_days[took] - v["ages"][took, j]) + v["lasts"][took]
+                v["ill_until"][took] = day - (age_days[took] - v["ages"][took, j]) + v["ill_lasts"][took]
                 if vacc_key in nd:
                     nd[vacc_key][took] = True
+                if ill_key in nd:
+                    nd[ill_key][took] = True
                 enter = took & ((status == Compartment.SUSCEPTIBLE) | (status == Compartment.RECOVERED)) \
                     & (v["wane_day"] > day)
                 status[enter] = Compartment.VACCINATED
@@ -300,6 +319,8 @@ class Rotavirus(Pathogen):
             ever_infected = nd[K.num_infections(self.name)] > 0
             status[waned & ever_infected] = Compartment.RECOVERED
             status[waned & ~ever_infected] = Compartment.SUSCEPTIBLE
+        if ill_key in nd:
+            nd[ill_key][nd[ill_key] & (v["ill_until"] <= day)] = False
         self._vax_day += 1
 
     def vaccination_summary(self, agent_state: AgentState) -> dict:

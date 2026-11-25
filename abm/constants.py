@@ -123,6 +123,7 @@ class AgentPropertyKeys:
     INSURED = "insured"                          # household holds NHIS cover
     PROVIDER = "provider"                        # usual provider: 0 public primary, 1 public hospital, 2 private, 3 drug seller
     WORK_LOST = "work_lost"                      # share of today's working time lost (reset daily)
+    DEBT = "debt"                                # household's debt for care, GH¢ (EconomyConfig.emergency_credit_days > 0 only)
 
     # Dynamic keys for pathogens
     @staticmethod
@@ -151,6 +152,14 @@ class AgentPropertyKeys:
         survives V -> E -> I -> R, so it is still readable when a vaccinated
         child falls ill (see ChildIllnessSystem._initialize_illness)."""
         return f"ever_vaccinated_{pathogen_name}"
+
+    @staticmethod
+    def vaccine_illness_protected(pathogen_name: str) -> str:
+        """True while the vaccine still protects the child against illness
+        (RotavirusConfig.vaccine_illness_protection_days). Present only when
+        that duration is set; ChildIllnessSystem then reads it instead of
+        ever_vaccinated."""
+        return f"vaccine_illness_{pathogen_name}"
 
     @staticmethod
     def first_infection_day(pathogen_name: str) -> str:

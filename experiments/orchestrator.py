@@ -194,10 +194,11 @@ def _build_config(spec: SweepSpec, combo: Dict[str, Any], seed: int) -> SVEIRCon
     for path, value in combo.items():
         if path == PATHOGEN_SUBSET_KEY:
             continue
-        if path.startswith("shock.") or path.startswith("gsa."):
-            continue  # metadata, not a real SVEIRConfig path - shock.* is consumed by
-            # step_callback via combo; gsa.* (e.g. gsa.design_id) is a GSA design tag
-            # carried into results.parquet for robust sample<->output alignment.
+        if path.startswith("shock.") or path.startswith("gsa.") or path.startswith("hook."):
+            continue  # metadata, not a real SVEIRConfig path - shock.* and hook.* are
+            # consumed by step_callback via combo (hook.*: experiments/scenarios/hooks.py);
+            # gsa.* (e.g. gsa.design_id) is a GSA design tag carried into
+            # results.parquet for robust sample<->output alignment.
         set_param(cfg, path, value)
     return cfg
 
@@ -275,9 +276,17 @@ def _run_one(task) -> Optional[Dict[str, Any]]:
 # Sweep execution
 # ---------------------------------------------------------------------------
 
+#: a combo key giving that scenario its own number of replicates (instead of
+#: SweepSpec.reps); like every gsa.* key it is not a config path, and it is left
+#: out of the run id, so a scenario's finished runs survive a change of its count
+REPS_KEY = "gsa.reps"
+
+
 def _combo_id(combo: Dict[str, Any], rep: int) -> str:
     parts = []
     for k, v in combo.items():
+        if k == REPS_KEY:
+            continue
         short = k.split(".")[-1].split("]")[-1] or k
         parts.append(f"{short}{v:.4g}" if isinstance(v, float) else f"{short}{v}")
     parts.append(f"rep{rep}")
@@ -318,7 +327,7 @@ def run_sweep(spec: SweepSpec, combos: Optional[List[Dict[str, Any]]] = None) ->
 
     tasks = []
     for combo in combos:
-        for rep in range(spec.reps):
+        for rep in range(int(combo.get(REPS_KEY, spec.reps))):
             run_id = _combo_id(combo, rep)
             tasks.append((spec, combo, rep, run_id))
 

@@ -185,6 +185,10 @@ class CareSeekingSystem(System):
         # (treatment_effect_model == "supportive"): they face no further
         # decisions until the spell ends.
         self._treated_this_episode: torch.Tensor | None = None
+        # Experiment 1B (SteeringParamsSVEIR.belief_learning): each household's
+        # beliefs about how often care works and how often waiting makes the
+        # illness worse, and its neighbours. Built at the first update.
+        self._beliefs: dict | None = None
 
     def reset_counters(self):
         """Reset all counters — call between independent simulation runs."""
@@ -203,6 +207,7 @@ class CareSeekingSystem(System):
         self._last_ill_day = None
         self._sick_yesterday = None
         self.daily_records = []
+        self._beliefs = None
 
     @property
     def conditional_care_rate(self) -> float:
@@ -234,7 +239,11 @@ class CareSeekingSystem(System):
                                  quintile=agent_state.ndata[AgentPropertyKeys.WEALTH_QUINTILE])
             self._caring_time(agent_state, child_severity, is_child)
             self._recent_illness(agent_state, child_severity, is_child)
+            if self.config.steering_parameters.belief_learning:
+                self._record_beliefs(agent_state)
         else:
+            if self.config.steering_parameters.belief_learning:
+                raise ValueError("steering_parameters.belief_learning needs the cedi economy")
             self._track_episodes(child_severity, is_child)
 
         candidate_mask = (
@@ -332,6 +341,12 @@ class CareSeekingSystem(System):
                 "carer_days_to_first_visit": [0.0] * N_QUINTILES,
                 "sick_days_to_first_facility_visit": [0.0] * N_QUINTILES,
                 "carer_days_to_first_facility_visit": [0.0] * N_QUINTILES,
+                # ended after at least one effective treatment; out-of-pocket spending (GH¢,
+                # including any part bought on credit); visits bought on credit and the
+                # amount borrowed (EconomyConfig.emergency_credit_days > 0 only)
+                "episodes_ended_treated": count(resolved_mask & self._treated_this_episode),
+                "oop_paid": [0.0] * N_QUINTILES,
+                "visits_on_credit": [0] * N_QUINTILES, "borrowed": [0.0] * N_QUINTILES,
             })
             self._blocked_this_episode[onset_mask] = False
             if getattr(self, "_pre_visit_sick_days", None) is None or self._pre_visit_sick_days.numel() != currently_sick.numel():
@@ -525,7 +540,14 @@ class CareSeekingSystem(System):
         presenting_pathogen, child_severity = self._presenting_illness(agent_state, child_idx)
         child_health = max(0.0, 1.0 - child_severity)
 
-        if cash < oop:
+        borrow = 0.0
+        if cash < oop and eco.emergency_credit_days > 0.0:
+            # Sensitivity D2: the household may borrow the
+            # shortfall while its debt stays within emergency_credit_days of consumption
+            from abm.economy.cedi import household_debt
+            if oop - cash <= eco.emergency_credit_days * target - household_debt(nd, parent_idx):
+                borrow = oop - cash
+        if cash < oop and borrow <= 0.0:
             self.could_not_afford += 1
             today["could_not_afford"][q] += 1
             self._blocked_this_episode[child_idx] = True
@@ -535,16 +557,29 @@ class CareSeekingSystem(System):
         w = float(wealth_term(np.float64(cash), np.float64(target), eco.wealth_scale_days))
         w_after = float(wealth_term(np.float64(cash - oop - lost), np.float64(target), eco.wealth_scale_days))
         alpha = nd[K.ALPHA][parent_idx].item()
+        p_success = p_worsen = None
+        if self._beliefs is not None:                    # experiment 1B: the household's own beliefs
+            h = int(self._beliefs["hh_of"][parent_idx])
+            p_success = float(self._beliefs["success"][h])
+            p_worsen = float(self._beliefs["worsen"][h])
         if self.use_cpt:
             gamma = nd[K.GAMMA][parent_idx].item()
             lam = nd[K.LAMBDA][parent_idx].item()
-            seek = self._evaluate_cpt(w, parent_health, child_health, alpha, gamma, lam, params, w_after=w_after)
+            seek = self._evaluate_cpt(w, parent_health, child_health, alpha, gamma, lam, params, w_after=w_after,
+                                      p_success=p_success, p_worsen=p_worsen)
         else:
-            seek = self._evaluate_ev(w, parent_health, child_health, alpha, params, w_after=w_after)
+            seek = self._evaluate_ev(w, parent_health, child_health, alpha, params, w_after=w_after,
+                                     p_success=p_success, p_worsen=p_worsen)
 
         if seek:
             self.care_sought += 1
             today["care_sought"][q] += 1
+            today["oop_paid"][q] += oop
+            if borrow > 0.0:
+                from abm.economy.cedi import add_household_debt
+                add_household_debt(agent_state, parent_idx, borrow)
+                today["visits_on_credit"][q] += 1
+                today["borrowed"][q] += borrow
             self._apply_treatment_outcome(agent_state, parent_idx, child_idx, oop_cost=oop,
                                           lost_day_fraction=day_fraction)
         else:
@@ -559,6 +594,7 @@ class CareSeekingSystem(System):
         w: float, h_p: float, h_c: float,
         alpha: float, gamma: float, lam: float,
         params, w_after: float | None = None,
+        p_success: float | None = None, p_worsen: float | None = None,
     ) -> bool:
         """
         Return True if CPT favours seeking care.
@@ -589,6 +625,10 @@ class CareSeekingSystem(System):
 
         w_after: the wealth term after paying for the visit (cedi economy);
         None = w - cost_of_care (legacy).
+
+        p_success, p_worsen: the household's beliefs (experiment 1B,
+        belief_learning); None = _perceived_success(params) and
+        natural_worsening_prob.
         """
         w2 = w - params.cost_of_care if w_after is None else w_after
 
@@ -604,7 +644,7 @@ class CareSeekingSystem(System):
         d_s1 = u_s1 - ref_u
         d_s2 = u_s2 - ref_u
 
-        p1 = params.treatment_success_prob
+        p1 = _perceived_success(params) if p_success is None else p_success
         p2 = 1.0 - p1
 
         if d_s1 >= 0:
@@ -620,7 +660,7 @@ class CareSeekingSystem(System):
             pi_s2 = probability_weighting(p2, gamma)
             pi_s1 = 1.0 - pi_s2
 
-        pi_w1 = probability_weighting(params.natural_worsening_prob, gamma)
+        pi_w1 = probability_weighting(params.natural_worsening_prob if p_worsen is None else p_worsen, gamma)
 
         v_s1 = _cpt_v(d_s1, lam, params.cpt_theta, params.cpt_eta)
         v_s2 = _cpt_v(d_s2, lam, params.cpt_theta, params.cpt_eta)
@@ -640,9 +680,11 @@ class CareSeekingSystem(System):
         w: float, h_p: float, h_c: float,
         alpha: float,
         params, w_after: float | None = None,
+        p_success: float | None = None, p_worsen: float | None = None,
     ) -> bool:
         """
-        Return True if plain expected utility favours seeking care.
+        Return True if plain expected utility favours seeking care
+        (p_success, p_worsen: as in _evaluate_cpt).
         """
         w2 = w - params.cost_of_care if w_after is None else w_after
         chw = params.child_health_weight
@@ -654,10 +696,12 @@ class CareSeekingSystem(System):
         u_w1 = _utility(w, _h_eff(max(0.0, h_p - params.parent_stress_health_impact), h_c_worsened, chw), alpha)
         u_w2 = _utility(w, _h_eff(h_p, h_c, chw), alpha)
 
-        ev_seek = (params.treatment_success_prob * u_s1
-                   + (1.0 - params.treatment_success_prob) * u_s2)
-        ev_wait = (params.natural_worsening_prob * u_w1
-                   + (1.0 - params.natural_worsening_prob) * u_w2)
+        p1 = _perceived_success(params) if p_success is None else p_success
+        pw = params.natural_worsening_prob if p_worsen is None else p_worsen
+        ev_seek = (p1 * u_s1
+                   + (1.0 - p1) * u_s2)
+        ev_wait = (pw * u_w1
+                   + (1.0 - pw) * u_w2)
 
         return ev_seek >= ev_wait
 
@@ -704,6 +748,7 @@ class CareSeekingSystem(System):
         self._care_sought_this_episode[child_idx] = True
 
         if torch.rand(1).item() < params.treatment_success_prob:
+            self._learn(parent_idx, "success", 1.0)
             if params.treatment_effect_model == "supportive":
                 self._apply_supportive_treatment(agent_state, child_idx)
                 return
@@ -726,6 +771,7 @@ class CareSeekingSystem(System):
                     if p_clear >= 1.0 or (p_clear > 0.0 and torch.rand(1).item() < p_clear):
                         agent_state.ndata[status_key][child_idx] = Compartment.RECOVERED
         else:
+            self._learn(parent_idx, "success", 0.0)
             current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx].item()
             agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx] = max(
                 0.0, current_health - params.parent_stress_health_impact
@@ -793,7 +839,9 @@ class CareSeekingSystem(System):
         """
         params = self.config.steering_parameters
 
-        if torch.rand(1).item() < params.natural_worsening_prob:
+        worsened = torch.rand(1).item() < params.natural_worsening_prob
+        self._learn(parent_idx, "worsen", 1.0 if worsened else 0.0)
+        if worsened:
             current_health = agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx].item()
             agent_state.ndata[AgentPropertyKeys.HEALTH][parent_idx] = max(
                 0.0, current_health - params.parent_stress_health_impact
@@ -808,6 +856,77 @@ class CareSeekingSystem(System):
                 agent_state.ndata[severity_key][child_idx] = min(
                     1.0, current_severity + params.untreated_severity_penalty
                 )
+
+    # ------------------------------------------------------------------
+    # Experiment 1B: learning how well care works (belief_learning)
+    # ------------------------------------------------------------------
+
+    def _init_beliefs(self, agent_state: AgentState) -> None:
+        """Every household's beliefs, at the perceived (or actual) probability
+        that care works and the actual probability that waiting makes the
+        illness worse, and its neighbours: the households whose homes lie
+        within the social-visit radius (social_interaction_radius, in cells of
+        the loaded grid). Draws no random numbers."""
+        from scipy.spatial import cKDTree
+        K = AgentPropertyKeys
+        nd = agent_state.ndata
+        params = self.config.steering_parameters
+        _, hh_of = torch.unique(nd[K.HOUSEHOLD_ID], return_inverse=True)
+        n_hh = int(hh_of.max().item()) + 1
+        first = torch.full((n_hh,), hh_of.numel(), dtype=torch.long)
+        first.scatter_reduce_(0, hh_of.cpu(), torch.arange(hh_of.numel()), reduce="amin")
+        home = nd[K.HOME_LOCATION][first].cpu().numpy().astype(np.float64)
+        near = cKDTree(home).query_ball_point(home, r=float(params.social_interaction_radius))
+        self._beliefs = {
+            "hh_of": hh_of.cpu(),
+            "first_agent": first,
+            "quintile": nd[K.WEALTH_QUINTILE][first].cpu() if K.WEALTH_QUINTILE in nd else None,
+            "success": torch.full((n_hh,), _perceived_success(params), dtype=torch.float64),
+            "worsen": torch.full((n_hh,), float(params.natural_worsening_prob), dtype=torch.float64),
+            "neighbours": [torch.as_tensor(sorted(set(nb) - {h}), dtype=torch.long) for h, nb in enumerate(near)],
+        }
+
+    def _learn(self, parent_idx, which: str, outcome: float) -> None:
+        """Moves the deciding household's belief `which` ("success" or "worsen")
+        towards `outcome` by belief_learning_rate, and its neighbours' by
+        belief_social_weight times that. No-op unless belief_learning is on."""
+        b = self._beliefs
+        if b is None:
+            return
+        params = self.config.steering_parameters
+        rate = float(params.belief_learning_rate)
+        belief = b[which]
+        h = int(b["hh_of"][parent_idx])
+        belief[h] += rate * (outcome - belief[h])
+        social = float(params.belief_social_weight)
+        if social > 0.0:
+            nb = b["neighbours"][h]
+            if nb.numel():
+                belief[nb] += rate * social * (outcome - belief[nb])
+
+    def _record_beliefs(self, agent_state: AgentState) -> None:
+        """Today's beliefs (households' means, the share believing care works
+        less than 40% of the time, and the lowest quintile's mean), at the
+        start of the day, into today's record."""
+        if self._beliefs is None:
+            self._init_beliefs(agent_state)
+        b = self._beliefs
+        rec = self.daily_records[-1]
+        rec["belief_success"] = float(b["success"].mean())
+        rec["belief_worsen"] = float(b["worsen"].mean())
+        rec["belief_low_share"] = float((b["success"] < 0.4).double().mean())
+        q = b["quintile"]
+        if q is not None and bool((q == 0).any()):
+            rec["belief_success_q1"] = float(b["success"][q == 0].mean())
+
+
+def _perceived_success(params) -> float:
+    """The probability that care works as the parent weighs it: the
+    perceived value if set (SteeringParamsSVEIR.perceived_treatment_success_prob),
+    else the actual treatment_success_prob. Outcomes always use the actual one."""
+    p = getattr(params, "perceived_treatment_success_prob", None)
+    return params.treatment_success_prob if p is None else float(p)
+
 
 def _treated_child_health(h_c: float, params) -> float:
     """The child's health after SUCCESSFUL treatment, as the parent weighs it.

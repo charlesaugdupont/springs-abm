@@ -247,3 +247,15 @@ V5_0_OVERRIDES: dict = {
 for _older in (V3_OVERRIDES, V2_OVERRIDES, LEGACY_V1_OVERRIDES):
     for _k, _v in V4_OVERRIDES.items():
         _older.setdefault(_k, _v)
+
+#: v5 with vaccination by schedule as it was before the vaccine's cut in severity
+#: became 0.2 (2026-11-12): the unsourced 0.4. regression_check --v5-1.
+V5_1_OVERRIDES: dict = {
+    "illness_mechanics.immunity_factor_vaccine": 0.4,
+}
+
+# Every earlier generation predates the change too, and keeps 0.4: the web app
+# (which runs V2_OVERRIDES), the calibrations' reproductions and their goldens.
+for _older in (V5_0_OVERRIDES, V4_OVERRIDES, V3_OVERRIDES, V2_OVERRIDES, LEGACY_V1_OVERRIDES):
+    for _k, _v in V5_1_OVERRIDES.items():
+        _older.setdefault(_k, _v)

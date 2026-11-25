@@ -159,3 +159,80 @@ def test_v5_campaign_is_wired():
     assert set(c.emulator_inputs("econ_care_seeking_rate_q1")) == set(hm.V5_ECON_PARAMS)
     assert "pathogens[rota].post_infection_refractory_days" in c.emulator_inputs("rota_obs_infant_ratio_0_6_vs_6_12m")
     assert "pathogens[rota].post_infection_refractory_days" not in c.emulator_inputs("crypto_obs_infant_ratio_0_6_vs_6_12m")
+
+
+ILL_T = "pathogens[rota].vaccine_illness_protection_days"
+
+
+def test_protection_against_illness_is_lifelong_by_default(make_model):
+    model = make_model(run=False, agents=600, overrides=SCHEDULE)
+    rota = _rota(model)
+    assert rota.config.vaccine_illness_protection_days is None
+    rota._susceptible_to_vaccinated(model.graph)
+    assert K.vaccine_illness_protected("rota") not in model.graph.ndata     # ever_vaccinated is read, as calibrated
+    assert torch.all(torch.isinf(rota._vax["ill_until"]))
+
+
+def test_protection_against_illness_wanes_on_the_same_draw(make_model):
+    """vaccine_illness_protection_days: the flag starts at the take and ends
+    after e * T, e the draw behind the protection against infection; the
+    schedule's draws are those of the default (no extra random number)."""
+    T = 40.0
+    base = make_model(run=False, agents=3000, overrides=SCHEDULE)
+    model = make_model(run=False, agents=3000, overrides={**SCHEDULE, ILL_T: T})
+    rota, nd = _rota(model), model.graph.ndata
+    _rota(base)._susceptible_to_vaccinated(base.graph)
+    rota._susceptible_to_vaccinated(model.graph)              # day 0
+    v, v0 = rota._vax, _rota(base)._vax
+    for key in ("planned", "ages", "takes", "lasts"):
+        assert torch.equal(v[key], v0[key])
+    e = v["lasts"] / rota.config.vaccine_protection_days
+    assert torch.allclose(v["ill_lasts"], e * T)
+    key = K.vaccine_illness_protected("rota")
+    ever = nd[K.ever_vaccinated("rota")]
+    assert torch.equal(nd[key], v["protected"] & (v["ill_until"] > 0))
+    assert not torch.any(nd[key] & ~ever)
+    for _ in range(150):
+        rota._susceptible_to_vaccinated(model.graph)
+        nd[K.AGE] += 12.0 / 365.25
+    day = rota._vax_day - 1
+    assert not torch.any(nd[key] & (v["ill_until"] <= day))
+    assert torch.any(ever & ~nd[key]), "a waned child is still ever_vaccinated, but no longer protected against illness"
+
+
+def test_illness_reads_the_waning_flag_when_it_exists():
+    from abm.state import AgentState
+    from abm.systems.child_illness import _vaccine_illness_key
+    s = AgentState(3)
+    s.ndata[K.ever_vaccinated("rota")] = torch.ones(3, dtype=torch.bool)
+    assert _vaccine_illness_key(s, "rota") == K.ever_vaccinated("rota")
+    s.ndata[K.vaccine_illness_protected("rota")] = torch.zeros(3, dtype=torch.bool)
+    assert _vaccine_illness_key(s, "rota") == K.vaccine_illness_protected("rota")
+
+
+def test_the_trial_records_reproduce_the_model(make_model, monkeypatch):
+    """experiments.scenarios.vaccine_trial: half the children in each arm, child-days
+    by arm, and every recorded episode's severity recomputed from its record."""
+    import experiments.scenarios.vaccine_trial as vt
+    monkeypatch.setattr(vt, "TRIAL_BURN_IN", 30)
+    model = make_model(run=False, agents=3000, seed=11,
+                       overrides={**SCHEDULE, "pathogens[rota].vaccine_dose_continuation": [0.5, 1.0, 1.0]})
+    model.infection_incidence.clear()
+    model.u5_prevalence_history = {p.name: [] for p in model.pathogens}
+    model.u5_symptomatic_prevalence_history = {p.name: [] for p in model.pathogens}
+    child_mask = model.graph.ndata[K.IS_CHILD]
+    for day in range(240):
+        vt.record_trial(model, day, {})
+        model.step(child_mask=child_mask)
+    m = vt.trial_metrics(model)
+    assert m["vt_n_unmatched"] == 0
+    assert sum(m["vt_pt_v"]) > 0 and 0.35 < sum(m["vt_pt_v"]) / (sum(m["vt_pt_v"]) + sum(m["vt_pt_p"])) < 0.65
+    import pandas as pd
+    inf = pd.DataFrame({c[3:]: m[c] for c in ("vt_day", "vt_age_m", "vt_arm", "vt_tsd_d", "vt_take_age_d",
+                                             "vt_lasts_d", "vt_prior", "vt_sym", "vt_sev")})
+    assert len(inf) > 0 and not inf.loc[inf["arm"] == 0, "take_age_d"].notna().any()
+    p, sev, _ = vt.episode_weights(inf, T_days=None, cut=0.4)
+    s = inf["sym"].to_numpy() > 0
+    if s.any():
+        assert np.max(np.abs(inf["sev"].to_numpy()[s] - sev[s])) < 1e-4
+    assert np.all((p >= 0) & (p <= 1))

@@ -328,6 +328,10 @@ REGISTRY: list[ParamMeta] = [
         rationale="Rotavirus vaccination (config.RotavirusConfig; Asare et al. 2026). Not used by the web app, which runs the hazard model.",
     ),
     ParamMeta(
+        path="pathogens[rota].vaccine_illness_protection_days", label="Duration of the vaccine's protection against illness", category="internal", evidence_tier="literature",
+        rationale="Rotavirus vaccination by schedule (config.RotavirusConfig; None = for life; fitted to the trials' efficacy by time since the last dose, Clark et al. 2019). Not used by the web app, which runs the hazard model.",
+    ),
+    ParamMeta(
         path="illness_mechanics.base_severity_rota", label="Base rotavirus severity",
         category="Rotavirus", evidence_tier="literature", editable=True, ui_min=0.0, ui_max=1.0,
         rationale="Base illness severity (0-1 scale) before age/immunity adjustments. Anchored to "
@@ -806,6 +810,26 @@ REGISTRY: list[ParamMeta] = [
                   "matched against the Ghana DHS childhood-diarrhoea care-seeking rate (69.2%, 95% "
                   "CI 65.6-72.8%, n=621). The care-seeking rate responds strongly to this and "
                   "hardly to income.",
+    ),
+    ParamMeta(
+        path="steering_parameters.belief_learning", label="Parents learn how well care works",
+        category="internal", evidence_tier="assumption",
+        rationale="Experiment 1B only: beliefs about care and waiting updated from own and neighbours' outcomes. Off by default. Not used by the web app.",
+    ),
+    ParamMeta(
+        path="steering_parameters.belief_learning_rate", label="Learning rate (own outcomes)",
+        category="internal", evidence_tier="assumption",
+        rationale="Experiment 1B only. Not used by the web app.",
+    ),
+    ParamMeta(
+        path="steering_parameters.belief_social_weight", label="Weight of neighbours' outcomes",
+        category="internal", evidence_tier="assumption",
+        rationale="Experiment 1B only. Not used by the web app.",
+    ),
+    ParamMeta(
+        path="steering_parameters.perceived_treatment_success_prob", label="Treatment success as parents perceive it",
+        category="internal", evidence_tier="assumption",
+        rationale="Experiments only: the probability that care works as parents perceive it, used in the care-seeking decision; None = the actual probability. Not used by the web app.",
     ),
     ParamMeta(
         path="steering_parameters.treatment_success_prob", label="Treatment success probability",
@@ -1369,6 +1393,10 @@ REGISTRY: list[ParamMeta] = [
     ParamMeta(
         path="economy.cost_drug_seller", label="Drug seller cost", category="internal", evidence_tier="literature",
         rationale="Cedi household economy (config.EconomyConfig). Not used by the web app, which runs the legacy economy.",
+    ),
+    ParamMeta(
+        path="economy.emergency_credit_days", label="Emergency credit for care", category="internal", evidence_tier="assumption",
+        rationale="Experiment sensitivity (D2): days of consumption a household may borrow for a visit; 0 = no borrowing, as calibrated. Not used by the web app, which runs the legacy economy.",
     ),
     ParamMeta(
         path="economy.insured_prob", label="NHIS cover", category="internal", evidence_tier="literature",

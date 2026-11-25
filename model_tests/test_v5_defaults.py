@@ -78,8 +78,19 @@ def test_defaults_run_v5s_base_settings_except_vaccination():
 
 def test_every_changed_default_is_pinned_for_earlier_generations():
     assert set(V4_OVERRIDES) == set(ADOPTED_V5) | {"economy.model", "pathogens[rota].vaccination_model",
+                                                    "illness_mechanics.immunity_factor_vaccine",
                                                     "pathogens[rota].vaccine_counts_as_prior_infection"}
     assert V4_OVERRIDES["economy.model"] == "legacy"
     assert all(V4_OVERRIDES[k] != v for k, v in ADOPTED_V5.items()), "v5 changed every one of them"
     for older in (V3_OVERRIDES, V2_OVERRIDES):
         assert set(V4_OVERRIDES) <= set(older)
+
+
+def test_vaccine_severity_cut_is_0_2_and_earlier_versions_keep_0_4():
+    """The vaccine's cut in severity became 0.2 on 2026-11-12 (checked against the trials with a
+    trial inside the model); every earlier version, the web app's V2 included, keeps the unsourced 0.4."""
+    from experiments.legacy import LEGACY_V1_OVERRIDES, V5_0_OVERRIDES, V5_1_OVERRIDES
+    key = "illness_mechanics.immunity_factor_vaccine"
+    assert _get(key) == 0.2
+    for older in (V5_1_OVERRIDES, V5_0_OVERRIDES, V4_OVERRIDES, V3_OVERRIDES, V2_OVERRIDES, LEGACY_V1_OVERRIDES):
+        assert older[key] == 0.4

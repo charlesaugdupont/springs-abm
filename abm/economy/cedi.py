@@ -195,6 +195,22 @@ def add_household_cash(agent_state, member_idx, delta: float, scale_days: float)
     nd[K.WEALTH][same] = float(wealth_term(np.float64(cash), np.float64(target), scale_days))
 
 
+def household_debt(nd, member_idx) -> float:
+    """The debt (GH¢) of `member_idx`'s household for care bought on credit
+    (EconomyConfig.emergency_credit_days); 0 when nothing was ever borrowed."""
+    return float(nd[K.DEBT][member_idx].item()) if K.DEBT in nd else 0.0
+
+
+def add_household_debt(agent_state, member_idx, amount: float) -> None:
+    """Adds `amount` GH¢ to the debt of `member_idx`'s household (every member
+    holds it, like CASH). The DEBT array is created at the first loan."""
+    nd = agent_state.ndata
+    if K.DEBT not in nd:
+        nd[K.DEBT] = torch.zeros_like(nd[K.CASH])
+    same = nd[K.HOUSEHOLD_ID] == nd[K.HOUSEHOLD_ID][member_idx]
+    nd[K.DEBT][same] = float(nd[K.DEBT][member_idx].item()) + float(amount)
+
+
 def visit_cost(nd, member_idx, eco) -> tuple[float, float]:
     """(out-of-pocket GH¢, share of a working day lost) of a visit to the
     household's usual provider."""

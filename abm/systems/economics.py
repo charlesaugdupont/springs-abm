@@ -158,6 +158,13 @@ class EconomicSystem(System):
         target = nd[K.CONSUMPTION_TARGET][rep]
         new_cash = torch.minimum(torch.clamp(cash + income - target, min=0.0), nd[K.CASH_CAP][rep])
         consumption = cash + income - new_cash
+        if K.DEBT in nd:
+            # emergency credit (EconomyConfig.emergency_credit_days > 0): debt for care is
+            # repaid from cash before the household saves again
+            debt = nd[K.DEBT][rep]
+            repay = torch.minimum(new_cash, debt)
+            new_cash = new_cash - repay
+            nd[K.DEBT] = (debt - repay)[inv]
 
         nd[K.CASH] = new_cash[inv]
         nd[K.WEALTH] = wealth_term(new_cash, target, eco.wealth_scale_days)[inv]

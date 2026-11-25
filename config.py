@@ -462,6 +462,16 @@ class RotavirusConfig(PathogenConfig):
                     "vaccinated child who is infected is as likely to fall ill as an unvaccinated one "
                     "(vaccine_efficacy and immunity_factor_vaccine only).",
     )
+    vaccine_illness_protection_days: float | None = Field(
+        None, gt=0.0,
+        description="Schedule mode only. Mean duration (days) of the vaccine's protection against ILLNESS: the "
+                    "extra prior infection (vaccine_counts_as_prior_infection) and the severity cut "
+                    "(IllnessMechanicsConfig.immunity_factor_vaccine). None (the default, as calibrated): for life. "
+                    "A number: an exponential time with this mean from the dose that took, drawn with the same "
+                    "exponential as vaccine_protection_days (the two end in the same order across children, and no "
+                    "random draw is added); afterwards the child's illness depends on its natural infections only. "
+                    "Step 1 of the revision of 2026-11-10.",
+    )
 
     @field_validator("vaccination_model")
     @classmethod
@@ -1229,7 +1239,16 @@ class IllnessMechanicsConfig(BaseModel):
 
     # Immunity reductions applied multiplicatively to base severity
     immunity_factor_vaccine: float = Field(
-        0.4, description="Severity reduction factor conferred by vaccination."
+        0.2, description="Severity reduction factor conferred by vaccination (children whose vaccine took). "
+                         "0.2 (since 2026-11-12): the reduction one natural infection gives "
+                         "(severity_reduction_per_infection), checked against the trials with a trial inside "
+                         "the model (experiments/scenarios/vaccine_trial.py; step 1 of the revision): efficacy "
+                         "against severe rotavirus diarrhoea 58% two weeks and 44% twelve months after the last "
+                         "dose, inside the intervals of Armah et al. 2010 and Clark et al. 2019. The earlier 0.4 "
+                         "had no source and protected too much over the trials' follow-up (61% against 39%, "
+                         "19-55); it is pinned in experiments.legacy (V5_1_OVERRIDES and every older set), so "
+                         "the web app and the earlier versions are unchanged. The calibration (campaign v5) ran "
+                         "without vaccination and does not depend on it."
     )
     severity_reduction_per_infection: float = Field(
         0.20, description="Severity reduction per prior infection (partial, never-complete immunity)."
@@ -1702,6 +1721,39 @@ class SteeringParamsSVEIR(BaseModel):
         0.80, description="Probability that a care-seeking visit delivers effective treatment "
                           "(under treatment_effect_model='cure', that it cures the illness)."
     )
+    perceived_treatment_success_prob: float | None = Field(
+        None, ge=0.0, le=1.0,
+        description="The probability that care works as parents perceive it, used only in the "
+                    "care-seeking decision (CareSeekingSystem._evaluate_cpt / _evaluate_ev); outcomes "
+                    "are drawn with treatment_success_prob. None (default) = the actual probability, "
+                    "as in every calibrated version. For experiments that separate trust in care from "
+                    "its quality (experiment 1).",
+    )
+    # --- Learning how well care works (experiment 1B; off by default) ---
+    belief_learning: bool = Field(
+        False,
+        description="Experiment 1B (decision D1). True: each household "
+                    "learns how often care works and how often waiting makes a child's illness worse. "
+                    "Its two beliefs start at perceived_treatment_success_prob (or "
+                    "treatment_success_prob) and natural_worsening_prob and replace them in its care "
+                    "decision; after a visit it moves its belief about care towards the outcome (1 if "
+                    "the treatment worked, else 0) by belief_learning_rate, after a day of waiting its "
+                    "belief about waiting; households within the social-visit radius "
+                    "(social_interaction_radius) move theirs towards the same outcome by "
+                    "belief_social_weight times that rate. Outcomes still follow the actual "
+                    "probabilities. False (default) = no learning, as calibrated.",
+    )
+    belief_learning_rate: float = Field(
+        0.2, ge=0.0, le=1.0,
+        description="Experiment 1B: how far one's own outcome moves a household's belief (the weight of "
+                    "the newest outcome in an exponentially weighted average; recency weights of "
+                    "0.1-0.3 are typical of learning from experience in repeated choice). ASSUMPTION.",
+    )
+    belief_social_weight: float = Field(
+        0.0, ge=0.0, le=1.0,
+        description="Experiment 1B: a neighbour's outcome moves a household's belief by this times "
+                    "belief_learning_rate (0 = learning from one's own experience only). ASSUMPTION.",
+    )
     # --- What effective treatment DOES (CareSeekingSystem._apply_treatment_outcome) ---
     # "cure" (the original model): every active episode ends on the spot. With
     # ~70-80% of episodes treated, realized episodes then last a median of 1
@@ -2075,6 +2127,15 @@ class EconomyConfig(BaseModel):
         description="Cost, GH¢, of ORS and zinc from a drug seller: 2 ORS sachets (GH¢1.47 each) and 10 "
                     "zinc tablets (GH¢0.17 each) at NHIS Medicines List prices (March 2025), x 1.05 to "
                     "2026, x 1.5 retail margin (ASSUMPTION).",
+    )
+    emergency_credit_days: float = Field(
+        0.0, ge=0.0,
+        description="Experiment sensitivity (decision D2), not calibrated: a "
+                    "household whose cash does not cover a visit may borrow the shortfall, up to this many "
+                    "days of its consumption target in all (informal credit, a susu group, selling a small "
+                    "asset). Debt is repaid from cash before the household saves again, and outstanding debt "
+                    "reduces what it can still borrow. 0 (default) = no borrowing (design decision D5), "
+                    "exactly as calibrated.",
     )
     public_visit_day_fraction: float = Field(
         0.36, ge=0.0, le=1.0,
