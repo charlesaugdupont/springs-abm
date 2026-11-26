@@ -187,6 +187,8 @@ Common flags across these scripts: `--pilot` (small grid/reps/steps for a quick 
 
 The experiments on the v5 model (`experiments/scenarios/`) are parts of one resumable driver, `python -m experiments.scenarios.run <part> --cores N` (`--dry-run` lists a part's scenarios and seeds). Paper 1's parts are `p1_3a`, `p1_ps`, `p1_obs`, `p1_routes`, `p1_decision`, `p1_morris` and `p1_long`; `experiments/scenarios/paper1.py`'s docstring gives each one's settings. The docking of person-to-person transmission against its SEIR equations runs on its own: `python -m experiments.verification.seir_docking`.
 
+Paper 1's numbers come from the finished runs. `python -m experiments.scenarios.paper1_analysis` writes its tables (CSV) and `values_p1.tex`, the numbers quoted in the text as LaTeX macros, to `experiments/outputs/experiments_v5/paper1/`; its docstring lists the parts and how each contrast and noise level is computed. `python -m experiments.calibration.diagnostics_v5` writes the history matching's diagnostics (the share of the search box kept before each wave, the emulators tested on the last wave's runs) and its emulators' Sobol indices to `experiments/outputs/history_matching_v5/diagnostics/`.
+
 ## 7. Web App (`webapp/` + `frontend/`)
 
 A browser interface for configuring and running single simulations: a FastAPI backend (`webapp/`) exposing a JSON API under `/api`, and a React + TypeScript + Vite frontend (`frontend/`) whose charts render client-side. It runs on the `7d9ce7c720a6` grid, executes one simulation at a time, and sits behind a single shared password.
