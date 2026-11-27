@@ -6,8 +6,9 @@ experiments.scenarios.paper1, and the docking's output:
     python -m experiments.scenarios.paper1_analysis              # every part with results
     python -m experiments.scenarios.paper1_analysis 3a routes    # some parts
 
-Parts: 3a (the vaccine, and the check that p1_3a reproduces the 3A rerun's
-reported effects), ps (the calibrated parameter sets), obs (experiment 8),
+Parts: calibration (1: the history matching's diagnostics, from the tables
+experiments.calibration.diagnostics_v5 writes), 3a (the vaccine, and the check
+that p1_3a reproduces the 3A rerun's reported effects), ps (the calibrated parameter sets), obs (experiment 8),
 routes (7), decision (9), morris (5), seeds (3: the number of seeds), warmup (3:
 the ten-year runs), docking (6).
 
@@ -32,6 +33,7 @@ LABEL = "gsa.design_id"
 RESULTS = os.path.join("experiments", "outputs", "experiments_v5")
 OUT = os.path.join(RESULTS, "paper1")
 DOCKING = os.path.join("experiments", "outputs", "verification", "seir_docking")
+CALIBRATION_DIAG = os.path.join("experiments", "outputs", "history_matching_v5", "diagnostics")
 PATHOGENS = ("rota", "campy", "crypto")
 NAMES = {"rota": "Rota", "campy": "Campy", "crypto": "Crypto"}
 
@@ -219,6 +221,14 @@ def part_3a(df: pd.DataFrame) -> dict:
     macro("VaccEpisodesLowerSeeds", got["r1n"])
     macro("VaccSevereFall", got["r3"]); macro("VaccSevereFallSE", got["r3se"])
     macro("VaccInfectionsFall", got["r4"]); macro("VaccDetectedEpisodesFall", got["m1"])
+    # experiment 10: what the vaccine's effect rests on (the 3A rerun's s-numbers)
+    for k, name in (("s1", "VaccNoPriorEpisodesFall"), ("s2", "VaccNoPriorInfectionsFall"), ("s3", "VaccPriorSharePct"),
+                    ("s4", "VaccNoPriorSevereFall"), ("s5", "VaccNoCutSevereFall"), ("s6", "VaccCutSharePct"),
+                    ("s8", "VaccWaningEpisodesFall"), ("s9", "VaccWaningSevereFall"), ("s10", "VaccWaningEpisodesMore"),
+                    ("s10se", "VaccWaningEpisodesMoreSE"), ("s11", "VaccWaningSevereMore"),
+                    ("s11se", "VaccWaningSevereMoreSE"), ("c1", "VaccFullProtectionEpisodesFall")):
+        if k in got:
+            macro(name, got[k])
     return {"checked": len(chk), "reproduced": int(chk["ok"].sum()) if len(chk) else 0,
             "not_reproduced": chk.loc[~chk["ok"], "id"].tolist() if len(chk) else []}
 
@@ -321,6 +331,24 @@ def part_ps(ps: pd.DataFrame, a3: pd.DataFrame) -> dict:
     save(sets, "p1_ps_sets")
     save(spread, "p1_ps_spread")
     macro("PsRobustSharePct", 100 * ROBUST_SHARE)
+    from experiments.scenarios.paper1 import ROUTES
+    camel = {"h2h": "PersonToPerson", "fecal_oral": "FecalOral", "food_borne": "FoodBorne"}
+    for p, r in ROUTES:
+        col = f"{p}_{r}_fraction_post_burnin"
+        name = f"Ps{NAMES[p]}{camel.get(r, r.capitalize())}"
+        macro(name + "Min", 100 * sets[col].min())
+        macro(name + "Max", 100 * sets[col].max())
+    for p in PATHOGENS:
+        col = f"{p}_infections_per_child_year_0_24m"
+        macro(f"Ps{NAMES[p]}InfectionsMin", sets[col].min(), 2)
+        macro(f"Ps{NAMES[p]}InfectionsMax", sets[col].max(), 2)
+    # what the data do not observe (true incidence, the main routes): the share of the spread between sets
+    # that comes from the parameters rather than the seeds
+    unobserved = ([f"{p}_infections_per_child_year_0_24m" for p in PATHOGENS]
+                  + ["campy_zoonotic_fraction_post_burnin", "crypto_household_fraction_post_burnin",
+                     "crypto_community_fraction_post_burnin", "crypto_water_fraction_post_burnin"])
+    macro("PsUnobservedShareParamsMin",
+          100 * spread.set_index("output").loc[unobserved, "share_from_parameters"].min())
     macro("PsVaccFallSetsMeeting", spread.loc[spread.output == "vacc_fall_episodes_0_24m", "sets_meeting"].iloc[0])
     macro("PsVaccSevereFallSetsMeeting", spread.loc[spread.output == "vacc_fall_severe_0_59m", "sets_meeting"].iloc[0])
     v = sets["vacc_fall_episodes_0_24m"]
@@ -433,13 +461,15 @@ def part_routes(routes: pd.DataFrame, obs: pd.DataFrame) -> dict:
     tab = pd.DataFrame(rows)
     save(tab, "p1_routes")
     t = tab.set_index(["pathogen", "route"])
-    for (p, r), short in ((("rota", "h2h"), "RotaPersonToPerson"), (("rota", "water"), "RotaWater"),
-                          (("rota", "imported"), "RotaImported"), (("campy", "zoonotic"), "CampyZoonotic"),
-                          (("campy", "food_borne"), "CampyFoodBorne"), (("crypto", "household"), "CryptoHousehold"),
-                          (("crypto", "community"), "CryptoCommunity"), (("crypto", "water"), "CryptoWater")):
-        macro(f"Route{short}Share", t.loc[(p, r), "share_pct"], 1)
+    from experiments.scenarios.paper1 import ROUTES
+    camel = {"h2h": "PersonToPerson", "fecal_oral": "FecalOral", "food_borne": "FoodBorne"}
+    for p, r in ROUTES:
+        short = f"{NAMES[p]}{camel.get(r, r.capitalize())}"
+        share = t.loc[(p, r), "share_pct"]
+        macro(f"Route{short}Share", share, 1 if share >= 1 else 2)
         macro(f"Route{short}Fall", t.loc[(p, r), "fall_all_infections_pct"], 1)
     macro("RouteSeeds", int(tab["n"].min()))
+    macro("RouteRotaImportedExtinct", int(t.loc[("rota", "imported"), "extinct_runs"]))
     return {"routes": len(tab)}
 
 
@@ -480,6 +510,10 @@ def part_decision(dec: pd.DataFrame) -> dict:
     save(tab, "p1_decision")
     t = tab.set_index(["variant", "output"])
     macro("DecSeeds", int(dec.groupby(LABEL)["seed"].nunique().min()))
+    gr = t.xs("care_seeking_gradient_q5_minus_q1", level="output")
+    macro("DecGradientCPT", 100 * gr.loc["cpt", "value"], 0)
+    macro("DecGradientNoCash", 100 * gr.loc["no_cash_constraint", "value"], 0)
+    macro("DecGradientDHS", 100 * gr.loc["cpt", "dhs"], 0)
     # validation: two-week diarrhoea prevalence by wealth quintile (the model's three pathogens, today's
     # vaccine, as in the DHS 2022 population) against the DHS's all-cause prevalence, both relative to the
     # richest quintile (V5-D1: a check, not a target)
@@ -600,6 +634,15 @@ def part_morris(mo: pd.DataFrame) -> dict:
     macro("MorrisFactors", len(MORRIS_FACTORS)); macro("MorrisPoints", len(X))
     macro("MorrisFactorsAboveNoise", int((summ.targets_above_noise > 0).sum()))
     macro("MorrisFactorsPastOne", int((summ.targets_past_one > 0).sum()))
+    sf = summ.set_index("factor")
+    if len(sf):                                                        # targets among the outputs
+        for f, short in (("steering_parameters.max_contacts_per_visit", "Contacts"),
+                         ("pathogens[rota].recovery_rate", "RotaRecovery"),
+                         ("pathogens[crypto].recovery_rate", "CryptoRecovery")):
+            macro(f"Morris{short}PastOne", int(sf.loc[f, "targets_past_one"]))
+            macro(f"Morris{short}MaxMuStar", sf.loc[f, "max_mu_star_above_noise"], 1)
+        decision = [f for f, *_ in MORRIS_FACTORS[:9]]                  # the decision's factors come first
+        macro("MorrisDecisionPastOne", int(sf.reindex(decision)["targets_past_one"].fillna(0).sum()))
     return {"outputs": int(tab.output.nunique()) if len(tab) else 0,
             "factors_above_noise": int((summ.targets_above_noise > 0).sum()),
             "factors_past_one": int((summ.targets_past_one > 0).sum())}
@@ -694,12 +737,64 @@ def part_warmup(lg: pd.DataFrame) -> dict:
     summ = pd.DataFrame(summ)
     save(summ, "p1_warmup")
     macro("WarmupMaxYearThreeGap", summ["year3_minus_later_pct"].abs().max(), 1)
+    ws = summ.set_index(["scenario", "output"])
+    for sc, sname in (("long_vacc_none", "NoVacc"), ("long_vacc_default", "Vacc")):
+        for p in PATHOGENS:
+            k = (sc, f"{p}_infections_0_24m")
+            if k in ws.index:
+                macro(f"Warmup{NAMES[p]}{sname}Gap", ws.loc[k, "year3_minus_later_pct"], 0)
+                macro(f"Warmup{NAMES[p]}{sname}GapSE", ws.loc[k, "se_pct"], 0)
     return {"outputs": int(summ.output.nunique())}
 
 
 # ---------------------------------------------------------------------------
 # Analysis 6: docking
 # ---------------------------------------------------------------------------
+
+def part_calibration(diag: str | None = None) -> dict:
+    """Analysis 1's numbers for the text, from experiments.calibration.diagnostics_v5's tables and the
+    calibrated sets (experiments/scenarios/param_sets.json)."""
+    from experiments.scenarios.param_sets import ADOPTED, I_MAX_KEEP, SETS_JSON
+    d = diag or CALIBRATION_DIAG
+    nroy = pd.read_csv(os.path.join(d, "nroy.csv")).sort_values("wave").reset_index(drop=True)
+    ranges = pd.read_csv(os.path.join(d, "design_ranges.csv"))
+    box = pd.read_csv(os.path.join(d, "sets_box.csv"))
+    fit = pd.read_csv(os.path.join(d, "fit_sets.csv"))
+    emu = pd.read_csv(os.path.join(d, "validation.csv"))
+    sets = json.load(open(SETS_JSON))
+    n_params = box.parameter.nunique()
+    macro("CalWaves", len(nroy))
+    macro("CalPoints", int(nroy.points.sum()))
+    macro("CalRunsPerPoint", int(nroy.runs_per_point.max()))
+    for i, name in ((1, "Two"), (2, "Three"), (3, "Four")):
+        v = 100 * float(nroy.nroy_share_before.iloc[i])
+        macro(f"CalNroyWave{name}", v, 2 if v >= 0.01 else 4)
+    macro("CalPerDimensionPct", 100 * float(nroy.nroy_share_before.iloc[-1]) ** (1 / n_params))
+    w4 = ranges[ranges.wave == ranges.wave.max()]
+    macro("CalWaveFourWidthMedianPct", 100 * float((w4.q975 - w4.q025).median()))
+    g = box.groupby("parameter").unit
+    macro("CalSetsSpreadMedianPct", 100 * float((g.max() - g.min()).median()))
+    macro("CalSetsAtBound", int(((g.max() < 0.1) | (g.min() > 0.9)).sum()))
+    imax = fit.groupby("set").implausibility.max()
+    macro("CalCandidates", len(sets["sets"]) + len(sets["excluded"]))
+    macro("CalSets", len(sets["sets"]))
+    macro("CalKeepRule", I_MAX_KEEP, 1)
+    macro("CalSetsImaxMin", imax.min(), 2)
+    macro("CalSetsImaxMax", imax.max(), 2)
+    macro("CalAdoptedImax", imax[ADOPTED], 2)
+    new = os.path.join(d, "fit.csv")                     # the adopted defaults on 8 new seeds (--validation)
+    if os.path.exists(new):
+        f = pd.read_csv(new)
+        macro("CalNewSeedsWithin", int((f.implausibility < 3).sum()))
+        macro("CalNewSeedsImax", f.implausibility.max(), 2)
+    macro("CalEmuRmsMedian", emu.rms_standardised_error.median(), 2)
+    macro("CalEmuRmsMin", emu.rms_standardised_error.min(), 2)
+    macro("CalEmuRmsMax", emu.rms_standardised_error.max(), 2)
+    macro("CalEmuBeyondThreePct", 100 * emu.share_beyond_3.mean(), 1)
+    macro("CalEmuRTwoMedian", emu.r2.median(), 2)
+    macro("CalEmuNegativeRTwo", int((emu.r2 < 0).sum()))
+    return {"waves": len(nroy), "sets": len(sets["sets"])}
+
 
 def part_docking(path: str | None = None) -> dict:
     s = pd.read_csv(os.path.join(path or DOCKING, "summary.csv"))
@@ -713,7 +808,7 @@ def part_docking(path: str | None = None) -> dict:
 
 # ---------------------------------------------------------------------------
 
-PARTS = ("3a", "ps", "obs", "routes", "decision", "morris", "seeds", "warmup", "docking")
+PARTS = ("calibration", "3a", "ps", "obs", "routes", "decision", "morris", "seeds", "warmup", "docking")
 
 
 def main(argv=None) -> None:
@@ -728,6 +823,12 @@ def main(argv=None) -> None:
     need = {"3a": ["3a"], "ps": ["ps", "3a"], "obs": ["obs"], "routes": ["routes", "obs"], "decision": ["decision"],
             "morris": ["morris"], "seeds": ["3a"], "warmup": ["long"]}
     for part in args.parts or PARTS:
+        if part == "calibration":
+            if os.path.exists(os.path.join(CALIBRATION_DIAG, "fit_sets.csv")):
+                print("calibration", part_calibration())
+            else:
+                print("calibration: no diagnostics (python -m experiments.calibration.diagnostics_v5)")
+            continue
         if part == "docking":
             if os.path.exists(os.path.join(DOCKING, "summary.csv")):
                 print("docking", part_docking())

@@ -140,3 +140,36 @@ def test_morris_refuses_runs_that_do_not_share_their_seeds():
     runs.loc[runs.index[-1], "seed"] = 99
     with pytest.raises(ValueError, match="share their two seeds"):
         pa.part_morris(runs.rename(columns={"y": pa.MORRIS_EXTRA[0]}))
+
+
+# ---------------------------------------------------------------------------
+# The calibration's numbers for the text
+# ---------------------------------------------------------------------------
+
+def test_calibration_numbers_come_from_the_diagnostics(monkeypatch, tmp_path):
+    """part_calibration reads diagnostics_v5's tables: the shares not ruled out, the region's width
+    per parameter, the sets' spread and fit, and the emulators' check."""
+    from experiments.scenarios.param_sets import ADOPTED
+    monkeypatch.setattr(pa, "VALUES", {})
+    pd.DataFrame({"wave": [1, 2, 3, 4], "points": [100, 100, 80, 100], "runs_per_point": 2,
+                  "nroy_share_before": [1.0, 0.01, 0.002, 1e-6], "criterion": "second"}).to_csv(
+        tmp_path / "nroy.csv", index=False)
+    pd.DataFrame({"wave": [4, 4], "parameter": ["a", "b"], "points": 100, "q025": [0.1, 0.0],
+                  "q50": [0.3, 0.5], "q975": [0.6, 1.0]}).to_csv(tmp_path / "design_ranges.csv", index=False)
+    sets = [ADOPTED, "x1", "x2"]
+    pd.DataFrame({"set": sets * 2, "adopted": [s == ADOPTED for s in sets] * 2, "parameter": ["a"] * 3 + ["b"] * 3,
+                  "value": 0.0, "unit": [0.95, 0.97, 0.99, 0.2, 0.4, 0.6]}).to_csv(tmp_path / "sets_box.csv", index=False)
+    pd.DataFrame({"set": sets, "adopted": [s == ADOPTED for s in sets], "target": "t", "runs": 8, "model": 0.0,
+                  "observed": 0.0, "signed": [-2.5, 1.0, 2.9], "implausibility": [2.5, 1.0, 2.9]}).to_csv(
+        tmp_path / "fit_sets.csv", index=False)
+    pd.DataFrame({"target": ["t", "u"], "n": 100, "rms_standardised_error": [0.8, 1.2], "share_beyond_2": 0.05,
+                  "share_beyond_3": [0.0, 0.02], "mean_standardised_error": 0.0, "r2": [0.9, -0.3],
+                  "tolerance_sd": 1.0, "median_emulator_sd": 0.5}).to_csv(tmp_path / "validation.csv", index=False)
+    pa.part_calibration(str(tmp_path))
+    v = pa.VALUES
+    assert (v["CalWaves"], v["CalPoints"], v["CalNroyWaveTwo"], v["CalNroyWaveFour"]) == ("4", "380", "1.00", "0.0001")
+    assert v["CalPerDimensionPct"] == "0"                    # 1e-6 spread over 2 parameters: 0.1% each
+    assert v["CalWaveFourWidthMedianPct"] == "75"            # widths 0.5 and 1.0
+    assert v["CalSetsSpreadMedianPct"] == "22" and v["CalSetsAtBound"] == "1"   # spreads 0.04 and 0.4; a at the top
+    assert (v["CalAdoptedImax"], v["CalSetsImaxMax"], v["CalEmuNegativeRTwo"]) == ("2.50", "2.90", "1")
+    assert "CalNewSeedsWithin" not in v                      # no fit.csv: the adopted defaults' new seeds not given
