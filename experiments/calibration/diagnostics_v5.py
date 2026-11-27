@@ -5,11 +5,22 @@ variance-based sensitivity indices of its emulators.
 
     python -m experiments.calibration.diagnostics_v5
     python -m experiments.calibration.diagnostics_v5 --validation PATH   # the adopted set's validation runs
+    python -m experiments.calibration.diagnostics_v5 --skip-emulators    # only the tables without emulators
 
 Reads the waves' runs (experiments/outputs/history_matching_v5/wave*/results.parquet,
-and wave*_meta.json beside them) and writes, to .../history_matching_v5/diagnostics/:
+and wave*_meta.json and wave*_design.json beside them), the calibrated parameter sets
+(experiments/scenarios/param_sets.json) and their verification runs
+(.../history_matching_v5/verify_v5*/results.parquet), and writes, to
+.../history_matching_v5/diagnostics/:
 
   nroy.csv        the share of the search box not ruled out before each wave (the waves' meta)
+  design_ranges.csv  each wave's design points on the box's unit scale (0 a parameter's lower bound,
+                  1 its upper, log-scaled parameters on a log scale): their 2.5, 50 and 97.5%
+                  quantiles per parameter
+  sets_box.csv    the 11 calibrated sets on the same scale
+  fit_sets.csv    the 11 sets' verification runs against the 41 targets: the standardised error
+                  (mean - target) / sqrt(sd_obs^2 + sd_md^2 + var / n) on the calibration scale, the
+                  implausibility of the selection rule with its sign
   validation.csv  the emulators of waves 1-3 (those that designed wave 4) against wave 4's runs,
                   per target: the standardised errors (y - mu) / sd, sd the emulator's predictive
                   SD of a two-run mean (its nugget included), their root mean square (1 if the
@@ -89,6 +100,67 @@ def nroy_table() -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("wave")
 
 
+def design_ranges_table() -> pd.DataFrame:
+    """Where each wave's design points lie in the search box. Wave 1 is a Latin hypercube of the whole
+    box; each later wave drew its points from the region the earlier waves' emulators had not ruled
+    out (wave 4's also meeting the campaign's design rules), half of them from that region's core
+    (hm.sample_nroy), so the points' spread shows how far the region extends along each parameter."""
+    rows = []
+    for name in sorted(os.listdir(hm.OUT_DIR)):
+        if not (name.startswith("wave") and name.endswith("_design.json")):
+            continue
+        d = json.load(open(os.path.join(hm.OUT_DIR, name)))
+        U = hm.to_unit(np.array([[float(c[p]) for p in hm.PATHS] for c in d["combos"]]))
+        for j, p in enumerate(hm.PATHS):
+            q = np.quantile(U[:, j], [0.025, 0.5, 0.975])
+            rows.append({"wave": int(d["wave"]), "parameter": p, "points": len(U), "q025": float(q[0]),
+                         "q50": float(q[1]), "q975": float(q[2])})
+    return pd.DataFrame(rows).sort_values(["wave"], kind="stable").reset_index(drop=True)
+
+
+def _param_sets(path: str | None = None) -> dict:
+    from experiments.scenarios.param_sets import SETS_JSON
+    with open(path or SETS_JSON) as f:
+        return json.load(f)
+
+
+def sets_table(path: str | None = None) -> pd.DataFrame:
+    """The calibrated parameter sets (experiments/scenarios/param_sets.json) on the box's unit scale."""
+    from experiments.scenarios.param_sets import ADOPTED
+    rows = []
+    for s in _param_sets(path)["sets"]:
+        u = hm.to_unit(np.array([[float(s["values"][p]) for p in hm.PATHS]]))[0]
+        rows += [{"set": s["name"], "adopted": s["name"] == ADOPTED, "parameter": p,
+                  "value": float(s["values"][p]), "unit": float(u[j])} for j, p in enumerate(hm.PATHS)]
+    return pd.DataFrame(rows)
+
+
+def fit_sets_table(path: str | None = None) -> pd.DataFrame:
+    """The calibrated sets' verification runs (8 seeds apart from the waves', without the vaccine, as
+    calibrated) against the 41 targets, computed as the selection rule did (hm.summarise and
+    hm.simulated_implausibility): signed is (mean - target) / sqrt(sd_obs^2 + sd_md^2 + var / n) on
+    the target's calibration scale, its size the implausibility. Each set's largest implausibility
+    must equal the I_max recorded in param_sets.json."""
+    from experiments.scenarios.param_sets import ADOPTED
+    rows = []
+    for s in _param_sets(path)["sets"]:
+        runs = pd.read_parquet(os.path.join(hm.OUT_DIR, s["verification"], "results.parquet"))
+        g = runs[runs["gsa.design_id"] == f"{s['verification']}_{s['name']}"].assign(wave=99)
+        if g.empty:
+            raise ValueError(f"no verification runs for {s['name']} in {s['verification']}")
+        r = hm.simulated_implausibility(hm.summarise(g)).iloc[0]
+        if not math.isclose(float(r["I_max"]), float(s["I_max"]), rel_tol=1e-9):
+            raise ValueError(f"{s['name']}: I_max {r['I_max']} from its runs, {s['I_max']} recorded")
+        for t in hm.TARGETS_HM:
+            var = float(r[t.metric + "__var"]) if np.isfinite(r[t.metric + "__var"]) else 0.0
+            sd = math.sqrt(t.sd_obs ** 2 + t.sd_md ** 2 + var / float(r["n_rep"]))
+            back = (lambda v: math.exp(v) - t.eps) if t.transform == "log" else (lambda v: v)
+            rows.append({"set": s["name"], "adopted": s["name"] == ADOPTED, "target": t.metric,
+                         "runs": int(r["n_rep"]), "model": back(float(r[t.metric])), "observed": back(t.z),
+                         "signed": (float(r[t.metric]) - t.z) / sd, "implausibility": float(r["I__" + t.metric])})
+    return pd.DataFrame(rows)
+
+
 def validation_table(summary: pd.DataFrame, ems: dict, test_wave: int) -> pd.DataFrame:
     test = summary[summary["wave"] == test_wave]
     X = hm.to_unit(test[hm.PATHS].to_numpy(dtype=float))
@@ -156,6 +228,8 @@ def main(argv=None) -> None:
     ap.add_argument("--n-jobs", type=int, default=None)
     ap.add_argument("--sobol-n", type=int, default=SOBOL_N)
     ap.add_argument("--targets", nargs="*", default=None, help="only these targets (tests)")
+    ap.add_argument("--skip-emulators", action="store_true",
+                    help="only the tables that need no emulator (nroy, design ranges, sets, their fit)")
     args = ap.parse_args(argv)
     hm.use_campaign("v5")
     if args.targets:
@@ -163,6 +237,15 @@ def main(argv=None) -> None:
     out = _out_dir() if not args.targets else os.path.join(_out_dir(), "test")
     os.makedirs(out, exist_ok=True)
     nroy_table().to_csv(os.path.join(out, "nroy.csv"), index=False)
+    design_ranges_table().to_csv(os.path.join(out, "design_ranges.csv"), index=False)
+    sets_table().to_csv(os.path.join(out, "sets_box.csv"), index=False)
+    fit_sets_table().to_csv(os.path.join(out, "fit_sets.csv"), index=False)
+    print("nroy, design ranges, sets and their fit written", flush=True)
+    if args.skip_emulators:
+        if args.validation:
+            fit_table(args.validation).to_csv(os.path.join(out, "fit.csv"), index=False)
+        print(f"diagnostics in {out}")
+        return
     summary = hm.summarise(hm.load_all_waves())
     last = int(summary["wave"].max())
     ems_prev = _cached_emulators(summary[summary["wave"] < last], f"w1_{last - 1}", args.n_jobs)

@@ -227,13 +227,16 @@ def part_3a(df: pd.DataFrame) -> dict:
 # Parameter uncertainty: the calibrated parameter sets
 # ---------------------------------------------------------------------------
 
+def _route_fractions() -> list[str]:
+    from experiments.scenarios.paper1 import ROUTES
+    return [f"{p}_{r}_fraction_post_burnin" for p, r in ROUTES]
+
+
 PS_OUTPUTS_NONE = ([f"{p}_infections_per_child_year_0_24m" for p in PATHOGENS]
                    + [f"{p}_symptomatic_episodes_per_child_year_0_24m" for p in PATHOGENS]
                    + [f"{p}_obs_infections_per_child_year_0_24m" for p in PATHOGENS]
                    + [f"{p}_obs_attributable_fraction_0_24m" for p in PATHOGENS]
-                   + ["rota_h2h_fraction_post_burnin", "campy_zoonotic_fraction_post_burnin",
-                      "crypto_household_fraction_post_burnin", "crypto_community_fraction_post_burnin",
-                      "crypto_water_fraction_post_burnin"])
+                   + _route_fractions())
 PS_OUTPUTS_TODAY = ["episode_care_seeking_rate"] + [f"econ_care_seeking_rate_q{q}" for q in range(1, 6)]
 
 
@@ -302,7 +305,24 @@ def part_ps(ps: pd.DataFrame, a3: pd.DataFrame) -> dict:
         rows.append({"output": m, "adopted": float(sets.loc[sets.adopted, m].iloc[0]), "min": float(sets[m].min()),
                      "max": float(sets[m].max()), **_blocked_spread(Y)})
     spread = pd.DataFrame(rows)
+    # the rule set before the runs (experiments.scenarios.param_sets): an effect is tested if it exceeds
+    # 2 SE at the adopted set over all its seeds (p1_3a), and is robust if, in at least ROBUST_SHARE of
+    # the sets (the adopted one on the same 8 seeds included), it has that sign and exceeds 2 SE
+    from experiments.scenarios.param_sets import ROBUST_SHARE
+    for m, src in (("vacc_fall_episodes_0_24m", EP24), ("vacc_fall_severe_0_59m", "sev59")):
+        full = pair(by_seed(a3, "vacc_default")[src], by_seed(a3, "vacc_none")[src])
+        meets = (np.sign(-sets[m]) == np.sign(full["diff"])) & (sets[m].abs() > 2 * sets[m + "_se"])
+        sets[m + "_meets_rule"] = meets
+        i = spread.index[spread.output == m][0]
+        spread.loc[i, "adopted_all_seeds"] = -100 * full["rel"]
+        spread.loc[i, "tested"] = bool(abs(full["diff"]) > 2 * full["se"])
+        spread.loc[i, "sets_meeting"] = int(meets.sum())
+        spread.loc[i, "robust"] = bool(spread.loc[i, "tested"] and meets.mean() >= ROBUST_SHARE)
+    save(sets, "p1_ps_sets")
     save(spread, "p1_ps_spread")
+    macro("PsRobustSharePct", 100 * ROBUST_SHARE)
+    macro("PsVaccFallSetsMeeting", spread.loc[spread.output == "vacc_fall_episodes_0_24m", "sets_meeting"].iloc[0])
+    macro("PsVaccSevereFallSetsMeeting", spread.loc[spread.output == "vacc_fall_severe_0_59m", "sets_meeting"].iloc[0])
     v = sets["vacc_fall_episodes_0_24m"]
     macro("PsSets", len(sets)); macro("PsVaccFallMin", v.min()); macro("PsVaccFallMax", v.max())
     s = sets["vacc_fall_severe_0_59m"]
@@ -347,7 +367,30 @@ def part_obs(obs: pd.DataFrame) -> dict:
             rows.append(row)
     tab = pd.DataFrame(rows)
     save(tab, "p1_obs_designs")
+    # by age: true infections, those MAL-ED's design detects, and MAL-ED's own rates (its Suppl. Table 3:
+    # the calibration used two ratios of these bands, not the curves)
+    from abm.evidence import maled
+    from experiments.calibration.validate_calibration import BANDS
+    rows = []
+    for p in PATHOGENS:
+        for lo, hi in BANDS:
+            true_inf = base[f"{p}_infections_per_child_year_{lo}_{hi}m"].astype(float)
+            det = base[f"{OBS_PREFIX}maled_{p}_infections_per_child_year_{lo}_{hi}m"].astype(float)
+            rows.append({"pathogen": p, "age_lo_months": lo, "age_hi_months": hi, "true": true_inf.mean(),
+                         "true_se": true_inf.std(ddof=1) / math.sqrt(len(true_inf)), "detected": det.mean(),
+                         "detected_se": det.std(ddof=1) / math.sqrt(len(det)),
+                         "maled": maled.infection_rate(p, lo, hi)})
+    by_age = pd.DataFrame(rows)
+    save(by_age, "p1_obs_by_age")
     m = tab.set_index(["design", "pathogen"])
+    for p in PATHOGENS:
+        g = by_age[by_age.pathogen == p]
+        macro(f"Obs{NAMES[p]}AgeCorr", float(np.corrcoef(g.detected, g.maled)[0, 1]), 2)
+        # the share of infections that cause an episode, true and as each design would measure it
+        macro(f"Obs{NAMES[p]}TrueSymptomaticPct", 100 * m.loc[("maled", p), "true_episodes"]
+              / m.loc[("maled", p), "true_infections"])
+        macro(f"Obs{NAMES[p]}AttributablePct", 100 * m.loc[("maled", p), "attributable_fraction_0_24m"])
+        macro(f"Obs{NAMES[p]}DailyAttributablePct", 100 * m.loc[("daily", p), "attributable_fraction_0_24m"])
     for p in PATHOGENS:
         macro(f"Obs{NAMES[p]}TrueInfections", m.loc[("maled", p), "true_infections"], 2)
         macro(f"Obs{NAMES[p]}DetectedInfections", m.loc[("maled", p), "detected_infections"], 2)
@@ -436,7 +479,24 @@ def part_decision(dec: pd.DataFrame) -> dict:
                                     "care_seeking_gradient_q5_minus_q1": ECON_CARE_TARGETS[5][0] - ECON_CARE_TARGETS[1][0]})
     save(tab, "p1_decision")
     t = tab.set_index(["variant", "output"])
-    macro("DecSeeds", int(t["n"].min()))
+    macro("DecSeeds", int(dec.groupby(LABEL)["seed"].nunique().min()))
+    # validation: two-week diarrhoea prevalence by wealth quintile (the model's three pathogens, today's
+    # vaccine, as in the DHS 2022 population) against the DHS's all-cause prevalence, both relative to the
+    # richest quintile (V5-D1: a check, not a target)
+    from experiments.calibration.validate_calibration import DHS_DIARRHOEA_2WK_BY_QUINTILE as DHS
+    rows = []
+    for q in range(1, 6):
+        prev = cpt[f"econ_diarrhoea_2wk_prevalence_q{q}"].astype(float)
+        rel = prev / cpt["econ_diarrhoea_2wk_prevalence_q5"].astype(float)
+        rows.append({"quintile": q, "model": prev.mean(), "model_se": prev.std(ddof=1) / math.sqrt(len(prev)),
+                     "model_rel_q5": rel.mean(), "model_rel_q5_se": rel.std(ddof=1) / math.sqrt(len(rel)),
+                     **{f"dhs{y}": v[q - 1] for y, v in DHS.items()},
+                     **{f"dhs{y}_rel_q5": v[q - 1] / v[4] for y, v in DHS.items()}})
+    wealth = pd.DataFrame(rows)
+    save(wealth, "p1_wealth_gradient")
+    macro("WealthDiarrhoeaRatioModel", wealth.loc[0, "model_rel_q5"], 2)
+    macro("WealthDiarrhoeaRatioModelSE", wealth.loc[0, "model_rel_q5_se"], 2)
+    macro("WealthDiarrhoeaRatioDHS", wealth.loc[0, "dhs2022_rel_q5"], 2)
     macro("DecCareCPT", 100 * t.loc[("cpt", "episode_care_seeking_rate"), "value"], 1)
     for v, short in (("no_probability_weighting", "NoPW"), ("no_loss_aversion", "NoLA"),
                      ("linear_value", "Linear"), ("expected_utility", "EU"), ("no_cash_constraint", "NoCash")):
